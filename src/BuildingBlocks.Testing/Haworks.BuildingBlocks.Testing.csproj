@@ -4,7 +4,7 @@
     <RootNamespace>Haworks.BuildingBlocks.Testing</RootNamespace>
     <AssemblyName>Haworks.BuildingBlocks.Testing</AssemblyName>
     <PackageId>Haworks.BuildingBlocks.Testing</PackageId>
-    <Description>Shared test infrastructure: Testcontainers fixture base (per-service container subset), TestWait polling helpers, Pact verifier helpers. Used by every service's *.Integration test project.</Description>
+    <Description>Shared test infrastructure: Testcontainers fixture base, TestWait polling helpers, Pact verifier helpers, TestBase, and TestAuth.</Description>
     <Version>0.1.0</Version>
   </PropertyGroup>
 
@@ -14,7 +14,17 @@
     <PackageReference Include="Testcontainers.Redis" Version="4.0.0" />
     <PackageReference Include="Testcontainers.Minio" Version="4.0.0" />
     <PackageReference Include="Testcontainers.RabbitMq" Version="4.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.0" />
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="xunit.abstractions" Version="2.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
 </Project>

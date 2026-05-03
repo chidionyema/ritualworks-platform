@@ -1,0 +1,17 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+  
+  <PropertyGroup>
+    <NoWarn>
+      $(NoWarn);
+      CA1707; <!-- Underscores in test names -->
+      CA2215; <!-- Dispose base call -->
+      CA2201; <!-- Generic exception -->
+      CA2016; <!-- Forward cancellation token -->
+      CA1852; <!-- Seal class -->
+      CA1051; <!-- Visible instance fields -->
+      CA1014; <!-- CLS compliant -->
+      CS0105; <!-- Duplicate using -->
+    </NoWarn>
+  </PropertyGroup>
+</Project>
