@@ -51,6 +51,20 @@ public sealed class IdentityWebAppFactory : WebApplicationFactory<Program>, IAsy
         Environment.SetEnvironmentVariable("Jwt__Issuer",   "test-issuer");
         Environment.SetEnvironmentVariable("Jwt__Audience", "test-audience");
         Environment.SetEnvironmentVariable("Vault__Enabled", "false");
+
+        // External auth providers — dummy values so AddGoogle/Microsoft/Facebook
+        // construction does not throw. Tests do not actually exchange OAuth
+        // codes with real providers; we only verify our /challenge route emits
+        // a proper 302 redirect with correct PKCE state.
+        Environment.SetEnvironmentVariable("Authentication__Google__ClientId",        "test-google-client-id");
+        Environment.SetEnvironmentVariable("Authentication__Google__ClientSecret",    "test-google-client-secret");
+        Environment.SetEnvironmentVariable("Authentication__Microsoft__ClientId",     "test-microsoft-client-id");
+        Environment.SetEnvironmentVariable("Authentication__Microsoft__ClientSecret", "test-microsoft-client-secret");
+        Environment.SetEnvironmentVariable("Authentication__Facebook__AppId",         "test-facebook-app-id");
+        Environment.SetEnvironmentVariable("Authentication__Facebook__AppSecret",     "test-facebook-app-secret");
+
+        // Security options for the external-auth controller's redirect-host allow-list.
+        Environment.SetEnvironmentVariable("Security__AllowedRedirectHosts__0", "localhost");
     }
 
     async Task IAsyncLifetime.DisposeAsync()
