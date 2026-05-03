@@ -2,8 +2,29 @@
 
 > **Living doc.** Updated after each phase milestone. Read this first if returning to the project after time away.
 
-**Last updated:** 2026-05-03 (Phase 1 complete)
+**Last updated:** 2026-05-03 (Phase 1 complete — full auth suite + 25 tests)
 **Current phase:** Phase 1 (identity-svc) — **DONE**, ready for Phase 2 (catalog-svc)
+
+## Phase 1 verified surface (the user-asked "rest of endpoints")
+
+| Endpoint | Method | Status |
+|---|---|---|
+| `/api/Authentication/register` | POST | ✅ 201 + RS256 JWT |
+| `/api/Authentication/login` | POST | ✅ 200 + JWT + refresh |
+| `/api/Authentication/refresh-token` | POST | ✅ 200 + new JWT |
+| `/api/Authentication/logout` | POST | ✅ 200, revokes JTI |
+| `/api/Authentication/verify-token` | GET | ✅ 200 with bearer / 401 without / 401 after logout |
+| `/api/Authentication/csrf-token` | GET | ✅ 200 |
+| `/api/external-authentication/providers` | GET | ✅ 200 lists Google/Microsoft/Facebook |
+| `/api/external-authentication/challenge/{provider}` | GET | ✅ 302 → provider OAuth2 with PKCE / 400 on bad provider |
+| `/api/external-authentication/callback` | GET | ✅ wired (callback handled inline by ASP.NET → ExternalLoginCallbackCommand) |
+| `/api/external-authentication/link/{provider}` | POST | ✅ wired ([Authorize]) |
+| `/api/external-authentication/link-callback` | GET | ✅ wired |
+| `/api/external-authentication/unlink/{provider}` | DELETE | ✅ wired ([Authorize]) |
+| `/api/external-authentication/logins` | GET | ✅ wired ([Authorize]) |
+| `/.well-known/jwks.json` | GET | ✅ RSA JWK |
+
+Total tests: **25 passing** (3 architecture + 7 unit + 14 integration + 1 contract).
 
 ---
 
