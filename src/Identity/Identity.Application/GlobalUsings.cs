@@ -1,4 +1,5 @@
 // Global usings for Identity.Application — types virtually every command/query needs.
+global using Microsoft.Extensions.Configuration;
 global using Microsoft.Extensions.Logging;
 global using Microsoft.AspNetCore.Http;
 global using Haworks.BuildingBlocks.Persistence;

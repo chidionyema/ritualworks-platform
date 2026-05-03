@@ -11,7 +11,7 @@ namespace Haworks.BuildingBlocks.Audit;
 /// - Adding tamper-evident mechanisms (signatures, blockchain)
 /// - Implementing log forwarding to SIEM systems
 /// </summary>
-internal sealed class AuditLogger : IAuditLogger
+public sealed class AuditLogger : IAuditLogger
 {
     private readonly ILogger<AuditLogger> _logger;
 

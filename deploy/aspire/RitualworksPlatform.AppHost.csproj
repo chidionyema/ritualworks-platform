@@ -22,4 +22,9 @@
     <PackageReference Include="Aspire.Hosting.RabbitMQ" Version="9.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Service project references — required for Aspire's Projects.* generated types -->
+    <ProjectReference Include="../../src/Identity/Identity.Api/Identity.Api.csproj" />
+  </ItemGroup>
+
 </Project>

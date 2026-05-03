@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Haworks.BuildingBlocks.Caching;
 
-internal sealed class HybridCache : IHybridCache, IDisposable
+public sealed class HybridCache : IHybridCache, IDisposable
 {
     private readonly IMemoryCache _l1Cache;
     private readonly IDistributedCache _l2Cache;

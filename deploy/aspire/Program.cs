@@ -134,8 +134,23 @@ var vaultSeed = builder.AddContainer("vault-seed", "hashicorp/vault", "1.15")
     .WithArgs("/seed.sh");
 
 // =============================================================================
-// SERVICES — none yet. Each service is wired up in its own phase per
-// docs/microservices-migration/03-build-plan.md. Phase 1 wires identity-svc.
+// SERVICES
 // =============================================================================
+// Per docs/microservices-migration/03-build-plan.md.
+// Each service is wired with:
+//   • WaitForCompletion(vaultSeed) — KV secrets must exist before
+//     VaultConfigBootstrap reads them (when wired)
+//   • WithReference(<svc>Db)      — Aspire injects ConnectionStrings__<svc>
+//   • Vault credential paths for the service's own AppRole
+
+// --- identity-svc -----------------------------------------------------------
+var identity = builder.AddProject<Projects.Identity_Api>("identity-svc")
+    .WaitForCompletion(vaultSeed)
+    .WithReference(identityDb)
+    .WithEnvironment("Vault__Enabled",      "true")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("identity"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("identity"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
 builder.Build().Run();
