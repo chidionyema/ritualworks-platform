@@ -25,6 +25,7 @@
   <ItemGroup>
     <!-- Service project references — required for Aspire's Projects.* generated types -->
     <ProjectReference Include="../../src/Identity/Identity.Api/Identity.Api.csproj" />
+    <ProjectReference Include="../../src/Catalog/Catalog.Api/Catalog.Api.csproj" />
   </ItemGroup>
 
 </Project>

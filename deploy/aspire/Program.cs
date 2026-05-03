@@ -153,4 +153,18 @@ var identity = builder.AddProject<Projects.Identity_Api>("identity-svc")
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("identity"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
+// --- catalog-svc -----------------------------------------------------------
+// Catalog publishes stock events to RabbitMQ (per-context outbox in
+// catalog DB). Has its own per-service Vault AppRole (no Vault secrets
+// needed yet — all stock state is in postgres, not Vault).
+var catalog = builder.AddProject<Projects.Catalog_Api>("catalog-svc")
+    .WaitForCompletion(vaultSeed)
+    .WithReference(catalogDb)
+    .WithReference(rabbitmq)
+    .WithEnvironment("Vault__Enabled",      "false")  // no Vault secrets in Phase 2; flip when needed
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("catalog"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("catalog"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+
 builder.Build().Run();

@@ -2,8 +2,55 @@
 
 > **Living doc.** Updated after each phase milestone. Read this first if returning to the project after time away.
 
-**Last updated:** 2026-05-03 (Phase 1 complete — full auth suite + 25 tests)
-**Current phase:** Phase 1 (identity-svc) — **DONE**, ready for Phase 2 (catalog-svc)
+**Last updated:** 2026-05-03 (Phase 2d complete — full catalog-svc test suite green)
+**Current phase:** Phase 2 (catalog-svc) — **DONE**. 22/22 catalog tests pass (3 architecture + 11 unit + 7 integration + 1 contract). Next: Phase 3 (orders-svc) or commit + push.
+
+## Phase 2d verified surface (catalog test suite, 22/22 green)
+
+| Layer | Tests | Cmd |
+|---|---|---|
+| Architecture (NetArchTest) | 3 — boundary rules: no cross-service refs; Domain ⊥ Application/Infrastructure; Application ⊥ Infrastructure | `dotnet test tests/Catalog.Architecture` |
+| Unit (FluentAssertions) | 11 — Product invariants: Create/Restock/Reserve/Release semantics, error paths | `dotnet test tests/Catalog.Unit` |
+| Integration (Testcontainers + WebApplicationFactory + MassTransit ITestHarness) | 7 — `/health`, category round-trip, product round-trip with `Include`, 404 paths, reserve happy path with `StockReservedEvent` publish assertion, reserve insufficient stock returns 409 + no event | `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock dotnet test tests/Catalog.Integration` |
+| Contract (PactNet v5 message) | 1 — `StockReservedEvent` consumer-side pact pinning OrderId/SagaId/UserId/TotalAmount/Currency/CustomerEmail/IdempotencyKey/Items/OrderLineItems schema. Pact JSON written to `tests/pacts/ConsumerOfCatalog-catalog-svc.json` for broker publication. | `dotnet test tests/Catalog.Contract` |
+
+Infrastructure changes for tests:
+- `Catalog.Infrastructure.DependencyInjection` early-returns from `AddInfrastructure` when `ASPNETCORE_ENVIRONMENT=Test`, skipping the production MassTransit/RabbitMQ/EF-outbox wiring. The integration fixture sets the env var BEFORE Program.cs runs (top-level statements + WAF ordering means `builder.UseEnvironment("Test")` fires too late) and registers `AddMassTransitTestHarness` + `AddDomainEventPublisher()` itself.
+- Catalog test projects added to `RitualworksPlatform.sln`.
+
+
+## Phase 2c verified surface (catalog-svc stock reservation, https://localhost:7102)
+
+| Endpoint | Behaviour | Status |
+|---|---|---|
+| `POST /api/products/{id}/reserve` qty within stock | 200 + Guid, stock decremented, `StockReservedEvent` published to RabbitMQ | ✅ |
+| `POST /api/products/{id}/reserve` qty > stock | 409 Conflict with `Insufficient stock for product {id}: requested N, available M` | ✅ |
+| `POST /api/products/{id}/reserve` (5 parallel, stock=3) | 1 winner gets 200; 4 losers get 409 `Concurrent reservation … retry with the latest stock` | ✅ |
+| Final stock after the race | Exactly `initial - winners` (atomic, no oversell) | ✅ |
+
+Implementation:
+- **xmin shadow column** on `Products` (Postgres native row-version) — declared via `entity.Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken()`. `Npgsql.UseXminAsConcurrencyToken()` was removed in 9.x; the manual shadow form is the supported path.
+- **MassTransit transactional outbox** anchored to `CatalogDbContext` via `AddEntityFrameworkOutbox<CatalogDbContext>().UseBusOutbox()`. `OutboxMessage` / `OutboxState` / `InboxState` tables live in the `catalog` schema. `BusOutboxDeliveryService` polls every 1 s and removes rows after broker ack — empty `OutboxMessage` table with non-zero successful reservations is the *correct* steady state.
+- **`StockReservedEvent` published to RabbitMQ** via `IDomainEventPublisher` (BuildingBlocks) → `IPublishEndpoint`. Verified by `rabbitmqctl list_exchanges | grep StockReservedEvent` showing the fanout exchange. No queue exists yet (no consumers wired); Orders/Payments services in later phases will declare them.
+- **Concurrency exception** caught explicitly in `ReserveStockCommandHandler`: `DbUpdateConcurrencyException` → `Result.Failure(Error.Conflict("Stock.ConcurrencyConflict", …))` → 409 with retry hint. No auto-retry inside the handler — caller decides whether to retry against the new stock state.
+
+Smoke scripts: `/tmp/phase2c-smoke.sh` (happy path + insufficient stock), `/tmp/phase2c-outbox-race.sh` (5-way concurrency).
+
+## Phase 2b verified surface (catalog-svc, https://localhost:7102)
+
+| Endpoint | Method | Status |
+|---|---|---|
+| `/health` | GET | ✅ 200 Healthy |
+| `/api/categories` | GET | ✅ 200 list |
+| `/api/categories` | POST | ✅ 201 + Guid (validates unique name) |
+| `/api/products` | GET | ✅ 200 paged `{items, total, skip, take}` |
+| `/api/products?categoryId=` | GET | ✅ 200 category-filtered |
+| `/api/products/{id}` | GET | ✅ 200 with `categoryName` / 404 if missing |
+| `/api/products` | POST | ✅ 201 + Guid / 404 if `categoryId` missing |
+
+EF Core 9 + Postgres — `catalog` schema (Categories, Products, ProductReviews). Auto-migrate at startup. Per ADR-0009 catalog-svc owns its DB; no cross-context FKs (`ProductReview.UserId` is an opaque string FK to identity-svc). `RowVersion byte[]` left as a plain bytea column with default `'\x0000000000000000'::bytea`; Phase 2c will switch to Postgres `xmin` for real optimistic concurrency on stock reservation.
+
+Smoke script: `/tmp/catalog-smoke.sh` (POST category → POST product → GET list/by-id/filter → 404 negative paths).
 
 ## Phase 1 verified surface (the user-asked "rest of endpoints")
 

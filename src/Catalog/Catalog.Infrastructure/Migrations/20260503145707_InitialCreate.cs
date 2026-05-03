@@ -1,0 +1,150 @@
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
+
+#nullable disable
+
+namespace Haworks.Catalog.Infrastructure.Migrations
+{
+    /// <inheritdoc />
+    public partial class InitialCreate : Migration
+    {
+        /// <inheritdoc />
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.EnsureSchema(
+                name: "catalog");
+
+            migrationBuilder.CreateTable(
+                name: "Categories",
+                schema: "catalog",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
+                    CreatedFromIp = table.Column<string>(type: "text", nullable: true),
+                    ModifiedFromIp = table.Column<string>(type: "text", nullable: true),
+                    RowVersion = table.Column<byte[]>(type: "bytea", nullable: false, defaultValueSql: "'\\x0000000000000000'::bytea"),
+                    CreatedBy = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    LastModifiedBy = table.Column<string>(type: "text", nullable: true),
+                    LastModifiedDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Categories", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Products",
+                schema: "catalog",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "character varying(4000)", maxLength: 4000, nullable: false),
+                    UnitPrice = table.Column<decimal>(type: "numeric(18,2)", nullable: false),
+                    StockQuantity = table.Column<int>(type: "integer", nullable: false),
+                    IsInStock = table.Column<bool>(type: "boolean", nullable: false),
+                    IsListed = table.Column<bool>(type: "boolean", nullable: false),
+                    CategoryId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CreatedFromIp = table.Column<string>(type: "text", nullable: true),
+                    ModifiedFromIp = table.Column<string>(type: "text", nullable: true),
+                    RowVersion = table.Column<byte[]>(type: "bytea", nullable: false, defaultValueSql: "'\\x0000000000000000'::bytea"),
+                    CreatedBy = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    LastModifiedBy = table.Column<string>(type: "text", nullable: true),
+                    LastModifiedDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Products", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Products_Categories_CategoryId",
+                        column: x => x.CategoryId,
+                        principalSchema: "catalog",
+                        principalTable: "Categories",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ProductReviews",
+                schema: "catalog",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ProductId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
+                    Rating = table.Column<int>(type: "integer", nullable: false),
+                    Body = table.Column<string>(type: "character varying(4000)", maxLength: 4000, nullable: true),
+                    IsApproved = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedFromIp = table.Column<string>(type: "text", nullable: true),
+                    ModifiedFromIp = table.Column<string>(type: "text", nullable: true),
+                    RowVersion = table.Column<byte[]>(type: "bytea", nullable: false, defaultValueSql: "'\\x0000000000000000'::bytea"),
+                    CreatedBy = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    LastModifiedBy = table.Column<string>(type: "text", nullable: true),
+                    LastModifiedDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ProductReviews", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ProductReviews_Products_ProductId",
+                        column: x => x.ProductId,
+                        principalSchema: "catalog",
+                        principalTable: "Products",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Categories_Name",
+                schema: "catalog",
+                table: "Categories",
+                column: "Name",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ProductReviews_ProductId",
+                schema: "catalog",
+                table: "ProductReviews",
+                column: "ProductId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ProductReviews_UserId",
+                schema: "catalog",
+                table: "ProductReviews",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Products_CategoryId",
+                schema: "catalog",
+                table: "Products",
+                column: "CategoryId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Products_IsListed",
+                schema: "catalog",
+                table: "Products",
+                column: "IsListed");
+        }
+
+        /// <inheritdoc />
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropTable(
+                name: "ProductReviews",
+                schema: "catalog");
+
+            migrationBuilder.DropTable(
+                name: "Products",
+                schema: "catalog");
+
+            migrationBuilder.DropTable(
+                name: "Categories",
+                schema: "catalog");
+        }
+    }
+}
