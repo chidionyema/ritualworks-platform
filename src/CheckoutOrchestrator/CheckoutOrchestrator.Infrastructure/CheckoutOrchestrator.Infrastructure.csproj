@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Haworks.CheckoutOrchestrator.Infrastructure</RootNamespace>
+    <AssemblyName>CheckoutOrchestrator.Infrastructure</AssemblyName>
+    <NoWarn>$(NoWarn);CA1861</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../CheckoutOrchestrator.Application/CheckoutOrchestrator.Application.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.0" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.3.4" />
+  </ItemGroup>
+</Project>

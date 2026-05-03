@@ -2,8 +2,32 @@
 
 > **Living doc.** Updated after each phase milestone. Read this first if returning to the project after time away.
 
-**Last updated:** 2026-05-03 (Phase 4 complete — orders-svc end-to-end with cross-context consumers + 31/31 tests)
-**Current phase:** Phase 4 (orders-svc) — **DONE**. 31/31 orders tests pass: 3/3 architecture + 16/16 unit + 3/3 contract + 9/9 integration (including consumer pipeline + idempotency-replay). Next: Phase 5 (checkout-orchestrator-svc — the saga).
+**Last updated:** 2026-05-03 (Phase 5 complete — CheckoutSaga the crown jewel, full state machine + 9/9 tests including saga restart-resume)
+**Current phase:** Phase 5 (checkout-orchestrator-svc) — **DONE**. 9/9 saga tests pass: 3/3 architecture + 6/6 integration (CheckoutInitiated→Initiated, full happy path, StockReservationFailed branch, PaymentSessionFailed compensation with StockReleaseRequested, PaymentAmountMismatch→RequiresReview, **saga restart resumes from persisted state**). Next: Phase 6 (content-svc) or Phase 7 (bff-web composing the gRPC surface).
+
+## Phase 5 verified surface (checkout-orchestrator-svc, https://localhost:7105)
+
+| Endpoint / state-machine arrow | Behaviour | Status |
+|---|---|---|
+| `POST /api/checkouts` | 202 + `{sagaId, orderId}`; publishes `CheckoutInitiatedEvent` | ✅ |
+| `GET /api/checkouts/{sagaId}` | 200 with current state + paymentCheckoutUrl + failureReason / 404 | ✅ |
+| `Initial → Initiated` (CheckoutInitiated) | Publishes `StockReservationRequestedEvent` with full snapshot | ✅ |
+| `Initiated → StockReservedState` (StockReserved) | Snapshots reserved items; publishes `PaymentSessionRequestedEvent` with line items + URLs | ✅ |
+| `StockReservedState → ReadyForPayment` (PaymentSessionCreated) | Saves `PaymentId`, `PaymentSessionId`, `PaymentCheckoutUrl` | ✅ |
+| `ReadyForPayment → Completed` (PaymentCompleted) | Finalizes saga; row removed by `SetCompletedWhenFinalized()` | ✅ |
+| `Initiated → Abandoned` (StockReservationFailed) | Records `FailureReason`; **no** compensation publish (nothing reserved) | ✅ |
+| `StockReservedState\|ReadyForPayment → Abandoned` (PaymentSessionFailed) | Publishes `StockReleaseRequestedEvent` with snapshotted items + reason; transitions Abandoned | ✅ |
+| `ReadyForPayment → RequiresReview` (PaymentAmountMismatch) | Captures expected/actual amounts in `FailureReason`; ops decides | ✅ |
+| Restart resume | Saga state persists in `checkout` schema's `CheckoutSagas` table; `harness.Stop()` + `harness.Start()` and the saga picks up exactly where it left off | ✅ |
+
+Implementation:
+- **`CheckoutSaga` MassTransit state machine** (`src/CheckoutOrchestrator.Application/Sagas/CheckoutSaga.cs`) — 6 states, 7 inbound events, 3 outbound events, all correlated by `SagaId` (PaymentAmountMismatch alone correlates by `OrderId` because the contract doesn't carry `SagaId`).
+- **`CheckoutSagaState`** persisted via MassTransit's EF saga repository to a Postgres table with both `Version` (MT optimistic concurrency) and `xmin` (raw EF concurrency) tokens. Snapshot fields propagate through the choreography: `LineItemsJson`, `ReservedItemsJson`, `PaymentId`, `PaymentSessionId`, `PaymentCheckoutUrl`, `FailureReason`.
+- **`StockReservationRequestedEvent`** added to `Contracts/Catalog` to close the gap from Phase 2c (which only exposed REST). The saga publishes it; a future catalog consumer will react. In tests we drive the saga directly with `StockReservedEvent` / `StockReservationFailedEvent`.
+- **Per-context outbox** anchored to `CheckoutDbContext` — saga state writes + outbound publishes commit atomically in one EF transaction.
+- **Payment-expiry timeout schedule** intentionally deferred (TODO comment in saga); requires either RabbitMQ delayed-message-exchange plugin or Quartz.NET. Compensation paths covered the failure modes that don't need a wall-clock timer.
+
+## Phase 4 verified surface (orders-svc, https://localhost:7104)
 
 ## Phase 4 verified surface (orders-svc, https://localhost:7104)
 

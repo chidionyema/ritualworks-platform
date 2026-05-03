@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Haworks.CheckoutOrchestrator.Domain</RootNamespace>
+    <AssemblyName>CheckoutOrchestrator.Domain</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../BuildingBlocks/Haworks.BuildingBlocks.csproj" />
+    <ProjectReference Include="../../Contracts/Haworks.Contracts.csproj" />
+  </ItemGroup>
+</Project>

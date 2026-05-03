@@ -167,6 +167,22 @@ var catalog = builder.AddProject<Projects.Catalog_Api>("catalog-svc")
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("catalog"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
+// --- checkout-orchestrator-svc --------------------------------------------
+// The saga. Consumes everything (CheckoutInitiated, StockReserved/Failed,
+// PaymentSessionCreated/Failed, PaymentCompleted, PaymentAmountMismatch);
+// publishes orchestration triggers (StockReservationRequested,
+// PaymentSessionRequested, StockReleaseRequested). Per-context outbox in
+// checkout DB.
+var checkout = builder.AddProject<Projects.CheckoutOrchestrator_Api>("checkout-svc")
+    .WaitForCompletion(vaultSeed)
+    .WithReference(checkoutDb)
+    .WithReference(rabbitmq)
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("checkout-orchestrator"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("checkout-orchestrator"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+
 // --- orders-svc ------------------------------------------------------------
 // Orders consumes PaymentCompleted / PaymentSessionFailed / StockReservationFailed
 // from RabbitMQ; publishes OrderCreated / OrderCompleted / OrderAbandoned via

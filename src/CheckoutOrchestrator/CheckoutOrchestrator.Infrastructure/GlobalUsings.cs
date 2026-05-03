@@ -1,0 +1,12 @@
+global using Microsoft.Extensions.Configuration;
+global using Microsoft.Extensions.Logging;
+global using Microsoft.AspNetCore.Http;
+global using Microsoft.AspNetCore.Hosting;
+global using Microsoft.Extensions.Hosting;
+global using Haworks.BuildingBlocks.Persistence;
+global using Haworks.BuildingBlocks.Common;
+global using Haworks.BuildingBlocks.Caching;
+global using Haworks.BuildingBlocks.CurrentUser;
+global using Haworks.BuildingBlocks.Messaging;
+global using Haworks.CheckoutOrchestrator.Domain;
+global using Haworks.CheckoutOrchestrator.Application;
