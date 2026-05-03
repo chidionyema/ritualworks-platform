@@ -109,6 +109,16 @@ if (!app.Environment.IsEnvironment("Test"))
             await roleManager.CreateAsync(new Microsoft.AspNetCore.Identity.IdentityRole(roleName));
         }
     }
+
+    // 3. Initialize the RSA signing keypair from Vault (generates on first run,
+    //    reads back on subsequent runs). Must complete before request handling
+    //    so JwtTokenService has a SigningKey to use.
+    var keyProvider = scope.ServiceProvider
+        .GetRequiredService<Haworks.BuildingBlocks.Vault.IJwtSigningKeyProvider>();
+    if (keyProvider is Haworks.BuildingBlocks.Vault.VaultJwtSigningKeyProvider vaultProvider)
+    {
+        await vaultProvider.InitializeAsync();
+    }
 }
 
 app.MapDefaultEndpoints();

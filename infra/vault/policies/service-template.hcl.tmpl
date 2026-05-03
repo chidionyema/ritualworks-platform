@@ -13,9 +13,13 @@
 
 # Service-owned KV v2 secrets (Stripe keys, JWT key, OAuth, etc.).
 # Each service's secrets live under secret/{{service}}/* and only this
-# service's runtime AppRole can read them.
-path "secret/data/{{service}}/*"     { capabilities = ["read", "list"] }
-path "secret/metadata/{{service}}/*" { capabilities = ["read", "list"] }
+# service's runtime AppRole can read AND WRITE them. Write capability is
+# required because services manage their own rotating secrets — identity-svc
+# generates RSA signing keys on startup and persists them so they survive
+# restart, the same pattern future services will use for their own
+# rotating credentials.
+path "secret/data/{{service}}/*"     { capabilities = ["create", "read", "update", "delete", "list"] }
+path "secret/metadata/{{service}}/*" { capabilities = ["read", "list", "delete"] }
 
 # Shared KV namespace — read-only for everyone. Use sparingly. Examples:
 # JWKS endpoint URL, public-facing branding, anything intentionally public.

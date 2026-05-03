@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Haworks.BuildingBlocks.Persistence;
 using Haworks.BuildingBlocks.Caching;
+using Haworks.BuildingBlocks.Vault;
 
 namespace Haworks.Identity.Infrastructure;
 
@@ -63,6 +64,24 @@ public static class DependencyInjection
         services.AddScoped<ITokenRevocationService, TokenRevocationService>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+
+        // RSA signing keypair for JWT (RS256). Provider reads/writes
+        // secret/identity/jwt-signing in Vault. Singleton because the
+        // keypair lives for the process lifetime; Program.cs must call
+        // VaultJwtSigningKeyProvider.InitializeAsync once at startup
+        // before request handling.
+        services.AddSingleton<IVaultAppRoleAuthenticator, VaultAppRoleAuthenticator>();
+        services.AddSingleton<IJwtSigningKeyProvider>(sp =>
+        {
+            var cfg          = sp.GetRequiredService<IConfiguration>();
+            var address      = cfg["Vault:Address"]      ?? throw new InvalidOperationException("Vault:Address missing");
+            var roleIdPath   = cfg["Vault:RoleIdPath"]   ?? throw new InvalidOperationException("Vault:RoleIdPath missing");
+            var secretIdPath = cfg["Vault:SecretIdPath"] ?? throw new InvalidOperationException("Vault:SecretIdPath missing");
+            var roleId       = File.ReadAllText(roleIdPath).Trim();
+            var secretId     = File.ReadAllText(secretIdPath).Trim();
+            var auth         = sp.GetRequiredService<IVaultAppRoleAuthenticator>();
+            return new VaultJwtSigningKeyProvider(address, "identity", auth, roleId, secretId);
+        });
 
         return services;
     }

@@ -1,6 +1,7 @@
 #nullable enable
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using Haworks.BuildingBlocks.Vault;
 using Haworks.Identity.Application;
 using Haworks.Identity.Domain;
 using Microsoft.AspNetCore.Identity;
@@ -11,6 +12,11 @@ namespace Haworks.Identity.Infrastructure;
 
 /// <summary>
 /// JWT token generation and validation service.
+///
+/// Per ADR-0005: RS256 signing, RSA-2048 keypair sourced from
+/// <see cref="IJwtSigningKeyProvider"/> (Vault-backed). Downstream services
+/// validate via /.well-known/jwks.json — no shared secret to rotate across
+/// services.
 /// </summary>
 public class JwtTokenService : IJwtTokenService
 {
@@ -18,7 +24,7 @@ public class JwtTokenService : IJwtTokenService
     private readonly JwtOptions _jwtOptions;
     private readonly ILogger<JwtTokenService> _logger;
     private readonly ITokenRevocationService _revocationService;
-    private readonly SymmetricSecurityKey _securityKey;
+    private readonly IJwtSigningKeyProvider _signingKeyProvider;
     private readonly IHostEnvironment _environment;
 
     public JwtTokenService(
@@ -26,38 +32,15 @@ public class JwtTokenService : IJwtTokenService
         IOptions<JwtOptions> jwtOptions,
         ILogger<JwtTokenService> logger,
         ITokenRevocationService revocationService,
+        IJwtSigningKeyProvider signingKeyProvider,
         IHostEnvironment environment)
     {
         _userManager = userManager;
         _jwtOptions = jwtOptions.Value;
         _logger = logger;
         _revocationService = revocationService;
+        _signingKeyProvider = signingKeyProvider;
         _environment = environment;
-
-        if (string.IsNullOrEmpty(_jwtOptions.Key))
-        {
-            _logger.LogCritical("JWT Key (Jwt:Key) is not configured");
-            throw new InvalidOperationException("JWT Key is not configured.");
-        }
-
-        byte[] keyBytes;
-        try
-        {
-            keyBytes = Convert.FromBase64String(_jwtOptions.Key);
-        }
-        catch (FormatException)
-        {
-            // Fallback to UTF-8 for plain-text keys in dev/test
-            keyBytes = System.Text.Encoding.UTF8.GetBytes(_jwtOptions.Key);
-        }
-
-        if (keyBytes.Length < 32 && _environment.IsProduction())
-        {
-            _logger.LogCritical("JWT Key is too weak for production: {Length} bytes (minimum 32)", keyBytes.Length);
-            throw new InvalidOperationException($"JWT Key is too weak for production. Expected at least 32 bytes, got {keyBytes.Length}.");
-        }
-
-        _securityKey = new SymmetricSecurityKey(keyBytes);
     }
 
     public async Task<JwtSecurityToken> GenerateTokenAsync(User user, DateTime expiration)
@@ -78,16 +61,23 @@ public class JwtTokenService : IJwtTokenService
         var userClaims = await _userManager.GetClaimsAsync(user);
         claims.AddRange(userClaims);
 
+        // RS256: sign with the private RSA key from Vault. The key's KeyId
+        // is also written into the JWT header as `kid` so downstream
+        // validators can pick the right public key from JWKS during rotation.
+        var signingCredentials = new SigningCredentials(
+            _signingKeyProvider.SigningKey, SecurityAlgorithms.RsaSha256);
+
         var token = new JwtSecurityToken(
             issuer: _jwtOptions.Issuer,
             audience: _jwtOptions.Audience,
             claims: claims,
             expires: expiration,
-            signingCredentials: new SigningCredentials(_securityKey, SecurityAlgorithms.HmacSha256)
+            signingCredentials: signingCredentials
         );
+        token.Header["kid"] = _signingKeyProvider.KeyId;
 
-        _logger.LogInformation("Token generated for user {UserId} with {RoleCount} roles, expires {Expiry}",
-            user.Id, roles.Count, expiration);
+        _logger.LogInformation("Token generated for user {UserId} with {RoleCount} roles, expires {Expiry}, kid {Kid}",
+            user.Id, roles.Count, expiration, _signingKeyProvider.KeyId);
 
         return token;
     }
@@ -170,7 +160,8 @@ public class JwtTokenService : IJwtTokenService
         return new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = _securityKey,
+            IssuerSigningKey = _signingKeyProvider.SigningKey,
+            ValidAlgorithms = new[] { SecurityAlgorithms.RsaSha256 },
             ValidateIssuer = true,
             ValidIssuer = _jwtOptions.Issuer,
             ValidateAudience = true,
