@@ -167,4 +167,20 @@ var catalog = builder.AddProject<Projects.Catalog_Api>("catalog-svc")
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("catalog"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
+// --- payments-svc ----------------------------------------------------------
+// Payments owns Stripe + PayPal webhook ingress and publishes
+// PaymentCompleted / PaymentSessionFailed / PaymentAmountMismatch /
+// PaymentVerified / PaymentWebhookValidated to RabbitMQ via the
+// per-context outbox in payments DB. Per-service Vault AppRole holds the
+// provider API keys + webhook secrets (wired in Phase 3b/3c).
+var payments = builder.AddProject<Projects.Payments_Api>("payments-svc")
+    .WaitForCompletion(vaultSeed)
+    .WithReference(paymentsDb)
+    .WithReference(rabbitmq)
+    .WithEnvironment("Vault__Enabled",      "false")  // flip when Phase 3b wires Stripe/PayPal secrets
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("payments"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("payments"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+
 builder.Build().Run();

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Haworks.Payments.Infrastructure</RootNamespace>
+    <AssemblyName>Payments.Infrastructure</AssemblyName>
+    <!-- CA1861: EF Core's generated Migrations files pass new[]{...} as args. Auto-gen, can't edit. -->
+    <NoWarn>$(NoWarn);CA1861</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Payments.Application/Payments.Application.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.0" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.3.4" />
+  </ItemGroup>
+</Project>
