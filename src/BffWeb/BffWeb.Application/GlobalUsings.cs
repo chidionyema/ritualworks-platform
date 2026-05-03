@@ -1,0 +1,7 @@
+global using Microsoft.Extensions.Configuration;
+global using Microsoft.Extensions.Logging;
+global using Microsoft.AspNetCore.Http;
+global using Haworks.BuildingBlocks.Common;
+global using Haworks.BuildingBlocks.Caching;
+global using Haworks.BuildingBlocks.CurrentUser;
+global using Haworks.BuildingBlocks.Messaging;

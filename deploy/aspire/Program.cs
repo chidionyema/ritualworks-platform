@@ -214,4 +214,23 @@ var payments = builder.AddProject<Projects.Payments_Api>("payments-svc")
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("payments"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
+// --- bff-web ---------------------------------------------------------------
+// Public HTTP edge. Composes services via REST clients (Phase 7b) and
+// pushes checkout updates to connected browsers via SignalR (Phase 7c).
+// Owns no DB; consumes PaymentSessionCreatedEvent from RabbitMQ to bridge
+// the saga -> SignalR -> browser flow.
+var bffWeb = builder.AddProject<Projects.BffWeb_Api>("bff-web")
+    .WaitForCompletion(vaultSeed)
+    .WithReference(rabbitmq)
+    .WithReference(identity)
+    .WithReference(catalog)
+    .WithReference(orders)
+    .WithReference(payments)
+    .WithReference(checkout)
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("bff-web"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("bff-web"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+
 builder.Build().Run();

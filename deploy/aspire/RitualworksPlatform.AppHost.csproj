@@ -29,6 +29,7 @@
     <ProjectReference Include="../../src/Payments/Payments.Api/Payments.Api.csproj" />
     <ProjectReference Include="../../src/Orders/Orders.Api/Orders.Api.csproj" />
     <ProjectReference Include="../../src/CheckoutOrchestrator/CheckoutOrchestrator.Api/CheckoutOrchestrator.Api.csproj" />
+    <ProjectReference Include="../../src/BffWeb/BffWeb.Api/BffWeb.Api.csproj" />
   </ItemGroup>
 
 </Project>

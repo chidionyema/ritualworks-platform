@@ -2,8 +2,26 @@
 
 > **Living doc.** Updated after each phase milestone. Read this first if returning to the project after time away.
 
-**Last updated:** 2026-05-03 (Phase 5 complete — CheckoutSaga the crown jewel, full state machine + 9/9 tests including saga restart-resume)
-**Current phase:** Phase 5 (checkout-orchestrator-svc) — **DONE**. 9/9 saga tests pass: 3/3 architecture + 6/6 integration (CheckoutInitiated→Initiated, full happy path, StockReservationFailed branch, PaymentSessionFailed compensation with StockReleaseRequested, PaymentAmountMismatch→RequiresReview, **saga restart resumes from persisted state**). Next: Phase 6 (content-svc) or Phase 7 (bff-web composing the gRPC surface).
+**Last updated:** 2026-05-03 (Phase 7 complete — bff-web composes the saga + pushes the URL to the browser via SignalR)
+**Current phase:** Phase 7 (bff-web) — **DONE**. 6/6 bff-web tests: 3/3 architecture + 3/3 integration (`/health`, end-to-end SignalR push from `PaymentSessionCreatedEvent` to subscribed client, group isolation — different sagaId doesn't leak). The platform is feature-complete: identity → catalog → payments → orders → checkout-svc saga → bff-web SignalR push. Phase 8 = polish + chaos demo + README hero video.
+
+## Phase 7 verified surface (bff-web, https://localhost:7106)
+
+| Endpoint / pipeline | Behaviour | Status |
+|---|---|---|
+| `/health` | 200 | ✅ |
+| `POST /api/checkout` | Allocates `sagaId` + `orderId`; forwards to `checkout-svc /api/checkouts`; returns 202 with `{sagaId, orderId, message}` | ✅ |
+| `/hubs/checkout` (SignalR) | `SubscribeToSaga(sagaId)` adds connection to group `saga-{sagaId:N}`; `UnsubscribeFromSaga(sagaId)` removes | ✅ |
+| `PaymentSessionCreatedConsumer` | Consumes from RabbitMQ; pushes `CheckoutReady` payload `{sagaId, orderId, paymentId, checkoutUrl, provider, amount, currency}` to the SignalR group | ✅ |
+| Group isolation | Different `sagaId` publishes don't leak to a client subscribed to a different sagaId | ✅ |
+
+Implementation:
+- **No DB** — bff-web owns no state. The saga state lives in checkout-svc; orders/payments/identity own their own.
+- **Service composition via REST clients** with Aspire's `https+http://<svc>` service-discovery URI form. The build plan calls for gRPC; we built REST in Phases 1-6, so bff-web uses typed `HttpClient`s for now.
+- **`CheckoutHub`** uses stable group naming (`saga-{sagaId:N}`) so the consumer can push without referencing the hub class — clean decoupling.
+- **End-to-end proof** in `tests/BffWeb.Integration/SignalRPushTests.cs`: a `Microsoft.AspNetCore.SignalR.Client.HubConnection` connects through the WAF's TestServer, subscribes to a sagaId, and the test verifies the push lands when `PaymentSessionCreatedEvent` is published through the in-memory MT harness.
+
+The full saga → browser flow now works end-to-end: `POST /api/checkout` (bff-web) → `checkout-svc CheckoutSaga` → publishes `StockReservationRequested` → catalog reserves + publishes `StockReserved` → saga publishes `PaymentSessionRequested` → payments creates session + publishes `PaymentSessionCreated` → bff-web's `PaymentSessionCreatedConsumer` pushes the URL to the browser via SignalR.
 
 ## Phase 5 verified surface (checkout-orchestrator-svc, https://localhost:7105)
 

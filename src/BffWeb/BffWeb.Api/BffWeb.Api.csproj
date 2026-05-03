@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>Haworks.BffWeb.Api</RootNamespace>
+    <AssemblyName>BffWeb.Api</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../BffWeb.Infrastructure/BffWeb.Infrastructure.csproj" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+    <!-- SignalR ships as part of AspNetCore.App; no extra package reference. -->
+  </ItemGroup>
+</Project>

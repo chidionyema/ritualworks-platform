@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Haworks.BffWeb.Architecture</RootNamespace>
+    <AssemblyName>Haworks.BffWeb.Architecture</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AnalysisLevel>none</AnalysisLevel>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="FluentAssertions" Version="7.0.0" />
+    <PackageReference Include="NetArchTest.Rules" Version="1.3.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/BffWeb/BffWeb.Domain/BffWeb.Domain.csproj" />
+    <ProjectReference Include="../../src/BffWeb/BffWeb.Application/BffWeb.Application.csproj" />
+    <ProjectReference Include="../../src/BffWeb/BffWeb.Infrastructure/BffWeb.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/BffWeb/BffWeb.Api/BffWeb.Api.csproj" />
+  </ItemGroup>
+
+</Project>
