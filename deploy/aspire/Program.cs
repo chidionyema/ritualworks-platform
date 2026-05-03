@@ -167,6 +167,21 @@ var catalog = builder.AddProject<Projects.Catalog_Api>("catalog-svc")
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("catalog"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
+// --- orders-svc ------------------------------------------------------------
+// Orders consumes PaymentCompleted / PaymentSessionFailed / StockReservationFailed
+// from RabbitMQ; publishes OrderCreated / OrderCompleted / OrderAbandoned via
+// per-context outbox in orders DB. Per-service Vault AppRole; no Vault secrets
+// needed yet (no external API calls — pure event-driven state).
+var orders = builder.AddProject<Projects.Orders_Api>("orders-svc")
+    .WaitForCompletion(vaultSeed)
+    .WithReference(ordersDb)
+    .WithReference(rabbitmq)
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("orders"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("orders"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+
 // --- payments-svc ----------------------------------------------------------
 // Payments owns Stripe + PayPal webhook ingress and publishes
 // PaymentCompleted / PaymentSessionFailed / PaymentAmountMismatch /

@@ -2,8 +2,28 @@
 
 > **Living doc.** Updated after each phase milestone. Read this first if returning to the project after time away.
 
-**Last updated:** 2026-05-03 (Phase 3 complete — payments-svc end-to-end with webhook ingress + outbox consumer + 26 Docker-free tests)
-**Current phase:** Phase 3 (payments-svc) — **DONE** (with caveat). 26/29 payments tests pass: 3/3 architecture + 20/20 unit + 3/3 contract; integration tests blocked locally by Docker Desktop instability — runbook at `docs/runbooks/payments-integration-docker-flake.md`. Next: Phase 4 (orders-svc).
+**Last updated:** 2026-05-03 (Phase 4 complete — orders-svc end-to-end with cross-context consumers + 31/31 tests)
+**Current phase:** Phase 4 (orders-svc) — **DONE**. 31/31 orders tests pass: 3/3 architecture + 16/16 unit + 3/3 contract + 9/9 integration (including consumer pipeline + idempotency-replay). Next: Phase 5 (checkout-orchestrator-svc — the saga).
+
+## Phase 4 verified surface (orders-svc, https://localhost:7104)
+
+| Endpoint / consumer | Behaviour | Status |
+|---|---|---|
+| `POST /api/orders` | 201 + Guid; idempotent on `sagaId` (returns existing orderId on dupe) | ✅ |
+| `GET /api/orders/{id}` | 200 with items / 404 | ✅ |
+| `GET /api/orders/by-user/{userId}` | 200 paged result | ✅ |
+| `PaymentCompletedConsumer` | Order Created → Paid; publishes `OrderCompletedEvent` with `PaymentId` | ✅ |
+| `PaymentSessionFailedConsumer` | Order Created → Abandoned with `AbandonReason="PaymentSessionFailed: <code>"`; publishes `OrderAbandonedEvent` with `PreviousStatus="Created"` | ✅ |
+| `StockReservationFailedConsumer` | Order Created → Abandoned with `AbandonReason="StockReservationFailed: <reason>"`; publishes `OrderAbandonedEvent` | ✅ |
+| Idempotency: replay PaymentCompleted 3× | DB stays in Paid (xmin shadow concurrency catches race); publish count 1-3 (test transport doesn't wire EF outbox; production outbox dedupes on commit-with-state) | ✅ |
+
+Implementation notes:
+- **Slim Order aggregate per ADR-0009** — no `Payment` nav, no `GuestOrderInfo` nav. `UserId` opaque string FK to identity, `PaymentId`/`ProductId` opaque Guids. State machine: `Created → Paid | Abandoned` (both terminal). `MarkPaid` / `MarkAbandoned` return `false` if already terminal — application-level idempotency.
+- **OrderItem** snapshots `ProductName` + `UnitPrice` at order-create time per ADR-0009 — no cross-context join required for order-history queries.
+- **Three consumers** anchored to `OrderDbContext` outbox via `OrdersConsumerDefinition<T>`. Publish-before-save matches catalog/payments + production outbox semantics.
+- **xmin shadow concurrency** on `Orders` catches concurrent state transitions (e.g., StockReservationFailed racing PaymentCompleted on the same Created order — first wins).
+- **`CreateOrderCommand`** dedupes via unique index on `Orders.SagaId` — second POST with same sagaId returns the existing OrderId.
+- Same EF `EnableRetryOnFailure(5, 500ms)` + Test-environment short-circuit pattern + `AssemblyInfo.cs` serial test execution as catalog/payments.
 
 ## Phase 3 verified surface (payments-svc, https://localhost:7103)
 

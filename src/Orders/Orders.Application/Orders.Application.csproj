@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Haworks.Orders.Application</RootNamespace>
+    <AssemblyName>Orders.Application</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../Orders.Domain/Orders.Domain.csproj" />
+    <ProjectReference Include="../../Contracts/Haworks.Contracts.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="MediatR" Version="12.4.1" />
+    <PackageReference Include="FluentValidation" Version="11.10.0" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.10.0" />
+  </ItemGroup>
+</Project>

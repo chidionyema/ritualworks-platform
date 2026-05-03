@@ -27,6 +27,7 @@
     <ProjectReference Include="../../src/Identity/Identity.Api/Identity.Api.csproj" />
     <ProjectReference Include="../../src/Catalog/Catalog.Api/Catalog.Api.csproj" />
     <ProjectReference Include="../../src/Payments/Payments.Api/Payments.Api.csproj" />
+    <ProjectReference Include="../../src/Orders/Orders.Api/Orders.Api.csproj" />
   </ItemGroup>
 
 </Project>
