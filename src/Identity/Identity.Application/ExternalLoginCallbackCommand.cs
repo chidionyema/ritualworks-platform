@@ -2,7 +2,6 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
 using Haworks.Identity.Application.DTOs;
-using haworks.Application.Interfaces;
 using Haworks.BuildingBlocks.Common;
 using Haworks.Identity.Domain;
 using MediatR;

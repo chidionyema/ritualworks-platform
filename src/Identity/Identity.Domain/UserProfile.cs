@@ -1,4 +1,4 @@
-using haworks.Domain.Entities.Auth;
+using Haworks.BuildingBlocks.Persistence;
 
 namespace Haworks.Identity.Domain;
 

@@ -1,6 +1,4 @@
 using Haworks.BuildingBlocks.Extensions;
-using Haworks.Identity.Infrastructure;
-using Haworks.Identity.Application;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);

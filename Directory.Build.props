@@ -37,6 +37,7 @@
       CA1062;  <!-- Null param check — nullable reference types handle this -->
       CA1513;  <!-- ObjectDisposedException.ThrowIf — fine but not breaking -->
       CA1001;  <!-- Disposable field in non-disposable type — todo, not blocking -->
+      CA1822;  <!-- Member could be static — fine for DI-compatible interface impls -->
     </NoWarn>
   </PropertyGroup>
 

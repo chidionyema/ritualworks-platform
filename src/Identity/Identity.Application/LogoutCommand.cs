@@ -1,9 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using haworks.Application.Extensions;
-using haworks.Application.Interfaces;
 using Haworks.BuildingBlocks.Common;
-using haworks.Domain.Interfaces;
 using MediatR;
 
 namespace Haworks.Identity.Application;

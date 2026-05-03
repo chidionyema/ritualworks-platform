@@ -1,11 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup>
     <ProjectReference Include="../Identity.Infrastructure/Identity.Infrastructure.csproj" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.9.0" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.9.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.9.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.9.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.9.0" />
-    <PackageReference Include="Serilog.AspNetCore" Version="8.0.2" />
+    <!--
+      OpenTelemetry + Serilog.AspNetCore are transitively brought in by
+      Haworks.BuildingBlocks (referenced via Identity.Infrastructure →
+      Identity.Application → Identity.Domain → BuildingBlocks). Don't
+      re-declare them here — that creates package version conflicts.
+
+      Identity.Api gets the FULL ServiceDefaults stack for free.
+    -->
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
   </ItemGroup>
 </Project>

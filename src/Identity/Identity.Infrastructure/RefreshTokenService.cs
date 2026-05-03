@@ -1,9 +1,7 @@
 #nullable enable
 using System.Security.Cryptography;
 using Haworks.Identity.Application;
-using haworks.Application.Options;
 using Haworks.Identity.Domain;
-using haworks.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 

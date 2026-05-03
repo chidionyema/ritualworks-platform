@@ -1,8 +1,6 @@
 #nullable enable
 using Haworks.Identity.Application;
-using haworks.Application.Interfaces.Caching;
 using Haworks.Identity.Domain;
-using haworks.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 
 namespace Haworks.Identity.Infrastructure;

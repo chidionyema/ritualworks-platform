@@ -1,9 +1,7 @@
 #nullable enable
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using haworks.Application.Constants;
 using Haworks.Identity.Application;
-using haworks.Application.Options;
 using Haworks.Identity.Domain;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
@@ -21,14 +19,14 @@ public class JwtTokenService : IJwtTokenService
     private readonly ILogger<JwtTokenService> _logger;
     private readonly ITokenRevocationService _revocationService;
     private readonly SymmetricSecurityKey _securityKey;
-    private readonly IWebHostEnvironment _environment;
+    private readonly IHostEnvironment _environment;
 
     public JwtTokenService(
         UserManager<User> userManager,
         IOptions<JwtOptions> jwtOptions,
         ILogger<JwtTokenService> logger,
         ITokenRevocationService revocationService,
-        IWebHostEnvironment environment)
+        IHostEnvironment environment)
     {
         _userManager = userManager;
         _jwtOptions = jwtOptions.Value;

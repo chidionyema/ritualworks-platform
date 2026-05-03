@@ -1,11 +1,8 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Haworks.Identity.Application.DTOs;
-using haworks.Application.Extensions;
-using haworks.Application.Interfaces;
 using Haworks.BuildingBlocks.Common;
 using Haworks.Identity.Domain;
-using haworks.Domain.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;

@@ -1,8 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using haworks.Infrastructure.Persistence.Contexts;
 using Haworks.Identity.Domain;
 using Haworks.Identity.Domain;
-using haworks.Domain.Interfaces;
 
 namespace Haworks.Identity.Infrastructure;
 
