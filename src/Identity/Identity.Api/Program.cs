@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Extensions;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,6 +13,25 @@ builder.Services.AddApplication(builder.Configuration);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Antiforgery: required by AuthenticationController's [IgnoreAntiforgeryToken]
+// attribute. Without AddAntiforgery() the controller activator fails resolving
+// IAntiforgery even on endpoints that opt OUT of the check.
+builder.Services.AddAntiforgery();
+
+// Rate limiting: AuthenticationController uses [EnableRateLimiting("auth")].
+// 5 attempts per minute per IP — standard "stop credential stuffing" knob.
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("auth", context =>
+        System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+});
 
 // Serilog with explicit console sink. Avoid ReadFrom.Configuration here —
 // when the appsettings shape isn't exactly what Serilog.Settings.Configuration
@@ -27,6 +47,22 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 
 var app = builder.Build();
 
+// Auto-apply EF migrations on startup. Identity-svc owns its DB schema, so
+// it's the only thing that should be writing DDL. In a polyrepo world this
+// also means: deploying identity-svc is the ONLY way the identity DB schema
+// changes — no shared migration runner, no other service touching its tables.
+//
+// In production this should be gated behind an opt-in flag and run via a
+// separate Job container instead of inline at API startup. For dev + portfolio
+// this is fast and obvious.
+if (!app.Environment.IsEnvironment("Test"))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider
+        .GetRequiredService<Haworks.Identity.Infrastructure.AppIdentityDbContext>();
+    await db.Database.MigrateAsync();
+}
+
 app.MapDefaultEndpoints();
 
 if (app.Environment.IsDevelopment())
@@ -38,6 +74,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 
 app.Run();
