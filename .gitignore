@@ -50,7 +50,10 @@ deploy/vault/dev-tokens/
 # infra/image-digests.lock  ← committed; Renovate updates
 
 # Pact
-pacts/
+# Generated pact JSON is committed-by-default at this stage so we can show
+# the contract surface in the repo. CI will eventually publish via
+# `pact-broker publish` and we can flip to ignoring then.
+# pacts/
 pact-logs/
 
 # Kubernetes

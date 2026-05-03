@@ -1,0 +1,44 @@
+{
+  "consumer": {
+    "name": "ConsumerOfIdentity"
+  },
+  "interactions": [
+    {
+      "contents": {
+        "content": {
+          "changeReason": "Registered",
+          "email": "alice@example.com",
+          "eventId": "00000000-0000-0000-0000-000000000000",
+          "occurredAt": "2026-05-03T12:00:00Z",
+          "roles": [
+            "ContentUploader"
+          ],
+          "userId": "user-123",
+          "userName": "alice"
+        },
+        "contentType": "application/json",
+        "encoded": false
+      },
+      "description": "a UserProfileChangedEvent for a newly registered user",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a new user has just registered with username 'alice', email 'alice@example.com', role 'ContentUploader'"
+        }
+      ],
+      "type": "Asynchronous/Messages"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "ffi": "0.4.23",
+      "models": "1.2.5"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "identity-svc"
+  }
+}
