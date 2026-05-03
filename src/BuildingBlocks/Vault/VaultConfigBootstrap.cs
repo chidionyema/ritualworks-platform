@@ -18,22 +18,34 @@ namespace Haworks.BuildingBlocks.Vault;
 /// </summary>
 public static class VaultConfigBootstrap
 {
-    private static readonly (string VaultPath, string ConfigPrefix)[] s_kvMappings =
-    [
-        ("stripe",          "PaymentProviders:Stripe"),
-        ("jwt",             "Jwt"),
-        ("hub",             "HubSecurity"),
-        ("oauth/google",    "Authentication:Google"),
-        ("oauth/microsoft", "Authentication:Microsoft"),
-        ("oauth/facebook",  "Authentication:Facebook"),
-    ];
+    /// <summary>
+    /// Maps a Vault KV path (under the "secret" mount) to a configuration
+    /// section prefix. Each service supplies its own list — there is NO
+    /// shared mapping here because in a polyrepo world that would create
+    /// the same "everyone reads everything" coupling we are escaping.
+    ///
+    /// Example for identity-svc:
+    ///   new KvMapping("identity/jwt",            "Jwt"),
+    ///   new KvMapping("identity/oauth/google",   "Authentication:Google"),
+    ///   new KvMapping("identity/oauth/microsoft","Authentication:Microsoft"),
+    ///   new KvMapping("identity/oauth/facebook", "Authentication:Facebook"),
+    /// </summary>
+    public sealed record KvMapping(string VaultPath, string ConfigPrefix);
 
     public static async Task<IReadOnlyDictionary<string, string?>> LoadAsync(
         IConfiguration configuration,
+        IReadOnlyList<KvMapping> kvMappings,
         ILogger? logger = null,
         IVaultAppRoleAuthenticator? authenticator = null,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(kvMappings);
+        if (kvMappings.Count == 0)
+        {
+            logger?.LogWarning("[VaultBootstrap] No KV mappings supplied — no secrets loaded.");
+            return new Dictionary<string, string?>();
+        }
+
         var address      = Required(configuration, "Vault:Address");
         var roleIdPath   = Required(configuration, "Vault:RoleIdPath");
         var secretIdPath = Required(configuration, "Vault:SecretIdPath");
@@ -54,7 +66,7 @@ public static class VaultConfigBootstrap
         var client = new VaultClient(new VaultClientSettings(address, new TokenAuthMethodInfo(login.ClientToken)));
 
         var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (vaultPath, configPrefix) in s_kvMappings)
+        foreach (var (vaultPath, configPrefix) in kvMappings)
         {
             try
             {
