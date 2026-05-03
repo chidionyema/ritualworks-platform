@@ -1,0 +1,64 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.vscode/launch.json
+.idea/
+artifacts/
+TestResults/
+coverage*.xml
+*.coverage
+*.coveragexml
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+*.nuget.props
+*.nuget.targets
+
+# Aspire
+.aspire/
+*.AppHost/obj/
+*.AppHost/bin/
+deploy/aspire/vault-creds/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Logs
+*.log
+logs/
+
+# Secrets — never commit
+*.pem
+*.key
+*.pfx
+.env
+.env.*
+!.env.example
+secrets/
+deploy/vault/dev-tokens/
+
+# Image digest lock changes via auto-PR
+# infra/image-digests.lock  ← committed; Renovate updates
+
+# Pact
+pacts/
+pact-logs/
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+*.code-workspace

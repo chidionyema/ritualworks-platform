@@ -1,0 +1,43 @@
+<Project>
+
+  <!--
+    Root Directory.Build.props — applies to every .csproj in the repo.
+    Per-service Directory.Build.props files override / extend.
+
+    Boundary enforcement (the load-bearing piece — see ADR-0001):
+      Each service's Directory.Build.props blocks ProjectReference items
+      that point at a sibling service's folder. Sibling services may only
+      be reached via Haworks.Contracts (events, .proto) or
+      Haworks.BuildingBlocks (cross-cutting infrastructure).
+
+    Architectural test:
+      tests/Architecture/MonorepoBoundaryTests.cs runs NetArchTest on every PR
+      to catch namespace-only references that ProjectReference blocking won't.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>
+      $(NoWarn);
+      CS1591;  <!-- Missing XML doc — too noisy at this scale -->
+      CA1305;  <!-- IFormatProvider on .ToString() — overkill in logging code -->
+      CA1716;  <!-- Identifier-conflicts-with-keyword in other languages -->
+      CA1725;  <!-- Param-name mismatch with interface — cosmetic -->
+      CA1805;  <!-- Explicit init to default — clarity > pedantry -->
+      CA1812;  <!-- Unused internal class — false positive for DI-registered services -->
+      CA1848;  <!-- LoggerMessage delegates — micro-optimization not worth the verbosity -->
+      CA1859;  <!-- Concrete return type — over-rigid in extension methods -->
+      CA1062;  <!-- Null param check — nullable reference types handle this -->
+      CA1513;  <!-- ObjectDisposedException.ThrowIf — fine but not breaking -->
+      CA1001;  <!-- Disposable field in non-disposable type — todo, not blocking -->
+    </NoWarn>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,32 @@
+<Project>
+
+  <!--
+    BOUNDARY ENFORCEMENT — Identity service.
+    See ADR-0001 (Strict Monorepo with Physically-Enforced Service Boundaries).
+
+    Identity is a leaf service. It MAY reference:
+      • Haworks.BuildingBlocks (cross-cutting infrastructure)
+      • Haworks.Contracts      (events + .proto definitions)
+
+    It MUST NOT reference any sibling service's project.
+    NetArchTest in tests/Identity.Architecture/BoundaryTests.cs catches
+    namespace-only violations that this MSBuild check might miss.
+  -->
+
+  <Import Project="../../Directory.Build.props" />
+
+  <Target Name="EnforceServiceBoundary" BeforeTargets="Build">
+    <ItemGroup>
+      <ForbiddenRef Include="@(ProjectReference)"
+                    Condition="$([System.String]::Copy('%(Identity)').Contains('..\\Catalog\\')) Or
+                               $([System.String]::Copy('%(Identity)').Contains('..\\Orders\\')) Or
+                               $([System.String]::Copy('%(Identity)').Contains('..\\Payments\\')) Or
+                               $([System.String]::Copy('%(Identity)').Contains('..\\Content\\')) Or
+                               $([System.String]::Copy('%(Identity)').Contains('..\\CheckoutOrchestrator\\')) Or
+                               $([System.String]::Copy('%(Identity)').Contains('..\\BffWeb\\'))" />
+    </ItemGroup>
+    <Error Condition="'@(ForbiddenRef)' != ''"
+           Text="Boundary violation: Identity service may only reference Contracts and BuildingBlocks. Forbidden ProjectReference: @(ForbiddenRef)" />
+  </Target>
+
+</Project>

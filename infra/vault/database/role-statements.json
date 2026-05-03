@@ -1,0 +1,5 @@
+{
+  "_comment": "SQL templates Vault runs to issue/revoke a dynamic credential. {{owner}} is substituted with the bounded context's group role (catalog_owner, orders_owner, ...). The {{name}}/{{password}}/{{expiration}} placeholders are interpolated by Vault itself, not us.",
+  "creation_statements":   "CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}' INHERIT IN ROLE {{owner}};\nALTER ROLE \"{{name}}\" SET ROLE = {{owner}};",
+  "revocation_statements": "REASSIGN OWNED BY \"{{name}}\" TO {{owner}}; DROP OWNED BY \"{{name}}\"; DROP ROLE \"{{name}}\";"
+}

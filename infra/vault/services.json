@@ -1,0 +1,12 @@
+{
+  "_comment": "Single source of truth for the per-service AppRole topology. vault-init.sh iterates this list to create one Vault policy + one AppRole + one credential-file pair per service. Adding a new service = add a name here, a row in database/roles.json (if it has a DB), and a section in secrets/kv-dev-values.json (if it has owned secrets).",
+  "services": [
+    { "name": "identity",                "has_db": true,  "db_role": "haworks-identity"               },
+    { "name": "catalog",                 "has_db": true,  "db_role": "haworks-catalog"                },
+    { "name": "orders",                  "has_db": true,  "db_role": "haworks-orders"                 },
+    { "name": "payments",                "has_db": true,  "db_role": "haworks-payments"               },
+    { "name": "content",                 "has_db": true,  "db_role": "haworks-content"                },
+    { "name": "checkout-orchestrator",   "has_db": true,  "db_role": "haworks-checkout-orchestrator" },
+    { "name": "bff-web",                 "has_db": false                                              }
+  ]
+}

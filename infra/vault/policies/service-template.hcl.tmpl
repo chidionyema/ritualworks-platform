@@ -1,0 +1,33 @@
+# =============================================================================
+# Vault policy template — instantiated PER SERVICE by vault-init.sh.
+# Substitution: {{service}} → service name from infra/vault/services.json.
+# =============================================================================
+# Single source of truth for service runtime permissions. Consumed by:
+#   * deploy/aspire/vault-init.sh (local dev seeding via this template)
+#   * Production IaC (Terraform vault_policy.svc_<name> resources, etc.)
+#
+# Boundary rule (ADR-0009): each service can read its own KV namespace
+# + the shared namespace, plus rotate its own DB credentials. Cross-service
+# KV reads require an explicit policy grant — none by default.
+# =============================================================================
+
+# Service-owned KV v2 secrets (Stripe keys, JWT key, OAuth, etc.).
+# Each service's secrets live under secret/{{service}}/* and only this
+# service's runtime AppRole can read them.
+path "secret/data/{{service}}/*"     { capabilities = ["read", "list"] }
+path "secret/metadata/{{service}}/*" { capabilities = ["read", "list"] }
+
+# Shared KV namespace — read-only for everyone. Use sparingly. Examples:
+# JWKS endpoint URL, public-facing branding, anything intentionally public.
+path "secret/data/shared/*"     { capabilities = ["read", "list"] }
+path "secret/metadata/shared/*" { capabilities = ["read", "list"] }
+
+# Dynamic database credentials for THIS service only. Each issued user joins
+# the matching <service>_owner group role (created by init-postgres.sql),
+# inheriting full privileges on that database only — no SUPERUSER, no
+# cross-context access.
+path "database/creds/haworks-{{service}}" { capabilities = ["read"] }
+
+# Token self-management (used by the credential renewal background service).
+path "auth/token/renew-self"  { capabilities = ["update"] }
+path "auth/token/lookup-self" { capabilities = ["read"] }

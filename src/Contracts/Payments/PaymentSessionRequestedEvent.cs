@@ -1,0 +1,58 @@
+namespace Haworks.Contracts.Payments;
+
+/// <summary>
+/// Published when a payment session needs to be created with the payment provider.
+/// Typically triggered after stock is successfully reserved.
+/// Consumers:
+/// - PaymentSessionConsumer: Creates session with Stripe/PayPal
+/// </summary>
+public sealed record PaymentSessionRequestedEvent : DomainEvent
+{
+    /// <summary>The order requiring a payment session.</summary>
+    public required Guid OrderId { get; init; }
+
+    /// <summary>The saga identifier for correlation.</summary>
+    public required Guid SagaId { get; init; }
+
+    /// <summary>Total amount to charge.</summary>
+    public required decimal Amount { get; init; }
+
+    /// <summary>Currency code (e.g., "USD").</summary>
+    public required string Currency { get; init; }
+
+    /// <summary>Customer email for the payment session.</summary>
+    public required string CustomerEmail { get; init; }
+
+    /// <summary>Line items for the payment session.</summary>
+    public required IReadOnlyList<PaymentLineItemData> LineItems { get; init; }
+
+    /// <summary>URL to redirect on successful payment.</summary>
+    public required string SuccessUrl { get; init; }
+
+    /// <summary>URL to redirect on cancelled payment.</summary>
+    public required string CancelUrl { get; init; }
+
+    /// <summary>Additional metadata to attach to the session.</summary>
+    public Dictionary<string, string>? Metadata { get; init; }
+
+    /// <summary>Idempotency key for the payment provider.</summary>
+    public string? IdempotencyKey { get; init; }
+}
+
+/// <summary>
+/// Line item data for payment session creation.
+/// </summary>
+public sealed record PaymentLineItemData
+{
+    /// <summary>Product name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Product description.</summary>
+    public string? Description { get; init; }
+
+    /// <summary>Unit price in cents.</summary>
+    public required long UnitAmountCents { get; init; }
+
+    /// <summary>Quantity.</summary>
+    public required int Quantity { get; init; }
+}

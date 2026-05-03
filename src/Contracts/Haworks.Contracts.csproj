@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Haworks.Contracts</RootNamespace>
+    <AssemblyName>Haworks.Contracts</AssemblyName>
+    <PackageId>Haworks.Contracts</PackageId>
+    <Description>Cross-service integration event records and gRPC contract definitions. SemVer'd; additive within a major version. The only thing services may reference across boundaries (besides BuildingBlocks).</Description>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <!--
+    No references on purpose. Contracts is the lowest layer in the dependency graph.
+    Adding a dependency here propagates to every service in the system.
+  -->
+
+</Project>
