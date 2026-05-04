@@ -22,6 +22,19 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/CheckoutOrchestrator/CheckoutOrchestrator.Api/CheckoutOrchestrator.Api.csproj" />
+    <!-- Saga compensation chaos test wires the catalog StockReleaseRequestedConsumer
+         in-process so the test can prove the full compensation chain in one
+         harness. The other CheckoutOrchestrator.Integration tests don't touch
+         Catalog at all, but the cross-reference is OK at test-time per the
+         monorepo boundary rules (tests are end-to-end consumers of all
+         service contracts). -->
+    <ProjectReference Include="../../src/Catalog/Catalog.Application/Catalog.Application.csproj" />
+    <ProjectReference Include="../../src/Catalog/Catalog.Infrastructure/Catalog.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../../src/BuildingBlocks.Testing/TestModuleInitializer.cs"
+             Link="TestModuleInitializer.cs" />
   </ItemGroup>
 
 </Project>

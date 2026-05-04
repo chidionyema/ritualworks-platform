@@ -32,6 +32,9 @@ public class CatalogDbContext : DbContext
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductReview> ProductReviews => Set<ProductReview>();
+    public DbSet<ProductMetadata> ProductMetadata => Set<ProductMetadata>();
+    public DbSet<ProductSpecification> ProductSpecifications => Set<ProductSpecification>();
+    public DbSet<OrderStockReservation> OrderStockReservations => Set<OrderStockReservation>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -107,6 +110,8 @@ public class CatalogDbContext : DbContext
             entity.ToTable("ProductReviews");
             entity.HasKey(r => r.Id);
             entity.Property(r => r.UserId).HasMaxLength(450).IsRequired();
+            entity.Property(r => r.AuthorName).HasMaxLength(200);
+            entity.Property(r => r.Title).HasMaxLength(200);
             entity.Property(r => r.Rating).IsRequired();
             entity.Property(r => r.Body).HasMaxLength(4000);
             entity.Property(r => r.IsApproved).IsRequired();
@@ -119,6 +124,51 @@ public class CatalogDbContext : DbContext
 
             entity.HasIndex(r => r.ProductId).HasDatabaseName("IX_ProductReviews_ProductId");
             entity.HasIndex(r => r.UserId).HasDatabaseName("IX_ProductReviews_UserId");
+        });
+
+                modelBuilder.Entity<ProductMetadata>(entity =>
+        {
+            entity.ToTable("ProductMetadata");
+            entity.HasKey(m => m.Id);
+            entity.Property(m => m.KeyName).HasMaxLength(100).IsRequired();
+            entity.Property(m => m.KeyValue).HasMaxLength(2000).IsRequired();
+            // C# `\x` is a hex escape — `"\x0000…"` becomes a literal NUL byte.
+            // Use `\\x` so the backslash survives into the SQL literal Postgres parses.
+            entity.Property(m => m.RowVersion).HasDefaultValueSql("'\\x0000000000000000'::bytea");
+
+            entity.HasOne(m => m.Product)
+                .WithMany(p => p.Metadata)
+                .HasForeignKey(m => m.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(m => m.ProductId).HasDatabaseName("IX_ProductMetadata_ProductId");
+        });
+
+        modelBuilder.Entity<ProductSpecification>(entity =>
+        {
+            entity.ToTable("ProductSpecifications");
+            entity.HasKey(s => s.Id);
+            entity.Property(s => s.Name).HasMaxLength(100).IsRequired();
+            entity.Property(s => s.Value).HasMaxLength(1000).IsRequired();
+            entity.Property(s => s.DisplayOrder).IsRequired();
+
+            entity.HasOne(s => s.Product)
+                .WithMany(p => p.Specifications)
+                .HasForeignKey(s => s.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(s => s.ProductId).HasDatabaseName("IX_ProductSpecifications_ProductId");
+        });
+
+        modelBuilder.Entity<OrderStockReservation>(entity =>
+        {
+            entity.ToTable("OrderStockReservations");
+            entity.HasKey(r => r.Id);
+            entity.Property(r => r.OrderId).IsRequired();
+            entity.Property(r => r.ItemsJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(r => r.RowVersion).HasDefaultValueSql("'\\x0000000000000000'::bytea");
+
+            entity.HasIndex(r => r.OrderId).IsUnique().HasDatabaseName("IX_OrderStockReservations_OrderId");
         });
 
         // MassTransit transactional outbox tables. Lives in the catalog DB so

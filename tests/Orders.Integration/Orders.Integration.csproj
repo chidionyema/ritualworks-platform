@@ -23,4 +23,9 @@
     <ProjectReference Include="../../src/Orders/Orders.Api/Orders.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="../../src/BuildingBlocks.Testing/TestModuleInitializer.cs"
+             Link="TestModuleInitializer.cs" />
+  </ItemGroup>
+
 </Project>

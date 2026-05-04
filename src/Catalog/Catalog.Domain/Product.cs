@@ -14,6 +14,8 @@ namespace Haworks.Catalog.Domain;
 public class Product : AuditableEntity
 {
     private readonly List<ProductReview> _reviews = new();
+    private readonly List<ProductMetadata> _metadata = new();
+    private readonly List<ProductSpecification> _specifications = new();
 
     /// <summary>EF Core materialization constructor.</summary>
     protected Product() : base() { }
@@ -41,6 +43,8 @@ public class Product : AuditableEntity
     public Category? Category { get; private set; }
 
     public IReadOnlyCollection<ProductReview> Reviews => _reviews.AsReadOnly();
+    public IReadOnlyCollection<ProductMetadata> Metadata => _metadata.AsReadOnly();
+    public IReadOnlyCollection<ProductSpecification> Specifications => _specifications.AsReadOnly();
 
     public static Product Create(string name, string description, decimal unitPrice, Guid categoryId)
     {
@@ -103,4 +107,24 @@ public class Product : AuditableEntity
 
     public void List()    { IsListed = true;  LastModifiedDate = DateTime.UtcNow; }
     public void Unlist()  { IsListed = false; LastModifiedDate = DateTime.UtcNow; }
+
+    public void AddMetadata(string key, string value)
+    {
+        var existing = _metadata.FirstOrDefault(m => m.KeyName == key);
+        if (existing != null)
+        {
+            existing.UpdateValue(value);
+        }
+        else
+        {
+            _metadata.Add(ProductMetadata.Create(Id, key, value));
+        }
+        LastModifiedDate = DateTime.UtcNow;
+    }
+
+    public void AddSpecification(string name, string value, int displayOrder = 0)
+    {
+        _specifications.Add(ProductSpecification.Create(Id, name, value, displayOrder));
+        LastModifiedDate = DateTime.UtcNow;
+    }
 }

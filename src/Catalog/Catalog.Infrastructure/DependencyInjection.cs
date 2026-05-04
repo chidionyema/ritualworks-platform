@@ -1,8 +1,14 @@
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Haworks.BuildingBlocks.Messaging;
+using Haworks.Catalog.Application.Consumers;
+using Haworks.Catalog.Domain.Interfaces;
+using Haworks.Catalog.Infrastructure.Messaging;
 using Haworks.Catalog.Infrastructure.Repositories;
+using Haworks.Catalog.Infrastructure.Services;
+using System;
 
 namespace Haworks.Catalog.Infrastructure;
 
@@ -22,6 +28,8 @@ public static class DependencyInjection
 
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<ICategoryRepository, CategoryRepository>();
+        services.AddScoped<IProductReviewRepository, ProductReviewRepository>();
+        services.AddScoped<IStockService, StockService>();
 
         // MassTransit + transactional outbox anchored to CatalogDbContext.
         // BusOutboxDeliveryService polls the OutboxMessage table and
@@ -52,6 +60,11 @@ public static class DependencyInjection
                 o.QueryDelay = TimeSpan.FromSeconds(1);
                 o.DuplicateDetectionWindow = TimeSpan.FromMinutes(30);
             });
+
+            // Compensation consumer for the saga's StockReleaseRequested.
+            // Anchored to CatalogDbContext outbox via CatalogConsumerDefinition
+            // so release + StockReleasedEvent publish commit atomically.
+            mt.AddConsumer<StockReleaseRequestedConsumer, CatalogConsumerDefinition<StockReleaseRequestedConsumer>>();
 
             mt.UsingRabbitMq((context, cfg) =>
             {

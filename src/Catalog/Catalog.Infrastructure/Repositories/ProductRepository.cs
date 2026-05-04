@@ -8,10 +8,15 @@ internal sealed class ProductRepository(CatalogDbContext db) : IProductRepositor
         db.Products
             .AsNoTracking()
             .Include(p => p.Category)
+            .Include(p => p.Metadata)
+            .Include(p => p.Specifications)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
     public Task<Product?> GetByIdTrackedAsync(Guid id, CancellationToken ct = default) =>
-        db.Products.FirstOrDefaultAsync(p => p.Id == id, ct);
+        db.Products
+            .Include(p => p.Metadata)
+            .Include(p => p.Specifications)
+            .FirstOrDefaultAsync(p => p.Id == id, ct);
 
     public async Task<IReadOnlyList<Product>> ListAsync(
         int skip,
@@ -46,6 +51,29 @@ internal sealed class ProductRepository(CatalogDbContext db) : IProductRepositor
     {
         await db.Products.AddAsync(product, ct);
     }
+
+    public Task UpdateAsync(Product product, CancellationToken ct = default)
+    {
+        // EF tracks changes automatically via the change-tracker when the
+        // entity is loaded with GetByIdTrackedAsync; explicit Update marks
+        // the entire entity as Modified for the detached-entity case.
+        db.Products.Update(product);
+        return Task.CompletedTask;
+    }
+
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var existing = await db.Products.FirstOrDefaultAsync(p => p.Id == id, ct);
+        if (existing is not null) db.Products.Remove(existing);
+    }
+
+    public async Task AddOrderStockReservationAsync(OrderStockReservation reservation, CancellationToken ct = default)
+    {
+        await db.OrderStockReservations.AddAsync(reservation, ct);
+    }
+
+    public Task<OrderStockReservation?> GetOrderStockReservationAsync(Guid orderId, CancellationToken ct = default) =>
+        db.OrderStockReservations.FirstOrDefaultAsync(r => r.OrderId == orderId, ct);
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default) =>
         db.SaveChangesAsync(ct);

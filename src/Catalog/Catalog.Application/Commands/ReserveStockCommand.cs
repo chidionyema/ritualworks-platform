@@ -88,7 +88,7 @@ internal sealed class ReserveStockCommandHandler(
             IdempotencyKey = request.IdempotencyKey,
             Items = new[]
             {
-                new StockReservationItem
+                new Haworks.Contracts.Catalog.StockReservationItem
                 {
                     ProductId = product.Id,
                     ProductName = product.Name,
