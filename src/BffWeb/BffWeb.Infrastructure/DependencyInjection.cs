@@ -1,4 +1,3 @@
-using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using Haworks.BuildingBlocks.Messaging;
 
@@ -10,36 +9,17 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // Phase 7b registers HttpClient typed-clients to backend services.
-        // Phase 7c registers MassTransit + the PaymentSessionCreatedConsumer +
-        // SignalR. Skipped in Test env where the integration fixture grafts
-        // the in-memory MT harness.
-
+        // MassTransit + the PaymentSessionCreatedConsumer are wired by the Api
+        // project's Program.cs (it owns the consumer type, which lives under
+        // BffWeb.Api/SignalR/). Calling AddMassTransit in two places throws
+        // ConfigurationException — see ADR-0010 footnote in CHANGELOG. The
+        // domain event publisher still belongs in Infrastructure since it's
+        // pure plumbing.
         var aspNetEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
         if (string.Equals(aspNetEnv, "Test", StringComparison.OrdinalIgnoreCase))
         {
             return services;
         }
-
-        services.AddMassTransit(mt =>
-        {
-            mt.SetKebabCaseEndpointNameFormatter();
-
-            // Phase 7c: PaymentSessionCreatedConsumer wired here.
-            // bff-web has no DbContext + no outbox — it doesn't own state.
-            // The consumer is fire-and-forget into SignalR; if the push
-            // fails the message is acked (the user can poll the saga
-            // status REST endpoint as a fallback).
-
-            mt.UsingRabbitMq((context, cfg) =>
-            {
-                var rabbitConn = configuration.GetConnectionString("rabbitmq")
-                    ?? throw new InvalidOperationException(
-                        "ConnectionStrings:rabbitmq is missing.");
-                cfg.Host(new Uri(rabbitConn));
-                cfg.ConfigureEndpoints(context);
-            });
-        });
 
         services.AddDomainEventPublisher();
 

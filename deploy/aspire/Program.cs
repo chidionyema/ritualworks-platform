@@ -144,6 +144,13 @@ var vaultSeed = builder.AddContainer("vault-seed", "hashicorp/vault", "1.15")
 //   • Vault credential paths for the service's own AppRole
 
 // --- identity-svc -----------------------------------------------------------
+// Identity is the only service with Vault__Enabled=true at boot — its
+// VaultConfigBootstrap loads JWT secrets via AppRole login during
+// Program.cs Main(). That login requires vault-init to have already
+// written the role_id + secret_id files under vault-creds/identity/,
+// which only happens after vault-seed completes. Other services tolerate
+// vault-not-ready (they use lazy access) so they can use the cheaper
+// WaitFor(vault) — only identity needs WaitForCompletion(vaultSeed).
 var identity = builder.AddProject<Projects.Identity_Api>("identity-svc")
     .WaitForCompletion(vaultSeed)
     .WithReference(identityDb)
@@ -158,7 +165,7 @@ var identity = builder.AddProject<Projects.Identity_Api>("identity-svc")
 // catalog DB). Has its own per-service Vault AppRole (no Vault secrets
 // needed yet — all stock state is in postgres, not Vault).
 var catalog = builder.AddProject<Projects.Catalog_Api>("catalog-svc")
-    .WaitForCompletion(vaultSeed)
+    .WaitFor(vault)
     .WithReference(catalogDb)
     .WithReference(rabbitmq)
     .WithEnvironment("Vault__Enabled",      "false")  // no Vault secrets in Phase 2; flip when needed
@@ -174,7 +181,7 @@ var catalog = builder.AddProject<Projects.Catalog_Api>("catalog-svc")
 // PaymentSessionRequested, StockReleaseRequested). Per-context outbox in
 // checkout DB.
 var checkout = builder.AddProject<Projects.CheckoutOrchestrator_Api>("checkout-svc")
-    .WaitForCompletion(vaultSeed)
+    .WaitFor(vault)
     .WithReference(checkoutDb)
     .WithReference(rabbitmq)
     .WithEnvironment("Vault__Enabled",      "false")
@@ -189,7 +196,7 @@ var checkout = builder.AddProject<Projects.CheckoutOrchestrator_Api>("checkout-s
 // per-context outbox in orders DB. Per-service Vault AppRole; no Vault secrets
 // needed yet (no external API calls — pure event-driven state).
 var orders = builder.AddProject<Projects.Orders_Api>("orders-svc")
-    .WaitForCompletion(vaultSeed)
+    .WaitFor(vault)
     .WithReference(ordersDb)
     .WithReference(rabbitmq)
     .WithEnvironment("Vault__Enabled",      "false")
@@ -205,7 +212,7 @@ var orders = builder.AddProject<Projects.Orders_Api>("orders-svc")
 // per-context outbox in payments DB. Per-service Vault AppRole holds the
 // provider API keys + webhook secrets (wired in Phase 3b/3c).
 var payments = builder.AddProject<Projects.Payments_Api>("payments-svc")
-    .WaitForCompletion(vaultSeed)
+    .WaitFor(vault)
     .WithReference(paymentsDb)
     .WithReference(rabbitmq)
     .WithEnvironment("Vault__Enabled",      "false")  // flip when Phase 3b wires Stripe/PayPal secrets
@@ -220,7 +227,7 @@ var payments = builder.AddProject<Projects.Payments_Api>("payments-svc")
 // Owns no DB; consumes PaymentSessionCreatedEvent from RabbitMQ to bridge
 // the saga -> SignalR -> browser flow.
 var bffWeb = builder.AddProject<Projects.BffWeb_Api>("bff-web")
-    .WaitForCompletion(vaultSeed)
+    .WaitFor(vault)
     .WithReference(rabbitmq)
     .WithReference(identity)
     .WithReference(catalog)
