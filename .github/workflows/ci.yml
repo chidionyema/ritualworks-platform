@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel in-progress runs of the same workflow on the same branch.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  # Enforce the same regex timeout fix the per-assembly module init applies
+  # locally — belt-and-braces in case CI's Testcontainers tag matching is
+  # subject to the same backtracking.
+  TESTCONTAINERS_RYUK_DISABLED: true
+
+jobs:
+  # Fast path — builds the solution and runs everything that doesn't need
+  # Docker. Fails the PR in <2 minutes if the build, unit, architecture,
+  # or Pact tests are broken.
+  build-and-fast-tests:
+    name: Build + unit/arch/contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore RitualworksPlatform.sln
+
+      - name: Build (no restore)
+        run: dotnet build RitualworksPlatform.sln --no-restore --configuration Release
+
+      - name: Unit tests
+        run: |
+          for proj in tests/*.Unit/*.csproj; do
+            dotnet test "$proj" --no-build --configuration Release --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=minimal"
+          done
+
+      - name: Architecture tests
+        run: |
+          for proj in tests/*.Architecture/*.csproj; do
+            dotnet test "$proj" --no-build --configuration Release --logger "console;verbosity=minimal"
+          done
+
+      - name: Contract (Pact) tests
+        run: |
+          for proj in tests/*.Contract/*.csproj; do
+            dotnet test "$proj" --no-build --configuration Release --logger "console;verbosity=minimal"
+          done
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fast-test-results
+          path: '**/TestResults/*.trx'
+          retention-days: 7
+
+  # Slow path — Testcontainers integration tests. One job per service so a
+  # flake in one suite doesn't block the others, and so per-service timing
+  # is visible at a glance.
+  integration-tests:
+    name: Integration / ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build-and-fast-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - Catalog
+          - Orders
+          - Payments
+          - Identity
+          - BffWeb
+          - CheckoutOrchestrator
+          - Content
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # Linux runners have Docker pre-installed and dockerd running. The
+      # default socket lives at /var/run/docker.sock — same as the override
+      # the local test module init falls back to. Confirm it's reachable
+      # before kicking off the suite so a Docker outage shows up here, not
+      # buried in a Testcontainers stack trace 5 minutes in.
+      - name: Verify Docker
+        run: docker info
+
+      - name: Restore + build ${{ matrix.suite }}.Integration
+        run: |
+          dotnet restore tests/${{ matrix.suite }}.Integration/${{ matrix.suite }}.Integration.csproj
+          dotnet build tests/${{ matrix.suite }}.Integration/${{ matrix.suite }}.Integration.csproj --no-restore --configuration Release
+
+      - name: Run ${{ matrix.suite }}.Integration
+        run: |
+          dotnet test tests/${{ matrix.suite }}.Integration/${{ matrix.suite }}.Integration.csproj \
+            --no-build --configuration Release \
+            --logger "trx;LogFileName=test-results.trx" \
+            --logger "console;verbosity=normal"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results-${{ matrix.suite }}
+          path: '**/TestResults/*.trx'
+          retention-days: 7

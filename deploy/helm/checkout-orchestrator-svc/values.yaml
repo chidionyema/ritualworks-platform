@@ -1,0 +1,67 @@
+image:
+  repository: ghcr.io/ritualworks/checkout-orchestrator-svc
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+# Saga state is in Postgres, so multiple replicas safely consume from the
+# same RabbitMQ queue — MassTransit competing-consumer semantics.
+replicaCount: 2
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+config:
+  ASPNETCORE_ENVIRONMENT: Production
+  ConnectionStrings__checkout: "Host=postgres;Port=5432;Database=checkout;Username=checkout;Password=changeme"
+  ConnectionStrings__rabbitmq: "amqp://guest:guest@rabbitmq:5672/"
+  Vault__Enabled: "true"
+  Vault__Address: "http://vault:8200"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+
+vault:
+  enabled: true
+  role: checkout-orchestrator-svc
+  secretPath: secret/data/checkout
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+probes:
+  liveness:
+    path: /health/live
+    initialDelaySeconds: 10
+    periodSeconds: 20
+  readiness:
+    path: /health/ready
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  readOnlyRootFilesystem: true
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

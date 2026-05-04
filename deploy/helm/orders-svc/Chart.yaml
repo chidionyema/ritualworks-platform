@@ -1,0 +1,12 @@
+apiVersion: v2
+name: orders-svc
+description: Orders bounded context — cart, order placement, guest checkout
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - orders
+  - microservice
+  - dotnet
+maintainers:
+  - name: ritualworks

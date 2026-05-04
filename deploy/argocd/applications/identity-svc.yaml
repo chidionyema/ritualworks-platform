@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: identity-svc
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/chidionyema/ritualworks-platform.git
+    targetRevision: HEAD
+    path: deploy/helm/identity-svc
+    helm:
+      releaseName: identity-svc
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ritualworks
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

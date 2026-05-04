@@ -1,0 +1,68 @@
+image:
+  repository: ghcr.io/ritualworks/content-svc
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+config:
+  ASPNETCORE_ENVIRONMENT: Production
+  ConnectionStrings__content: "Host=postgres;Port=5432;Database=content;Username=content;Password=changeme"
+  ConnectionStrings__rabbitmq: "amqp://guest:guest@rabbitmq:5672/"
+  Minio__Endpoint: "http://minio:9000"
+  Vault__Enabled: "true"
+  Vault__Address: "http://vault:8200"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+
+vault:
+  enabled: true
+  role: content-svc
+  # MinIO access keys + ClamAV creds under secret/content
+  secretPath: secret/data/content
+
+# Content needs more memory headroom for image-resize / virus-scan buffering.
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+probes:
+  liveness:
+    path: /health/live
+    initialDelaySeconds: 10
+    periodSeconds: 20
+  readiness:
+    path: /health/ready
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  readOnlyRootFilesystem: true
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

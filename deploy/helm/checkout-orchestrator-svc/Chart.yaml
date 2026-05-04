@@ -1,0 +1,13 @@
+apiVersion: v2
+name: checkout-orchestrator-svc
+description: MassTransit saga state machine — choreographs the checkout workflow + compensation
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - saga
+  - microservice
+  - dotnet
+  - masstransit
+maintainers:
+  - name: ritualworks

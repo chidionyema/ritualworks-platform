@@ -1,0 +1,32 @@
+# App-of-Apps — the single Application that ArgoCD bootstraps with. It
+# points at the directory containing all per-service Application manifests,
+# so adding a new service is "drop a new YAML in this folder and ArgoCD
+# picks it up on the next sync."
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ritualworks-platform
+  namespace: argocd
+  finalizers:
+    # Cascade-deletes the child Applications when this one is removed.
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/chidionyema/ritualworks-platform.git
+    targetRevision: HEAD
+    path: deploy/argocd/applications
+    directory:
+      recurse: false
+      # Skip our own manifest to avoid the "Application that includes
+      # itself" diff loop.
+      exclude: app-of-apps.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

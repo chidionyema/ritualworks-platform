@@ -1,0 +1,12 @@
+apiVersion: v2
+name: identity-svc
+description: Identity bounded context — JWT issuance, refresh, profile, JTI revocation
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - identity
+  - microservice
+  - dotnet
+maintainers:
+  - name: ritualworks
