@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <!-- CA1861: EF Core's generated Migrations files pass new[]{...} as args. Auto-gen, can't edit. -->
+    <NoWarn>$(NoWarn);CA1861</NoWarn>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="../Content.Application/Content.Application.csproj" />
     <ProjectReference Include="../../BuildingBlocks/Haworks.BuildingBlocks.csproj" />

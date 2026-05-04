@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
 using Haworks.Contracts.Payments;
 
 namespace Haworks.Payments.Application.Consumers;
@@ -42,21 +43,86 @@ public sealed class PaymentWebhookValidatedConsumer(
             "Processing webhook: provider={Provider}, eventType={EventType}, providerEventId={ProviderEventId}",
             evt.Provider, evt.EventType, evt.ProviderEventId);
 
+        // Application-level idempotency. The cheap read-side check skips
+        // re-work when a redelivery arrives after the first consume committed.
+        // The WebhookEvent row itself is written by the dispatch branches
+        // (in the same SaveChanges as the Payment state mutation), so the
+        // unique index on (Provider, ProviderEventId) gives us atomic
+        // "state change + dedup row" semantics in production.
+        //
+        // This is best-effort — a tight burst of redeliveries can race the
+        // SELECT and all see "no row". Production resolves the race via the
+        // EF outbox: publishes are captured in the same TX as the WebhookEvent
+        // insert, and the second-place SaveChanges fails on the unique index
+        // and rolls back the outbox row too, so RabbitMQ sees one publish.
+        // The in-memory test transport publishes immediately and cannot
+        // replicate that, hence the WebhookEvent row count (not the publish
+        // count) is the production-correct idempotency assertion.
+        var providerEnum = ParseProvider(evt.Provider);
+        if (providerEnum.HasValue && !string.IsNullOrEmpty(evt.ProviderEventId))
+        {
+            var alreadyProcessed = await payments.WebhookEventExistsAsync(
+                providerEnum.Value, evt.ProviderEventId, context.CancellationToken);
+            if (alreadyProcessed)
+            {
+                logger.LogInformation(
+                    "Webhook {ProviderEventId} already processed (provider={Provider}); skipping",
+                    evt.ProviderEventId, evt.Provider);
+                return;
+            }
+
+            // Stage the WebhookEvent in the DbContext so it commits in the
+            // same SaveChanges as the Payment state mutation done by the
+            // dispatch branch. Production: outbox row + state row + dedup
+            // row all atomic. The unique index on (Provider, ProviderEventId)
+            // turns concurrent in-flight consumes into a deterministic
+            // single-winner race at SaveChanges time.
+            var webhookEvent = WebhookEvent.Create(
+                providerEnum.Value, evt.ProviderEventId, evt.EventType, evt.RawPayload);
+            await payments.AddWebhookEventAsync(webhookEvent, context.CancellationToken);
+        }
+
         // Provider dispatch. Each branch is responsible for parsing the
         // provider's payload, looking up the Payment aggregate, transitioning
         // it, and publishing the right downstream event.
-        switch (evt.Provider)
+        try
         {
-            case "Stripe":
-                await HandleStripeAsync(context, evt);
-                break;
-            case "PayPal":
-                await HandlePayPalAsync(context, evt);
-                break;
-            default:
-                logger.LogError("Unknown webhook provider: {Provider}", evt.Provider);
-                return;
+            switch (evt.Provider)
+            {
+                case "Stripe":
+                    await HandleStripeAsync(context, evt);
+                    break;
+                case "PayPal":
+                    await HandlePayPalAsync(context, evt);
+                    break;
+                default:
+                    logger.LogError("Unknown webhook provider: {Provider}", evt.Provider);
+                    return;
+            }
         }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            // Race lost: another consumer beat us to inserting the
+            // WebhookEvent row. Their SaveChanges already wrote the
+            // Payment update + outbox publish; ours rolled back. Treat
+            // this as a successful idempotent skip rather than an error.
+            logger.LogInformation(
+                "Webhook {ProviderEventId} concurrently processed by another worker; skipping",
+                evt.ProviderEventId);
+        }
+    }
+
+    /// <summary>
+    /// Postgres reports unique-constraint failures with SQLSTATE 23505.
+    /// Npgsql wraps that as PostgresException inside DbUpdateException.
+    /// We can't reference Npgsql here without a layer leak, so match by
+    /// SqlState string on the inner exception via reflection-free duck typing.
+    /// </summary>
+    private static bool IsUniqueViolation(DbUpdateException ex)
+    {
+        var inner = ex.InnerException;
+        return inner?.GetType().Name == "PostgresException"
+            && (inner.GetType().GetProperty("SqlState")?.GetValue(inner) as string) == "23505";
     }
 
     private async Task HandleStripeAsync(ConsumeContext<PaymentWebhookValidatedEvent> context, PaymentWebhookValidatedEvent evt)
@@ -255,4 +321,17 @@ public sealed class PaymentWebhookValidatedConsumer(
             return (null, null, null, null);
         }
     }
+
+    /// <summary>
+    /// PaymentWebhookValidatedEvent.Provider is a string ("Stripe", "PayPal").
+    /// WebhookEventExistsAsync takes the PaymentProvider enum. Map carefully —
+    /// unknown providers return null so the idempotency check is skipped (still
+    /// safe; the dispatch switch will hit the default branch + log an error).
+    /// </summary>
+    private static PaymentProvider? ParseProvider(string provider) => provider switch
+    {
+        "Stripe" => PaymentProvider.Stripe,
+        "PayPal" => PaymentProvider.PayPal,
+        _ => null,
+    };
 }

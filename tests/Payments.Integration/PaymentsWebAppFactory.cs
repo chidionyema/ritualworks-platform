@@ -80,9 +80,6 @@ public sealed class PaymentsWebAppFactory : WebApplicationFactory<Program>, IAsy
             {
                 mt.AddConsumer<PaymentWebhookValidatedConsumer>();
             });
-            // Test fixture sets harness.TestTimeout in InitializeAsync —
-            // EF retry-on-failure (5 × 500ms) plus actual processing can
-            // legitimately push the consume duration past the default 5s.
             services.AddDomainEventPublisher();
         });
     }

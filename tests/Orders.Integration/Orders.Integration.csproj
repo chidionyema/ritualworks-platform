@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Orders/Orders.Api/Orders.Api.csproj" />
+    <ProjectReference Include="../../src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

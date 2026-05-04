@@ -16,6 +16,17 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Authorization policy for content controllers — referenced by
+// [Authorize(Policy = "ContentUploader")] on ContentController. Tests stamp
+// the role via the shared TestAuthenticationHandler; production grants it
+// via the upstream identity-svc-issued JWT claims.
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("ContentUploader", policy =>
+        policy.RequireAuthenticatedUser()
+              .RequireRole("ContentUploader", "Admin"));
+});
+
 builder.Host.UseSerilog((context, loggerConfiguration) => {
     loggerConfiguration.ReadFrom.Configuration(context.Configuration);
 });
