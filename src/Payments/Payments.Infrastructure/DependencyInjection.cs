@@ -62,6 +62,7 @@ public static class DependencyInjection
             // on the receive endpoint, so consume + state writes + downstream
             // publishes commit atomically in one PaymentDbContext transaction.
             mt.AddConsumer<PaymentWebhookValidatedConsumer, PaymentsConsumerDefinition<PaymentWebhookValidatedConsumer>>();
+            mt.AddConsumer<PaymentSessionRequestedConsumer, PaymentsConsumerDefinition<PaymentSessionRequestedConsumer>>();
 
             mt.UsingRabbitMq((context, cfg) =>
             {
