@@ -114,6 +114,13 @@ public class Payment : AuditableEntity
     }
 
     /// <summary>Marks the payment as cancelled (user abandoned checkout).</summary>
+    /// <summary>Marks the payment as refunded.</summary>
+    public void MarkRefunded()
+    {
+        Status = PaymentStatus.Refunded;
+        LastModifiedDate = DateTime.UtcNow;
+    }
+
     public void MarkCancelled()
     {
         Status = PaymentStatus.Cancelled;
