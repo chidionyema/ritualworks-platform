@@ -35,6 +35,47 @@ public sealed class DemoTestController(
             timestamp = DateTime.UtcNow,
         });
 
+    // T2.7: in-process chaos flag. When set, /demo/health-with-chaos
+    // returns 503; otherwise it returns 200. BffWeb's chaos/trigger flips
+    // this flag in catalog for N seconds — paired with the circuit
+    // breaker demo, the breaker opens from real upstream chaos rather
+    // than just the always-failing /demo/fail.
+    //
+    // Production design (per Phase 2 brief T2.7): chaos flag should live
+    // in Vault KV (secret/data/chaos) so multi-instance services agree
+    // on state and the flag survives restarts. The static here is the
+    // dev/demo equivalent — single-process catalog-svc, single source of
+    // truth.
+    private static long s_chaosUntilTicks;
+
+    public static bool IsChaosActive() =>
+        DateTime.UtcNow.Ticks < Interlocked.Read(ref s_chaosUntilTicks);
+
+    [HttpPost("chaos/trigger")]
+    public IActionResult TriggerChaos([FromBody] ChaosRequest request)
+    {
+        var until = DateTime.UtcNow.AddSeconds(Math.Clamp(request.DurationSeconds, 1, 300));
+        Interlocked.Exchange(ref s_chaosUntilTicks, until.Ticks);
+        logger.LogWarning(
+            "CHAOS injected: scenario={Scenario}, duration={Duration}s, until={Until:O}",
+            request.Scenario, request.DurationSeconds, until);
+        return Ok(new
+        {
+            scenario = request.Scenario,
+            durationSeconds = request.DurationSeconds,
+            activeUntil = until,
+            traceId = Guid.NewGuid().ToString("N"),
+        });
+    }
+
+    [HttpGet("health-with-chaos")]
+    public IActionResult HealthWithChaos() =>
+        IsChaosActive()
+            ? StatusCode(StatusCodes.Status503ServiceUnavailable, new { chaos = true, message = "Chaos injection active" })
+            : Ok(new { chaos = false, healthy = true });
+
+    public sealed record ChaosRequest(string Scenario, int DurationSeconds);
+
     /// <summary>
     /// T2.6: real cache-stampede demo. Fires N concurrent reads through
     /// HybridCache.GetOrCreateAsync against a fresh key (clears first to

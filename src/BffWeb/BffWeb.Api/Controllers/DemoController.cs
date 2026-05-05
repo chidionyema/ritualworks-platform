@@ -860,10 +860,36 @@ public class DemoController : ControllerBase
     // ========================================================================
 
     [HttpPost("chaos/trigger")]
-    public IActionResult TriggerChaos([FromBody] ChaosRequest request)
+    public async Task<IActionResult> TriggerChaos([FromBody] ChaosRequest request, CancellationToken ct)
     {
-        var traceId = Guid.NewGuid().ToString();
-        _logger.LogWarning("CHAOS (stub): scenario={Scenario} duration={Duration}s trace={TraceId}",
+        // T2.7: route through catalog-svc's /demo/chaos/trigger which sets
+        // an in-process flag for N seconds. While the flag is set, catalog's
+        // /demo/health-with-chaos returns 503 — combined with the circuit
+        // breaker demo, the breaker opens from real upstream chaos rather
+        // than the always-failing /demo/fail.
+        //
+        // Production version (Phase 2 brief T2.7): chaos flag in Vault KV
+        // so all service instances + the BFF agree on state. Today's
+        // single-process per-service flag is the dev/demo equivalent.
+        var client = _httpClientFactory.CreateClient(BackendClients.Catalog);
+        try
+        {
+            using var resp = await client.PostAsJsonAsync("/demo/chaos/trigger", request, ct);
+            if (resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync(ct);
+                return Content(body, "application/json");
+            }
+            _logger.LogWarning("Catalog chaos/trigger returned {Status}", resp.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Catalog chaos/trigger unreachable; falling back to local log");
+        }
+
+        // Local-only fallback so the frontend always gets a trace_id.
+        var traceId = Guid.NewGuid().ToString("N");
+        _logger.LogWarning("CHAOS (local fallback): scenario={Scenario} duration={Duration}s trace={TraceId}",
             request.Scenario, request.DurationSeconds, traceId);
         return Ok(new { trace_id = traceId });
     }
