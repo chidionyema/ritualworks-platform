@@ -22,7 +22,7 @@ namespace Haworks.Payments.Api.Controllers;
 [AllowAnonymous]
 public sealed class AdminController(
     PaymentDbContext db,
-    IPublishEndpoint publishEndpoint,
+    IDomainEventPublisher eventPublisher,
     ILogger<AdminController> logger) : ControllerBase
 {
     /// <summary>
@@ -48,19 +48,13 @@ public sealed class AdminController(
             Payload = request.Payload,
         };
 
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-
-        // Publish through the EF outbox filter that's wired in
-        // Payments.Infrastructure DI. The OutboxMessage row is staged in
-        // the same DbContext transaction; if SaveChanges fails the publish
-        // never reaches the broker.
-        await publishEndpoint.Publish(demoEvent, ctx =>
-        {
-            ctx.MessageId = demoEvent.EventId;
-        }, ct);
-
+        // Same publish pattern catalog UpdateProductCommandHandler uses
+        // (and which IS observed working end-to-end against real outbox + RabbitMQ):
+        // IDomainEventPublisher.PublishAsync goes through MT's IPublishEndpoint
+        // with an (object)-cast for runtime type resolution, then SaveChanges
+        // commits the OutboxMessage row atomically.
+        await eventPublisher.PublishAsync(demoEvent, ct);
         await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
 
         logger.LogInformation(
             "Demo event published via payments outbox: sessionId={SessionId}, eventId={EventId}",
