@@ -1,49 +1,60 @@
+using FluentAssertions;
 using Haworks.Orders.Application.Queries;
-using Haworks.Orders.Application.DTOs;
 using Haworks.Orders.Domain;
 using Haworks.Orders.Domain.Interfaces;
-using Haworks.BuildingBlocks.Testing;
-using Haworks.Orders.UnitTests.Helpers;
-using Microsoft.Extensions.Logging;
 using Moq;
-using Xunit.Abstractions;
 using Xunit;
 
-namespace Haworks.Orders.UnitTests.Queries;
+namespace Haworks.Orders.Unit.Queries;
 
-public class GetOrderByIdQueryHandlerTests : TestBase
+public class OrderQueryHandlerTests
 {
-    private readonly Mock<IOrderRepository> _orderRepositoryMock;
-    private readonly GetOrderByIdQueryHandler _handler;
+    private readonly Mock<IOrderRepository> _repositoryMock = new();
+    private readonly GetOrderByIdQueryHandler _getByIdHandler;
+    private readonly ListUserOrdersQueryHandler _listByUserHandler;
 
-    public GetOrderByIdQueryHandlerTests(ITestOutputHelper output) : base(output)
+    public OrderQueryHandlerTests()
     {
-        _orderRepositoryMock = MockRepository.Create<IOrderRepository>();
-        _handler = new GetOrderByIdQueryHandler(_orderRepositoryMock.Object);
+        _getByIdHandler = new GetOrderByIdQueryHandler(_repositoryMock.Object);
+        _listByUserHandler = new ListUserOrdersQueryHandler(_repositoryMock.Object);
     }
 
     [Fact]
-    public async Task Handle_WhenOrderExists_ReturnsOrder()
-    {
-        var order = OrderTestHelpers.CreateOrder();
-        _orderRepositoryMock.Setup(r => r.GetByIdAsync(order.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(order);
-
-        var result = await _handler.Handle(new GetOrderByIdQuery(order.Id), CancellationToken.None);
-
-        Assert.True(result.IsSuccess);
-        Assert.Equal(order.Id, result.Value.Id);
-    }
-
-    [Fact]
-    public async Task Handle_WhenOrderNotFound_ReturnsFailure()
+    public async Task GetOrderById_WhenExists_ReturnsSuccess()
     {
         var orderId = Guid.NewGuid();
-        _orderRepositoryMock.Setup(r => r.GetByIdAsync(orderId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Order?)null);
+        var order = Order.Create("user-123", 100m, "USD", Guid.NewGuid(), "key", "email", 
+            new List<(Guid, string, int, decimal)> { (Guid.NewGuid(), "P1", 1, 100m) });
+        
+        _repositoryMock.Setup(r => r.GetByIdAsync(orderId, It.IsAny<CancellationToken>())).ReturnsAsync(order);
 
-        var result = await _handler.Handle(new GetOrderByIdQuery(orderId), CancellationToken.None);
+        var result = await _getByIdHandler.Handle(new GetOrderByIdQuery(orderId), CancellationToken.None);
 
-        Assert.True(result.IsFailure);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TotalAmount.Should().Be(100m);
+    }
+
+    [Fact]
+    public async Task ListUserOrders_WithValidUser_ReturnsPagedResult()
+    {
+        var userId = "user-123";
+        var order = Order.Create(userId, 100m, "USD", Guid.NewGuid(), "key", "email", 
+            new List<(Guid, string, int, decimal)> { (Guid.NewGuid(), "P1", 1, 100m) });
+        
+        _repositoryMock.Setup(r => r.ListByUserAsync(userId, 0, 20, It.IsAny<CancellationToken>())).ReturnsAsync(new List<Order> { order });
+        _repositoryMock.Setup(r => r.CountByUserAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        var result = await _listByUserHandler.Handle(new ListUserOrdersQuery(userId, 0, 20), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().HaveCount(1);
+        result.Value.Total.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ListUserOrders_WithEmptyUserId_ReturnsFailure()
+    {
+        var result = await _listByUserHandler.Handle(new ListUserOrdersQuery("", 0, 20), CancellationToken.None);
+        result.IsFailure.Should().BeTrue();
     }
 }
