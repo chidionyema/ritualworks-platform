@@ -33,6 +33,7 @@ public sealed class CheckoutsController(
         if (!result.IsSuccess)
             return result.ToActionResult();
 
+        await db.SaveChangesAsync(ct);
         return Accepted(new { sagaId = result.Value.SagaId, orderId = result.Value.OrderId });
     }
 

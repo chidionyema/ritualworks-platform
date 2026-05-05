@@ -53,12 +53,12 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
         // compensation paths below cover the failure modes that don't require a wall-clock
         // timer.
 
-        Event(() => CheckoutInitiated, e => e.CorrelateById(ctx => ctx.Message.SagaId));
-        Event(() => StockReserved, e => e.CorrelateById(ctx => ctx.Message.SagaId));
-        Event(() => StockReservationFailed, e => e.CorrelateById(ctx => ctx.Message.SagaId));
-        Event(() => PaymentSessionCreated, e => e.CorrelateById(ctx => ctx.Message.SagaId));
-        Event(() => PaymentSessionFailed, e => e.CorrelateById(ctx => ctx.Message.SagaId));
-        Event(() => PaymentCompleted, e => e.CorrelateById(ctx => ctx.Message.SagaId));
+        Event(() => CheckoutInitiated, e => e.SelectId(ctx => ctx.Message.SagaId));
+        Event(() => StockReserved, e => e.SelectId(ctx => ctx.Message.SagaId));
+        Event(() => StockReservationFailed, e => e.SelectId(ctx => ctx.Message.SagaId));
+        Event(() => PaymentSessionCreated, e => e.SelectId(ctx => ctx.Message.SagaId));
+        Event(() => PaymentSessionFailed, e => e.SelectId(ctx => ctx.Message.SagaId));
+        Event(() => PaymentCompleted, e => e.SelectId(ctx => ctx.Message.SagaId));
         Event(() => PaymentAmountMismatch, e =>
         {
             // PaymentAmountMismatchEvent doesn't carry a SagaId — correlate
