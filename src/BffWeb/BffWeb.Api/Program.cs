@@ -1,6 +1,7 @@
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BffWeb.Api;
 using Haworks.BffWeb.Api.Demo;
+using Haworks.BffWeb.Api.Middleware;
 using Haworks.BffWeb.Api.SignalR;
 using Haworks.BffWeb.Application.Interfaces;
 using MassTransit;
@@ -27,6 +28,14 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<IDemoHubNotifier, SignalRDemoHubNotifier>();
 builder.Services.AddSingleton<IDemoTraceStore, DemoTraceStore>();
 builder.Services.AddSingleton<DemoStateStore>();
+
+// T2.1: replaced Phase 1's hardcoded SystemController literals with real
+// probes. ActivityCounters tracks live request counts + p99 latency from
+// the rolling histogram fed by DemoActivityMiddleware. HealthProbe pings
+// each downstream microservice + RabbitMQ in parallel with a 2s per-target
+// timeout. See src/BffWeb/BffWeb.Api/Demo/{DemoActivityCounters, DependencyHealthProbe}.cs.
+builder.Services.AddSingleton<IDemoActivityCounters, DemoActivityCounters>();
+builder.Services.AddScoped<IDependencyHealthProbe, DependencyHealthProbe>();
 
 // CORS for the portfolio site dev server (http://localhost:4321 by default).
 // AllowCredentials is required for SignalR's negotiate handshake. Header
@@ -101,6 +110,10 @@ app.UseHttpsRedirection();
 // position relative to UseAuthentication doesn't matter for the response,
 // but it does matter for the OPTIONS preflight.
 app.UseCors("portfolio-site");
+// Activity middleware sits before auth so a 401 still records traffic into
+// the IngressEvents24h counter. Path-scoped to /api/demo/* internally so
+// non-demo routes have zero overhead.
+app.UseDemoActivityCounters();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

@@ -7,49 +7,49 @@ namespace Haworks.BffWeb.Api.Controllers;
 
 /// <summary>
 /// Health, metrics, and trace lookup endpoints used by the portfolio site's
-/// dashboard panels (TopologyMap, GrafanaPanel, TraceViewer).
+/// dashboard panels (StatusStrip, hero metrics tile, TraceViewer).
 ///
-/// Phase 1: snapshots are static-ish (small randomization on the SSE stream
-/// to keep the panels animating). Phase 2 plug-in points: query the Aspire
-/// DCP API for real per-service health + read OpenTelemetry's in-memory
-/// exporter for genuine spans.
+/// Phase 2 (T2.1): all snapshot fields are real now. <c>services</c> reflects
+/// the live state of each microservice BffWeb depends on (probed via typed
+/// HttpClients with a 2s timeout). Hero metrics (<c>ingressEvents24h</c>,
+/// <c>activeSessions</c>, <c>p99LatencyMs</c>) come from
+/// <see cref="IDemoActivityCounters"/> which the <c>DemoActivityMiddleware</c>
+/// updates on every <c>/api/demo/*</c> request.
+///
+/// <c>availability</c>/<c>clusterAvailability</c> stay <c>null</c> until we
+/// wire a real uptime SLO probe — the frontend renders an em-dash in that
+/// slot, which is more honest than inventing a number.
 /// </summary>
 [ApiController]
 [Route("api")]
 [AllowAnonymous]
 public class SystemController : ControllerBase
 {
-    private static readonly string[] s_services =
-    [
-        "API", "POSTGRES", "REDIS", "RABBITMQ", "VAULT",
-    ];
-
     private readonly IDemoTraceStore _traceStore;
+    private readonly IDemoActivityCounters _activityCounters;
+    private readonly IDependencyHealthProbe _healthProbe;
     private readonly ILogger<SystemController> _logger;
 
-    public SystemController(IDemoTraceStore traceStore, ILogger<SystemController> logger)
+    public SystemController(
+        IDemoTraceStore traceStore,
+        IDemoActivityCounters activityCounters,
+        IDependencyHealthProbe healthProbe,
+        ILogger<SystemController> logger)
     {
         _traceStore = traceStore;
+        _activityCounters = activityCounters;
+        _healthProbe = healthProbe;
         _logger = logger;
     }
 
     [HttpGet("health/snapshot")]
-    public IActionResult GetHealthSnapshot() =>
-        Ok(new
-        {
-            services = new[]
-            {
-                new { id = "api", name = "API", status = "online", latencyMs = 12 },
-                new { id = "db", name = "POSTGRES", status = "online", latencyMs = 5 },
-                new { id = "redis", name = "REDIS", status = "online", latencyMs = 2 },
-                new { id = "mq", name = "RABBITMQ", status = "online", latencyMs = 18 },
-                new { id = "vault", name = "VAULT", status = "online", latencyMs = 10 },
-            },
-            systemStatus = "healthy",
-            p99LatencyMs = 42.4,
-            availability = 99.998,
-            timestamp = DateTime.UtcNow,
-        });
+    public async Task<IActionResult> GetHealthSnapshot(CancellationToken ct)
+    {
+        var probe = await _healthProbe.ProbeAsync(ct);
+        var activity = _activityCounters.Snapshot();
+
+        return Ok(BuildHealthSnapshot(probe, activity));
+    }
 
     [HttpGet("health/stream")]
     public async Task GetHealthStream(CancellationToken ct)
@@ -60,23 +60,10 @@ public class SystemController : ControllerBase
 
         while (!ct.IsCancellationRequested)
         {
-            var snapshot = new
-            {
-                services = new[]
-                {
-                    new { id = "api", name = "API", status = "online", latencyMs = Random.Shared.Next(10, 20) },
-                    new { id = "db", name = "POSTGRES", status = "online", latencyMs = Random.Shared.Next(4, 8) },
-                    new { id = "redis", name = "REDIS", status = "online", latencyMs = Random.Shared.Next(1, 3) },
-                    new { id = "mq", name = "RABBITMQ", status = "online", latencyMs = Random.Shared.Next(15, 25) },
-                    new { id = "vault", name = "VAULT", status = "online", latencyMs = Random.Shared.Next(8, 12) },
-                },
-                systemStatus = "healthy",
-                p99LatencyMs = 42.0 + Random.Shared.NextDouble(),
-                availability = 99.998,
-                timestamp = DateTime.UtcNow,
-            };
+            var probe = await _healthProbe.ProbeAsync(ct);
+            var activity = _activityCounters.Snapshot();
 
-            var json = JsonSerializer.Serialize(snapshot);
+            var json = JsonSerializer.Serialize(BuildHealthSnapshot(probe, activity));
             await Response.WriteAsync($"data: {json}\n\n", ct);
             await Response.Body.FlushAsync(ct);
 
@@ -85,15 +72,19 @@ public class SystemController : ControllerBase
     }
 
     [HttpGet("metrics/snapshot")]
-    public IActionResult GetMetricsSnapshot() =>
-        Ok(new
+    public IActionResult GetMetricsSnapshot()
+    {
+        var snapshot = _activityCounters.Snapshot();
+
+        return Ok(new
         {
-            ingressEvents24h = 18234,
-            clusterAvailability = 99.998,
-            p99LatencyMs = 42.4,
-            activeSessions = 3,
-            timestamp = DateTime.UtcNow,
+            ingressEvents24h = snapshot.IngressEvents24h,
+            clusterAvailability = (double?)null, // honest: no uptime SLO wired yet
+            p99LatencyMs = snapshot.P99LatencyMs,
+            activeSessions = snapshot.ActiveSessions,
+            timestamp = snapshot.CapturedAt,
         });
+    }
 
     [HttpGet("metrics/stream")]
     public async Task GetMetricsStream(CancellationToken ct)
@@ -102,19 +93,17 @@ public class SystemController : ControllerBase
         Response.Headers.Append("Cache-Control", "no-cache");
         Response.Headers.Append("Connection", "keep-alive");
 
-        var basis = 18234;
         while (!ct.IsCancellationRequested)
         {
-            basis += Random.Shared.Next(1, 5);
-            var snapshot = new
+            var snapshot = _activityCounters.Snapshot();
+            var json = JsonSerializer.Serialize(new
             {
-                ingressEvents24h = basis,
-                clusterAvailability = 99.998,
-                p99LatencyMs = 42.0 + Random.Shared.NextDouble(),
-                activeSessions = Random.Shared.Next(2, 6),
-                timestamp = DateTime.UtcNow,
-            };
-            var json = JsonSerializer.Serialize(snapshot);
+                ingressEvents24h = snapshot.IngressEvents24h,
+                clusterAvailability = (double?)null,
+                p99LatencyMs = snapshot.P99LatencyMs,
+                activeSessions = snapshot.ActiveSessions,
+                timestamp = snapshot.CapturedAt,
+            });
             await Response.WriteAsync($"data: {json}\n\n", ct);
             await Response.Body.FlushAsync(ct);
             await Task.Delay(5000, ct);
@@ -145,4 +134,26 @@ public class SystemController : ControllerBase
             }),
         });
     }
+
+    /// <summary>
+    /// Shared shape for /health/snapshot + /health/stream. Field names match
+    /// portfolio-site's <c>HealthSnapshot</c> + <c>ServiceHealth</c> TypeScript
+    /// types (src/lib/api/demo-client.ts). <c>message</c> not <c>note</c> —
+    /// frontend reads <c>message</c>.
+    /// </summary>
+    private static object BuildHealthSnapshot(DependencySnapshot probe, DemoActivitySnapshot activity) => new
+    {
+        services = probe.Services.Select(s => new
+        {
+            id = s.Id,
+            name = s.Name,
+            status = s.Status,
+            latencyMs = s.LatencyMs,
+            message = s.Message,
+        }),
+        systemStatus = probe.SystemStatus,
+        p99LatencyMs = activity.P99LatencyMs,
+        availability = (double?)null,
+        timestamp = probe.CapturedAt,
+    };
 }

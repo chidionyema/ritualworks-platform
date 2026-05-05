@@ -51,7 +51,22 @@ What's already real in Phase 1 and **does not need re-doing**:
 
 ## 3. Phase 2 work queue (in priority order)
 
-### T2.1 — Honest System probes (1-2 days, port from monolith e9d5d88)
+### T2.1 — Honest System probes ✅ DONE
+
+Shipped on `feat/portfolio-bffweb-demos`. New files in BffWeb:
+`Application/Interfaces/IDemoActivityCounters.cs`,
+`Application/Interfaces/IDependencyHealthProbe.cs`,
+`Api/Demo/DemoActivityCounters.cs`,
+`Api/Demo/DependencyHealthProbe.cs`,
+`Api/Middleware/DemoActivityMiddleware.cs`. SystemController + Program.cs
+updated to consume them. Verified live: 7 services probed in parallel
+with real per-service latency, identity-svc correctly reported `offline`
+during boot then transitioned to `online` after vault-seed gate cleared.
+Activity counters went 0→3 with X-Demo-Session-tagged POSTs.
+
+Original brief left below for reference.
+
+---
 
 **Why first:** the portfolio's hero tile + StatusStrip render values from `/api/health/snapshot` and `/api/metrics/snapshot`. BffWeb currently returns hardcoded literals (`p99LatencyMs = 42.4`, `availability = 99.998`, etc). The monolith already replaced these — we ported the fakes in Phase 1 and need to match.
 
