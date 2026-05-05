@@ -1,22 +1,33 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Messaging;
+using Haworks.Catalog.Application.Interfaces;
 using Haworks.Catalog.Domain.Interfaces;
+using Haworks.Contracts.Catalog;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
 namespace Haworks.Catalog.Application.Commands;
 
-public sealed record DeleteProductCommand(Guid ProductId) : IRequest<Result>;
+public sealed record DeleteProductCommand(
+    Guid ProductId,
+    Guid? CorrelationId = null) : IRequest<Result>;
 
 internal sealed class DeleteProductCommandHandler : IRequestHandler<DeleteProductCommand, Result>
 {
     private readonly IProductRepository _repository;
+    private readonly IProductCacheReader _productCache;
+    private readonly IDomainEventPublisher _eventPublisher;
     private readonly ILogger<DeleteProductCommandHandler> _logger;
 
     public DeleteProductCommandHandler(
         IProductRepository repository,
+        IProductCacheReader productCache,
+        IDomainEventPublisher eventPublisher,
         ILogger<DeleteProductCommandHandler> logger)
     {
         _repository = repository;
+        _productCache = productCache;
+        _eventPublisher = eventPublisher;
         _logger = logger;
     }
 
@@ -33,7 +44,20 @@ internal sealed class DeleteProductCommandHandler : IRequestHandler<DeleteProduc
         }
 
         await _repository.DeleteAsync(request.ProductId, cancellationToken);
+
+        // Publish before SaveChanges so the outbox row commits with the
+        // delete; bridge consumer fires only after durable commit.
+        await _eventPublisher.PublishAsync(new ProductCacheInvalidatedEvent
+        {
+            ProductId = request.ProductId,
+            CorrelationId = request.CorrelationId,
+            Reason = "deleted",
+            NewVersion = null,
+        }, cancellationToken);
+
         await _repository.SaveChangesAsync(cancellationToken);
+
+        await _productCache.InvalidateAsync(request.ProductId, cancellationToken);
 
         _logger.LogInformation("Product deleted {ProductId}", request.ProductId);
 

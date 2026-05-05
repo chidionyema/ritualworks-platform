@@ -697,33 +697,188 @@ public class DemoController : ControllerBase
         }
     }
 
+    // ----- Cache invalidation demo (#1+#2) — real catalog-svc round-trip ----
+    // GET     /api/demo/cache/product/demo  -> POST catalog /demo/cache/seed-demo-product
+    //                                          (idempotent find-or-create against real Postgres)
+    // GET     /api/demo/cache/product/{id}  -> GET  catalog /api/products/{id}/cached
+    //                                          (read-through HybridCache over real IProductRepository)
+    // PUT     /api/demo/cache/product/{id}  -> PUT  catalog /api/products/{id}
+    //                                          (real UpdateProductCommand: writes to Postgres,
+    //                                           invalidates HybridCache, publishes
+    //                                           ProductCacheInvalidatedEvent through EF outbox)
+    // DELETE  /api/demo/cache/product/{id}  -> DELETE catalog /api/products/{id}
+    //                                          (real DeleteProductCommand: same flow)
+    //
+    // The publish lands in catalog's outbox table inside the same transaction
+    // as the row write; MassTransit BusOutboxDeliveryService relays to RabbitMQ;
+    // BffWeb's ProductCacheInvalidatedBridge consumer translates to OnCacheEvent
+    // for the demo session id passed as CorrelationId.
+    //
+    // Wire shape (CachedProductResponse) matches portfolio-site demo-client.ts.
+
     [HttpGet("cache/product/demo")]
-    public IActionResult GetDemoProduct() =>
-        Ok(new { id = Guid.NewGuid() });
-
-    [HttpGet("cache/product/{productId}")]
-    public IActionResult GetCachedProduct(Guid productId) =>
-        Ok(new
+    public async Task<IActionResult> GetDemoProduct(CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient(BackendClients.Catalog);
+        try
         {
-            product = new { id = productId, name = "Demo Widget", price = 39.99m, version = 1 },
-            cacheInfo = new { isHit = true, source = "Hybrid" },
-        });
-
-    [HttpPut("cache/product/{productId}")]
-    public IActionResult UpdateProduct(Guid productId, [FromBody] object updates) =>
-        Ok(new
+            using var resp = await client.PostAsync("/demo/cache/seed-demo-product", content: null, ct);
+            resp.EnsureSuccessStatusCode();
+            var body = await resp.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            return Ok(new { id = body.GetProperty("productId").GetGuid().ToString() });
+        }
+        catch (Exception ex)
         {
-            sessionId = Guid.NewGuid(),
-            invalidation = new
+            _logger.LogWarning(ex, "cache/product/demo: catalog seed unreachable");
+            return StatusCode(503, new { error = "catalog unreachable" });
+        }
+    }
+
+    [HttpGet("cache/product/{productId:guid}")]
+    public async Task<IActionResult> GetCachedProduct(Guid productId, CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient(BackendClients.Catalog);
+        try
+        {
+            using var resp = await client.GetAsync($"/api/products/{productId}/cached", ct);
+            if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                cacheKeysInvalidated = new[] { $"product:{productId}" },
-                pubsubMessageSent = true,
-            },
-        });
+                return NotFound(new { productId });
+            }
+            resp.EnsureSuccessStatusCode();
+            var body = await resp.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            return Ok(BuildCachedProductResponse(body, sessionId: null));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "cache/product/{ProductId}: catalog unreachable", productId);
+            return StatusCode(503, new { error = "catalog unreachable", productId });
+        }
+    }
 
-    [HttpDelete("cache/product/{productId}")]
-    public IActionResult InvalidateCache(Guid productId) =>
-        Ok(new { invalidated = true, cacheKey = $"product:{productId}" });
+    [HttpPut("cache/product/{productId:guid}")]
+    public async Task<IActionResult> UpdateProduct(
+        Guid productId,
+        [FromBody] UpdateProductRequest request,
+        CancellationToken ct)
+    {
+        var sessionId = request.SessionId ?? Guid.NewGuid();
+        var client = _httpClientFactory.CreateClient(BackendClients.Catalog);
+
+        // Need name + categoryId for the real UpdateProductCommand. Re-read the
+        // current product to fill in fields the frontend doesn't send (it only
+        // sends price + name + sessionId; categoryId stays the same as current).
+        try
+        {
+            using var getResp = await client.GetAsync($"/api/products/{productId}", ct);
+            if (getResp.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return NotFound(new { productId });
+            }
+            getResp.EnsureSuccessStatusCode();
+            var current = await getResp.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+
+            var putBody = new
+            {
+                name = request.Name ?? current.GetProperty("name").GetString() ?? "Demo Widget",
+                description = current.TryGetProperty("description", out var d) ? d.GetString() ?? string.Empty : string.Empty,
+                unitPrice = request.Price ?? current.GetProperty("unitPrice").GetDecimal(),
+                categoryId = current.GetProperty("categoryId").GetGuid(),
+                isListed = current.TryGetProperty("isListed", out var l) ? l.GetBoolean() : true,
+                correlationId = sessionId,
+            };
+
+            using var putResp = await client.PutAsJsonAsync($"/api/products/{productId}", putBody, ct);
+            putResp.EnsureSuccessStatusCode();
+
+            // Re-read via the cached endpoint so the frontend gets current
+            // cacheInfo (will be a miss because we just invalidated — that's
+            // exactly what the demo wants to show).
+            using var cachedResp = await client.GetAsync($"/api/products/{productId}/cached", ct);
+            cachedResp.EnsureSuccessStatusCode();
+            var cachedBody = await cachedResp.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+
+            var response = BuildCachedProductResponse(cachedBody, sessionId);
+            return Ok(new
+            {
+                response.sessionId,
+                response.product,
+                response.cacheInfo,
+                invalidation = new
+                {
+                    cacheKeysInvalidated = new[] { $"product:{productId}" },
+                    pubsubMessageSent = true,
+                    instancesNotified = 1,
+                },
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "cache/product/{ProductId} PUT: catalog unreachable", productId);
+            return StatusCode(503, new { sessionId, error = "catalog unreachable" });
+        }
+    }
+
+    [HttpDelete("cache/product/{productId:guid}")]
+    public async Task<IActionResult> InvalidateCache(
+        Guid productId,
+        [FromQuery] Guid sessionId,
+        CancellationToken ct)
+    {
+        var resolvedSession = sessionId == Guid.Empty ? Guid.NewGuid() : sessionId;
+        var client = _httpClientFactory.CreateClient(BackendClients.Catalog);
+        try
+        {
+            using var resp = await client.DeleteAsync(
+                $"/api/products/{productId}?correlationId={resolvedSession}", ct);
+            // 204 NoContent is the success response from a Result-pattern DELETE.
+            // 404 means the product was already gone — still report invalidated.
+            return Ok(new
+            {
+                sessionId = resolvedSession,
+                invalidated = true,
+                cacheKey = $"product:{productId}",
+                pubsubMessageSent = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "cache/product/{ProductId} DELETE: catalog unreachable", productId);
+            return StatusCode(503, new { sessionId = resolvedSession, error = "catalog unreachable" });
+        }
+    }
+
+    // Map catalog's `{ product, source, latencyMs }` shape to the frontend's
+    // CachedProductResponse (product + cacheInfo). cachedAt / ttlSeconds /
+    // totalTtlSeconds are the demo's animation metadata; HybridCache's
+    // default TTL is 5 minutes so totalTtlSeconds=300 is honest.
+    public sealed record CachedProductDto(Guid sessionId, object product, object cacheInfo);
+
+    private static CachedProductDto BuildCachedProductResponse(JsonElement body, Guid? sessionId)
+    {
+        var source = body.GetProperty("source").GetString() ?? "database";
+        var isHit = source == "L1" || source == "L2";
+        JsonElement productElement = body.GetProperty("product");
+        return new CachedProductDto(
+            sessionId ?? Guid.NewGuid(),
+            new
+            {
+                id = productElement.GetProperty("id").GetGuid(),
+                name = productElement.GetProperty("name").GetString(),
+                price = productElement.GetProperty("unitPrice").GetDecimal(),
+                version = 1, // Catalog's ProductDto has no version field today; xmin lives server-side
+            },
+            new
+            {
+                isHit,
+                source,
+                cachedAt = DateTime.UtcNow,
+                ttlSeconds = isHit ? 300 : 0,
+                totalTtlSeconds = 300,
+            });
+    }
+
+    public sealed record UpdateProductRequest(string? Name, decimal? Price, Guid? SessionId);
 
     // ========================================================================
     // Optimistic Concurrency — REAL in-process (DemoStateStore.InventoryVersions)

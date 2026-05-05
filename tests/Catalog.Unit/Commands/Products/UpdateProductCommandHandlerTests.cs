@@ -1,6 +1,8 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Messaging;
 using Haworks.Catalog.Application.Commands;
 using Haworks.Catalog.Application.DTOs;
+using Haworks.Catalog.Application.Interfaces;
 using Haworks.Catalog.Domain;
 using Haworks.Catalog.Domain.Interfaces;
 using Haworks.BuildingBlocks.Testing;
@@ -16,18 +18,24 @@ public class UpdateProductCommandHandlerTests : TestBase
 {
     private readonly Mock<IProductRepository> _productRepositoryMock;
     private readonly Mock<ICategoryRepository> _categoryRepositoryMock;
+    private readonly Mock<IProductCacheReader> _productCacheMock;
+    private readonly Mock<IDomainEventPublisher> _eventPublisherMock;
     private readonly UpdateProductCommandHandler _handler;
 
     public UpdateProductCommandHandlerTests(ITestOutputHelper output) : base(output)
     {
         _productRepositoryMock = MockRepository.Create<IProductRepository>();
         _categoryRepositoryMock = MockRepository.Create<ICategoryRepository>();
-        
+        _productCacheMock = new Mock<IProductCacheReader>();
+        _eventPublisherMock = new Mock<IDomainEventPublisher>();
+
         var loggerMock = new Mock<ILogger<UpdateProductCommandHandler>>();
 
         _handler = new UpdateProductCommandHandler(
             _productRepositoryMock.Object,
             _categoryRepositoryMock.Object,
+            _productCacheMock.Object,
+            _eventPublisherMock.Object,
             loggerMock.Object);
     }
 

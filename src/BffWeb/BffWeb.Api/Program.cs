@@ -104,6 +104,12 @@ if (!builder.Environment.IsEnvironment("Test"))
         // and emits OnEventFlow stage='consumed' to the SignalR hub.
         mt.AddConsumer<DemoOutboxEventConsumer>();
 
+        // #1+#2: bridges catalog-svc ProductCacheInvalidatedEvent (PUT/DELETE
+        // on /api/demo/cache/product/*) to a SignalR OnCacheEvent push so
+        // connected portfolio clients see real cache invalidations as they
+        // happen.
+        mt.AddConsumer<ProductCacheInvalidatedBridge>();
+
         mt.UsingRabbitMq((context, cfg) =>
         {
             var rabbitConn = builder.Configuration.GetConnectionString("rabbitmq")

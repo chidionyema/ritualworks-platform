@@ -4,7 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Catalog.Application.Consumers;
+using Haworks.Catalog.Application.Interfaces;
 using Haworks.Catalog.Domain.Interfaces;
+using Haworks.Catalog.Infrastructure.Caching;
 using Haworks.Catalog.Infrastructure.Messaging;
 using Haworks.Catalog.Infrastructure.Repositories;
 using Haworks.Catalog.Infrastructure.Services;
@@ -30,6 +32,14 @@ public static class DependencyInjection
         services.AddScoped<ICategoryRepository, CategoryRepository>();
         services.AddScoped<IProductReviewRepository, ProductReviewRepository>();
         services.AddScoped<IStockService, StockService>();
+
+        // Read-through HybridCache over IProductRepository.GetByIdAsync.
+        // Scoped because it captures Scoped IProductRepository — registering
+        // as Singleton would be a captive dependency caught at boot under
+        // ValidateScopes. The HybridCache instance itself is Singleton
+        // (registered in Catalog.Api/Program.cs) so cache state survives
+        // across the per-request reader wrappers.
+        services.AddScoped<IProductCacheReader, ProductCacheReader>();
 
         // MassTransit + transactional outbox anchored to CatalogDbContext.
         // BusOutboxDeliveryService polls the OutboxMessage table and

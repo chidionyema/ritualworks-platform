@@ -1,5 +1,7 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Messaging;
 using Haworks.Catalog.Application.Commands;
+using Haworks.Catalog.Application.Interfaces;
 using Haworks.Catalog.Domain;
 using Haworks.Catalog.Domain.Interfaces;
 using Haworks.BuildingBlocks.Testing;
@@ -14,15 +16,21 @@ namespace Haworks.Catalog.UnitTests.Commands.Products;
 public class DeleteProductCommandHandlerTests : TestBase
 {
     private readonly Mock<IProductRepository> _productRepositoryMock;
+    private readonly Mock<IProductCacheReader> _productCacheMock;
+    private readonly Mock<IDomainEventPublisher> _eventPublisherMock;
     private readonly DeleteProductCommandHandler _handler;
 
     public DeleteProductCommandHandlerTests(ITestOutputHelper output) : base(output)
     {
         _productRepositoryMock = MockRepository.Create<IProductRepository>();
+        _productCacheMock = new Mock<IProductCacheReader>();
+        _eventPublisherMock = new Mock<IDomainEventPublisher>();
         var loggerMock = new Mock<ILogger<DeleteProductCommandHandler>>();
 
         _handler = new DeleteProductCommandHandler(
             _productRepositoryMock.Object,
+            _productCacheMock.Object,
+            _eventPublisherMock.Object,
             loggerMock.Object);
     }
 

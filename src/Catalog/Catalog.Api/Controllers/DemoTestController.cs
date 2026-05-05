@@ -1,3 +1,7 @@
+using Haworks.Catalog.Application.Commands;
+using Haworks.Catalog.Domain;
+using Haworks.Catalog.Domain.Interfaces;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Hybrid;
@@ -131,4 +135,60 @@ public sealed class DemoTestController(
     }
 
     public sealed record StampedeRequest(int ConcurrentRequests, string CacheKey, string ProtectionMode, int SimulatedDbLatencyMs);
+
+    /// <summary>
+    /// Idempotent demo-product seed for the cache-invalidation demo. The
+    /// demo needs a real Product row (and a real Category to put it in) to
+    /// exercise the cached GET / production PUT / production DELETE flow
+    /// against real Postgres. This endpoint finds-or-creates both:
+    ///  - "Demo Category" (if missing)
+    ///  - "Demo Widget" product in that category (if missing)
+    /// Returns the product's stable Guid so BffWeb can use it for subsequent
+    /// proxy calls. Safe to call repeatedly.
+    /// </summary>
+    [HttpPost("cache/seed-demo-product")]
+    public async Task<IActionResult> SeedDemoProduct(
+        [FromServices] IMediator mediator,
+        [FromServices] ICategoryRepository categories,
+        [FromServices] IProductRepository products,
+        CancellationToken ct)
+    {
+        const string CategoryName = "Demo Category";
+        const string ProductName = "Demo Widget";
+
+        var existingCategories = await categories.ListAsync(ct);
+        var demoCategory = existingCategories.FirstOrDefault(c => c.Name == CategoryName);
+        if (demoCategory is null)
+        {
+            var createCategoryResult = await mediator.Send(
+                new CreateCategoryCommand(CategoryName, "Auto-seeded by /demo/cache/seed-demo-product"),
+                ct);
+            if (createCategoryResult.IsFailure)
+            {
+                return StatusCode(500, new { error = createCategoryResult.Error.Message });
+            }
+            demoCategory = await categories.GetByIdAsync(createCategoryResult.Value, ct);
+        }
+
+        var existingProducts = await products.ListAsync(skip: 0, take: 100, categoryId: demoCategory!.Id, ct);
+        var demoProduct = existingProducts.FirstOrDefault(p => p.Name == ProductName);
+        if (demoProduct is null)
+        {
+            var createProductResult = await mediator.Send(
+                new CreateProductCommand(
+                    ProductName,
+                    "Demo product for the portfolio cache-invalidation demo",
+                    UnitPrice: 39.99m,
+                    CategoryId: demoCategory.Id,
+                    InitialStock: 1000),
+                ct);
+            if (createProductResult.IsFailure)
+            {
+                return StatusCode(500, new { error = createProductResult.Error.Message });
+            }
+            return Ok(new { productId = createProductResult.Value, created = true });
+        }
+
+        return Ok(new { productId = demoProduct.Id, created = false });
+    }
 }

@@ -1,6 +1,7 @@
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Haworks.Catalog.Application.Interfaces;
 using Haworks.Contracts.Catalog;
 using Haworks.Contracts.Checkout;
 
@@ -33,6 +34,7 @@ public sealed record ReserveStockCommand(
 internal sealed class ReserveStockCommandHandler(
     IProductRepository products,
     IDomainEventPublisher eventPublisher,
+    IProductCacheReader productCache,
     ILogger<ReserveStockCommandHandler> logger
 ) : IRequestHandler<ReserveStockCommand, Result<Guid>>
 {
@@ -113,6 +115,12 @@ internal sealed class ReserveStockCommandHandler(
                 "Stock.ConcurrencyConflict",
                 $"Concurrent reservation on product {request.ProductId}; retry with the latest stock"));
         }
+
+        // Stock reservation mutates Product.StockQuantity; the cached DTO
+        // would otherwise serve a stale value until TTL expiry. No demo
+        // event publish here — stock reservations belong to the saga, not
+        // to the cache-invalidation demo.
+        await productCache.InvalidateAsync(product.Id, ct);
 
         logger.LogInformation(
             "Stock reserved: product {ProductId}, quantity {Quantity}, remaining {Remaining}, order {OrderId}",
