@@ -76,6 +76,18 @@ if (!builder.Environment.IsEnvironment("Test"))
     {
         mt.SetKebabCaseEndpointNameFormatter();
         mt.AddConsumer<PaymentSessionCreatedConsumer>();
+
+        // T2.2 commit 2: bridge each saga state-change event to a SignalR
+        // OnSagaStep push so the portfolio's CheckoutDemo updates in real
+        // time as the saga progresses. One consumer per event; each
+        // translates to a step + progress percent matching the frontend's
+        // stage ladder. See SagaStepBridgeConsumers.cs.
+        mt.AddConsumer<StockReservedSagaBridge>();
+        mt.AddConsumer<StockReservationFailedSagaBridge>();
+        mt.AddConsumer<PaymentSessionCreatedSagaBridge>();
+        mt.AddConsumer<PaymentSessionFailedSagaBridge>();
+        mt.AddConsumer<PaymentCompletedSagaBridge>();
+
         mt.UsingRabbitMq((context, cfg) =>
         {
             var rabbitConn = builder.Configuration.GetConnectionString("rabbitmq")
