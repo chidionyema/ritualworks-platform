@@ -138,3 +138,48 @@ jobs:
           name: integration-test-results-${{ matrix.suite }}
           path: '**/TestResults/*.trx'
           retention-days: 7
+
+  smoke-and-e2e:
+    name: Smoke + E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: build-and-fast-tests
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Verify Docker
+        run: docker info
+
+      - name: Install Playwright browsers
+        run: |
+          dotnet build tests/E2E/E2E.csproj
+          pwsh tests/E2E/bin/Debug/net9.0/playwright.ps1 install --with-deps
+
+      - name: Run Smoke tests
+        run: |
+          dotnet test tests/Smoke/Smoke.csproj --configuration Release
+
+      - name: Run E2E tests
+        run: |
+          dotnet test tests/E2E/E2E.csproj --configuration Release
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-e2e-test-results
+          path: '**/TestResults/*.trx'
+          retention-days: 7

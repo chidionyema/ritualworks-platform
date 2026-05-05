@@ -13,4 +13,13 @@ public static class BackendClients
     public const string Orders = "orders-svc";
     public const string Payments = "payments-svc";
     public const string Checkout = "checkout-svc";
+
+    /// <summary>
+    /// Separate typed-client identity for the T2.3 circuit-breaker demo
+    /// against catalog-svc. Same BaseAddress as <see cref="Catalog"/>, but
+    /// the registration adds a Polly circuit breaker (2 failures -> open
+    /// for 6s) so the demo can demonstrate fail-fast behaviour without
+    /// affecting the unrelated catalog calls real demos make.
+    /// </summary>
+    public const string CatalogDemo = "catalog-svc-demo-circuit";
 }

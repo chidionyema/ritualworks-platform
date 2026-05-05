@@ -5,6 +5,9 @@
       <RootNamespace>Haworks.Tests.Smoke</RootNamespace>
       <Nullable>enable</Nullable>
       <ImplicitUsings>enable</ImplicitUsings>
+      <!-- CA1711: xUnit's [CollectionDefinition] convention is "<Name>Collection".
+           The analyzer flags the suffix as misleading; xUnit requires it. -->
+      <NoWarn>$(NoWarn);CA1711</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

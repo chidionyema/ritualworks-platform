@@ -1,9 +1,15 @@
 using System.Collections.Concurrent;
+using System.Net.Http.Json;
+using System.Text.Json;
 using System.Threading.RateLimiting;
+using Haworks.BffWeb.Api;
 using Haworks.BffWeb.Api.Demo;
 using Haworks.BffWeb.Application.Interfaces;
+using Haworks.Contracts.Checkout;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Polly;
+using Polly.CircuitBreaker;
 
 namespace Haworks.BffWeb.Api.Controllers;
 
@@ -31,17 +37,20 @@ public class DemoController : ControllerBase
     private readonly IDemoHubNotifier _notifier;
     private readonly IDemoTraceStore _traceStore;
     private readonly DemoStateStore _stateStore;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<DemoController> _logger;
 
     public DemoController(
         IDemoHubNotifier notifier,
         IDemoTraceStore traceStore,
         DemoStateStore stateStore,
+        IHttpClientFactory httpClientFactory,
         ILogger<DemoController> logger)
     {
         _notifier = notifier;
         _traceStore = traceStore;
         _stateStore = stateStore;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
@@ -132,105 +141,256 @@ public class DemoController : ControllerBase
     private static string NewSpanId() => Guid.NewGuid().ToString("N").Substring(0, 16);
 
     // ========================================================================
-    // Saga (Checkout Flow) — PHASE 2 will route into CheckoutOrchestrator
+    // Saga (Checkout Flow) — T2.2: real CheckoutOrchestrator round-trip
     // ========================================================================
+    //
+    // BffWeb routes /api/demo/saga/start through to checkout-orchestrator-svc
+    // (POST /api/checkouts) via the typed HttpClient registered for
+    // BackendClients.Checkout. The saga's state machine handles the rest:
+    // publishes StockReservationRequestedEvent -> catalog reserves stock ->
+    // PaymentSessionRequestedEvent -> payments creates Stripe session -> ...
+    //
+    // What's still stub: SignalR push of saga state changes
+    // (NotifySagaStepAsync). The portfolio-site polls /api/demo/saga/{id}
+    // for status as a fallback, so the demo works without push. Real push
+    // is T2.2 commit 2 — adds MT consumers in BffWeb that listen for the
+    // saga's published events (StockReservationRequested, etc.) and
+    // translate each to OnSagaStep.
+    //
+    // Scenario coverage: only "success" + "stockFailure" work end-to-end
+    // today. "paymentFailure" + "stockRace" need catalog/payments to honor
+    // a DemoScenario MT header — separate task tracked in
+    // docs/agent-briefs/portfolio-bffweb-phase2.md.
 
     [HttpPost("saga/start")]
-    public Task<IActionResult> StartSaga([FromBody] SagaStartRequest request)
+    public async Task<IActionResult> StartSaga([FromBody] SagaStartRequest request, CancellationToken ct)
     {
-        var sessionId = Guid.NewGuid();
+        var sagaId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
-        _logger.LogInformation("Demo saga (stub): scenario={Scenario} sessionId={SessionId}",
-            request.ScenarioType, sessionId);
+        var idempotencyKey = $"demo-{sagaId:N}";
 
-        // PHASE 2: publish CheckoutInitiatedEvent via IPublishEndpoint with the
-        // DemoScenario header so the saga consumes it and the saga's state
-        // transitions stream back to the browser via the hub.
+        _logger.LogInformation(
+            "Saga demo: routing to checkout-orchestrator scenario={Scenario} sagaId={SagaId}",
+            request.ScenarioType, sagaId);
+
+        // Synthetic order data — one demo widget at $39.99. Real-product
+        // integration (catalog GET to pick a live product) is a follow-up.
+        var demoItems = new[]
+        {
+            new CheckoutItemData
+            {
+                ProductId = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                ProductName = "Demo Widget",
+                Quantity = request.ScenarioType == "stockRace" ? 3 : 1,
+                UnitPrice = 39.99m,
+            },
+        };
+
         if (request.ScenarioType == "stockRace")
         {
-            var sagaA = Guid.NewGuid();
+            // Two carts, one product, real saga concurrency. Both POSTs go
+            // to the orchestrator in parallel; the catalog stock reservation
+            // consumer's atomic UPDATE WHERE stock >= qty picks the winner.
             var sagaB = Guid.NewGuid();
-            return Task.FromResult<IActionResult>(Accepted(new
+            var (resA, resB) = await StartCartsRaceAsync(sagaId, sagaB, orderId, demoItems, idempotencyKey, ct);
+
+            return Accepted(new
             {
                 status = "RaceStarted",
-                sessionId = sagaA,
+                sessionId = sagaId,
                 races = new[]
                 {
-                    new { sagaId = sagaA, orderId = Guid.NewGuid(), label = "Cart_A" },
-                    new { sagaId = sagaB, orderId = Guid.NewGuid(), label = "Cart_B" },
+                    new { sagaId, orderId, label = "Cart_A", started = resA },
+                    new { sagaId = sagaB, orderId = Guid.NewGuid(), label = "Cart_B", started = resB },
                 },
-            }));
+            });
         }
 
-        return Task.FromResult<IActionResult>(Accepted(new
+        var ok = await PostStartCheckoutAsync(sagaId, orderId, demoItems, idempotencyKey, ct);
+        if (!ok)
         {
-            sessionId,
+            return StatusCode(502, new { sessionId = sagaId, status = "OrchestratorUnreachable" });
+        }
+
+        return Accepted(new
+        {
+            sessionId = sagaId,
             orderId,
             status = "Started",
             subscriptionToken = "demo-token",
-        }));
-    }
-
-    [HttpGet("saga/{sessionId}")]
-    public IActionResult GetSagaStatus(Guid sessionId)
-    {
-        // PHASE 2: query CheckoutOrchestrator's saga state by sessionId (SagaId).
-        // Phase 1: return a plausible Completed shape so the UI doesn't 404.
-        return Ok(new
-        {
-            sessionId,
-            orderId = Guid.NewGuid(),
-            status = "Completed",
-            isComplete = true,
-            isFailed = false,
         });
     }
 
+    [HttpGet("saga/{sessionId}")]
+    public async Task<IActionResult> GetSagaStatus(Guid sessionId, CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient(BackendClients.Checkout);
+        try
+        {
+            using var resp = await client.GetAsync($"/api/checkouts/{sessionId}", ct);
+            if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return NotFound(new { sessionId, status = "NotFound" });
+            }
+            if (!resp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("CheckoutOrchestrator returned {Status} for saga {SagaId}",
+                    resp.StatusCode, sessionId);
+                return StatusCode((int)resp.StatusCode, new { sessionId, status = "OrchestratorError" });
+            }
+
+            using var stream = await resp.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            var root = doc.RootElement;
+
+            var currentState = root.TryGetProperty("currentState", out var s) ? s.GetString() : null;
+            var orderIdEl = root.TryGetProperty("orderId", out var o) ? o.GetGuid() : Guid.Empty;
+            var failureReason = root.TryGetProperty("failureReason", out var f) && f.ValueKind != JsonValueKind.Null
+                ? f.GetString() : null;
+            var paymentUrl = root.TryGetProperty("paymentCheckoutUrl", out var u) && u.ValueKind != JsonValueKind.Null
+                ? u.GetString() : null;
+
+            return Ok(new
+            {
+                sessionId,
+                orderId = orderIdEl,
+                status = currentState ?? "Unknown",
+                isComplete = currentState is "Completed" or "RequiresReview",
+                isFailed = currentState == "Abandoned",
+                failureReason,
+                paymentCheckoutUrl = paymentUrl,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to query CheckoutOrchestrator for saga {SagaId}", sessionId);
+            return StatusCode(503, new { sessionId, status = "OrchestratorUnreachable" });
+        }
+    }
+
+    private async Task<bool> PostStartCheckoutAsync(
+        Guid sagaId, Guid orderId, CheckoutItemData[] items, string idempotencyKey, CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient(BackendClients.Checkout);
+        try
+        {
+            // Shape matches Haworks.CheckoutOrchestrator.Api.Models.StartCheckoutRequest.
+            // BffWeb doesn't reference the orchestrator's API project (would couple
+            // BFF to a sibling-service implementation type, ADR-0001 boundary), so
+            // we hand-shape the payload — anonymous object serialised by STJ camelCase.
+            var payload = new
+            {
+                sagaId,
+                orderId,
+                userId = "demo-user",
+                customerEmail = "demo@haworks.dev",
+                totalAmount = items.Sum(i => i.UnitPrice * i.Quantity),
+                idempotencyKey,
+                items,
+            };
+            using var resp = await client.PostAsJsonAsync("/api/checkouts", payload, ct);
+            if (resp.IsSuccessStatusCode) return true;
+
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning(
+                "CheckoutOrchestrator rejected demo start: {Status} {Body}",
+                resp.StatusCode, body);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "PostStartCheckoutAsync failed for saga {SagaId}", sagaId);
+            return false;
+        }
+    }
+
+    private async Task<(bool A, bool B)> StartCartsRaceAsync(
+        Guid sagaA, Guid sagaB, Guid orderA,
+        CheckoutItemData[] items, string idempotencyKey, CancellationToken ct)
+    {
+        var orderB = Guid.NewGuid();
+        var idempA = idempotencyKey + "-A";
+        var idempB = idempotencyKey + "-B";
+        var taskA = PostStartCheckoutAsync(sagaA, orderA, items, idempA, ct);
+        var taskB = PostStartCheckoutAsync(sagaB, orderB, items, idempB, ct);
+        await Task.WhenAll(taskA, taskB);
+        return (await taskA, await taskB);
+    }
+
     // ========================================================================
-    // Event Flow (Outbox Pattern) — PHASE 2 will write to payments outbox
+    // Event Flow (Outbox Pattern) — T2.5: real round-trip via payments outbox
     // ========================================================================
+    //
+    // BffWeb POSTs to payments-svc /admin/demo-event. Payments begins a
+    // transaction on PaymentDbContext, publishes a DemoOutboxEvent via
+    // its EF outbox (commits atomically), and the MT relay drains the
+    // outbox row to RabbitMQ. BffWeb's DemoOutboxEventConsumer translates
+    // the inbound message back to OnEventFlow stage='consumed' so the
+    // frontend animates the full persisted -> consumed lifecycle against
+    // the real EF outbox + broker plumbing.
+    //
+    // 'relayed' intermediate stage isn't emitted: would need
+    // IDemoHubNotifier injection into MT's outbox dispatcher
+    // (BuildingBlocks/Messaging plumbing). Tracked as follow-up.
 
     private static bool s_relayPaused;
     private static int s_relayQueued;
 
     [HttpPost("events/trigger")]
-    public async Task<IActionResult> TriggerEvent([FromBody] EventTriggerRequest request)
+    public async Task<IActionResult> TriggerEvent([FromBody] EventTriggerRequest request, CancellationToken ct)
     {
         var sessionId = Guid.NewGuid();
-        var eventId = Guid.NewGuid();
-        var payload = request.Payload?.ToString() ?? "{}";
 
         if (s_relayPaused)
         {
             Interlocked.Increment(ref s_relayQueued);
+            var queuedEventId = Guid.NewGuid();
             await _notifier.NotifyEventFlowAsync(new EventFlowEvent(
-                sessionId, eventId.ToString(), "persisted", payload, DateTime.UtcNow));
+                sessionId, queuedEventId.ToString(), "persisted", request.Payload?.ToString(), DateTime.UtcNow), ct);
             return Ok(new
             {
                 sessionId,
-                eventId,
+                eventId = queuedEventId,
                 status = "QueuedWhileRelayPaused",
                 queuedCount = s_relayQueued,
             });
         }
 
-        // PHASE 2: BeginTransactionAsync on payments DbContext, Publish, Commit.
-        // EF outbox writes the OutboxMessage row in the same TX; relay drains it.
-        await _notifier.NotifyEventFlowAsync(new EventFlowEvent(
-            sessionId, eventId.ToString(), "persisted", payload, DateTime.UtcNow));
-
-        // Simulate the relay + consumer stages so the UI animates the full flow.
-        _ = Task.Run(async () =>
+        // Real round-trip: payments-svc owns the publish + outbox commit.
+        var client = _httpClientFactory.CreateClient(BackendClients.Payments);
+        var payload = new
         {
-            await Task.Delay(150);
-            await _notifier.NotifyEventFlowAsync(new EventFlowEvent(
-                sessionId, eventId.ToString(), "relayed", payload, DateTime.UtcNow));
-            await Task.Delay(120);
-            await _notifier.NotifyEventFlowAsync(new EventFlowEvent(
-                sessionId, eventId.ToString(), "consumed", payload, DateTime.UtcNow));
-        });
+            sessionId,
+            payload = request.Payload?.ToString() ?? "{}",
+        };
 
-        return Ok(new { sessionId, eventId, status = "Persisted" });
+        try
+        {
+            using var resp = await client.PostAsJsonAsync("/admin/demo-event", payload, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("payments admin/demo-event returned {Status}", resp.StatusCode);
+                return StatusCode((int)resp.StatusCode, new { sessionId, status = "PaymentsRejected" });
+            }
+
+            // Payments returns the EventId it stamped on the outbox row.
+            // We re-emit the 'persisted' stage with that id so the
+            // 'consumed' notification (driven by DemoOutboxEventConsumer)
+            // matches it on the frontend's session timeline.
+            using var stream = await resp.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            var eventId = doc.RootElement.GetProperty("eventId").GetGuid();
+
+            await _notifier.NotifyEventFlowAsync(new EventFlowEvent(
+                sessionId, eventId.ToString(), "persisted", request.Payload?.ToString(), DateTime.UtcNow), ct);
+
+            return Ok(new { sessionId, eventId, status = "Persisted" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "events/trigger: payments-svc unreachable");
+            return StatusCode(503, new { sessionId, status = "PaymentsUnreachable" });
+        }
     }
 
     [HttpGet("events/relay-status")]
@@ -251,40 +411,62 @@ public class DemoController : ControllerBase
     }
 
     // ========================================================================
-    // Circuit Breaker — PHASE 2 will route through typed HttpClient + Polly
+    // Circuit Breaker — T2.3: real Polly circuit on real HTTP to catalog-svc
     // ========================================================================
-
-    private static int s_circuitFailureCount;
-    private const int CircuitFailureThreshold = 2;
+    //
+    // The circuit lives statically because Polly's state IS the demo —
+    // open/closed/half-open transitions across requests. shouldFail=true
+    // hits catalog-svc's /demo/fail (always 503); shouldFail=false hits
+    // /health (always 2xx). After 2 consecutive 503s the circuit opens for
+    // 6s; subsequent calls fail fast with BrokenCircuitException without
+    // hitting catalog at all. After the break window, the next call is
+    // half-open — success closes, another failure re-opens.
+    private static readonly AsyncCircuitBreakerPolicy<HttpResponseMessage> s_circuit =
+        Policy
+            .HandleResult<HttpResponseMessage>(r => !r.IsSuccessStatusCode)
+            .Or<HttpRequestException>()
+            .CircuitBreakerAsync(handledEventsAllowedBeforeBreaking: 2,
+                                  durationOfBreak: TimeSpan.FromSeconds(6));
 
     [HttpPost("circuit/request")]
     public async Task<IActionResult> CircuitRequest([FromBody] CircuitRequest request)
     {
         var sessionId = request.SessionId ?? Guid.NewGuid();
+        var client = _httpClientFactory.CreateClient(BackendClients.CatalogDemo);
+        var path = request.ShouldFail ? "/demo/fail" : "/health";
 
-        // PHASE 2: BffWeb's typed HttpClient to catalog-svc with an explicit
-        // Polly circuit. shouldFail=true hits a /demo/fail endpoint catalog
-        // exposes that returns 503 — Polly opens the circuit after 2 failures.
-        if (request.ShouldFail)
+        try
         {
-            var failures = Interlocked.Increment(ref s_circuitFailureCount);
-            var state = failures >= CircuitFailureThreshold ? "open" : "closed";
+            using var resp = await s_circuit.ExecuteAsync(() => client.GetAsync(path));
+            var stateAfter = MapState(s_circuit.CircuitState);
             await _notifier.NotifyCircuitBreakerStateAsync(new CircuitBreakerStateEvent(
-                sessionId, "demo-service", state, DateTime.UtcNow));
+                sessionId, "catalog-svc", stateAfter, DateTime.UtcNow));
 
-            if (state == "open")
+            return Ok(new
             {
-                return Ok(new { sessionId, success = false, circuitState = "open", isRejected = true });
-            }
-            return Ok(new { sessionId, success = false, circuitState = "closed" });
+                sessionId,
+                success = resp.IsSuccessStatusCode,
+                circuitState = stateAfter,
+                statusCode = (int)resp.StatusCode,
+            });
         }
-
-        // Successful call resets the failure count (matches Polly's behaviour
-        // on the first successful call after a failure).
-        Interlocked.Exchange(ref s_circuitFailureCount, 0);
-        await _notifier.NotifyCircuitBreakerStateAsync(new CircuitBreakerStateEvent(
-            sessionId, "demo-service", "closed", DateTime.UtcNow));
-        return Ok(new { sessionId, success = true, circuitState = "closed" });
+        catch (BrokenCircuitException)
+        {
+            await _notifier.NotifyCircuitBreakerStateAsync(new CircuitBreakerStateEvent(
+                sessionId, "catalog-svc", "open", DateTime.UtcNow));
+            return Ok(new { sessionId, success = false, circuitState = "open", isRejected = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Circuit demo: catalog-svc call threw {Type}", ex.GetType().Name);
+            return Ok(new
+            {
+                sessionId,
+                success = false,
+                circuitState = MapState(s_circuit.CircuitState),
+                error = ex.Message,
+            });
+        }
     }
 
     [HttpPost("circuit/toggle-failure")]
@@ -294,11 +476,24 @@ public class DemoController : ControllerBase
     [HttpPost("circuit/reset")]
     public async Task<IActionResult> ResetCircuit([FromBody] ResetRequest request)
     {
-        Interlocked.Exchange(ref s_circuitFailureCount, 0);
+        // Polly's manual Reset() returns the circuit to Closed regardless of
+        // current state. The demo's "Manual_Reset" button uses this to skip
+        // the half-open dance.
+        s_circuit.Reset();
         await _notifier.NotifyCircuitBreakerStateAsync(new CircuitBreakerStateEvent(
-            request.SessionId, "demo-service", "closed", DateTime.UtcNow));
+            request.SessionId, "catalog-svc", "closed", DateTime.UtcNow));
         return Ok(new { sessionId = request.SessionId });
     }
+
+    // Maps Polly's CircuitState enum to the kebab-case strings the frontend expects.
+    private static string MapState(CircuitState state) => state switch
+    {
+        CircuitState.Closed   => "closed",
+        CircuitState.Open     => "open",
+        CircuitState.HalfOpen => "half-open",
+        CircuitState.Isolated => "open", // manually isolated; demo doesn't distinguish
+        _                     => "closed",
+    };
 
     // ========================================================================
     // Vault / Secrets — PHASE 2 will trigger real Vault rotation via identity-svc
@@ -321,15 +516,38 @@ public class DemoController : ControllerBase
     }
 
     [HttpPost("vault/rotate")]
-    public IActionResult RotateVault()
+    public async Task<IActionResult> RotateVault(CancellationToken ct)
     {
         var sessionId = Guid.NewGuid();
         var previousVersion = s_vaultVersion;
         var newVersion = Interlocked.Increment(ref s_vaultVersion);
         s_vaultLeaseExpiry = DateTime.UtcNow.AddSeconds(3600);
 
-        // PHASE 2: hit identity-svc's /admin/vault/rotate endpoint and stream
-        // its real rotation stages (started -> activated -> grace_period -> revoked).
+        // T2.4: route through identity-svc's /admin/vault/rotate endpoint.
+        // Identity does the actual IVaultService.RefreshCredentials call (or
+        // logs warning + 202 if Vault integration isn't wired). BffWeb still
+        // owns the SignalR per-stage simulation — real per-stage events
+        // would require IVaultService to publish them, which is a larger
+        // refactor (BuildingBlocks/Vault scope) tracked as follow-up.
+        var client = _httpClientFactory.CreateClient(BackendClients.Identity);
+        try
+        {
+            using var resp = await client.PostAsync("/admin/vault/rotate-credentials?roleName=identity-jwt", content: null, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Identity vault-rotate returned {Status}", resp.StatusCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Identity vault-rotate request failed (continuing with simulated stages)");
+        }
+
+        // Stream the four-stage progression for the frontend's vault demo.
+        // Stages are simulated locally; identity-svc above is doing the
+        // actual rotation in the background. CancellationToken.None is
+        // intentional: this background task must outlive the request that
+        // started it (the request's ct fires when the response is sent).
         _ = Task.Run(async () =>
         {
             await _notifier.NotifyVaultRotationAsync(new VaultRotationEvent(
@@ -343,7 +561,7 @@ public class DemoController : ControllerBase
             await Task.Delay(300);
             await _notifier.NotifyVaultRotationAsync(new VaultRotationEvent(
                 sessionId, "revoked", newVersion, previousVersion.ToString(), DateTime.UtcNow));
-        });
+        }, CancellationToken.None);
 
         return Ok(new { sessionId, status = "Rotating" });
     }
@@ -452,21 +670,31 @@ public class DemoController : ControllerBase
     // ========================================================================
 
     [HttpPost("cache/stampede")]
-    public IActionResult SimulateStampede([FromBody] StampedeRequest request)
+    public async Task<IActionResult> SimulateStampede([FromBody] StampedeRequest request, CancellationToken ct)
     {
-        // PHASE 2: drive real HybridCache.GetOrCreateAsync against catalog-svc
-        // and count actual DB hits. Phase 1 returns the canned shape: with
-        // singleflight protection, exactly 1 query serves N concurrent reads.
-        var sessionId = Guid.NewGuid();
-        var dbQueries = request.ProtectionMode == "singleflight" ? 1 : request.ConcurrentRequests;
-        return Ok(new
+        // T2.6: real cache-stampede demo via catalog-svc HybridCache.
+        // catalog's /demo/cache-stampede runs Parallel.ForEachAsync of N
+        // GetOrCreateAsync calls; HybridCache's singleflight collapses
+        // them to 1 factory invocation (vs 'none' which bypasses cache and
+        // runs the factory N times).
+        var client = _httpClientFactory.CreateClient(BackendClients.Catalog);
+        try
         {
-            sessionId,
-            protectionMode = request.ProtectionMode,
-            cacheHits = request.ConcurrentRequests - dbQueries,
-            cacheMisses = dbQueries,
-            dbQueries,
-        });
+            using var resp = await client.PostAsJsonAsync("/demo/cache-stampede", request, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                return StatusCode((int)resp.StatusCode, new { error = "catalog stampede demo failed" });
+            }
+            // Forward catalog's response shape verbatim — fields match what
+            // the frontend expects.
+            var json = await resp.Content.ReadAsStringAsync(ct);
+            return Content(json, "application/json");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "cache/stampede: catalog-svc unreachable");
+            return StatusCode(503, new { sessionId = Guid.NewGuid(), error = "catalog unreachable" });
+        }
     }
 
     [HttpGet("cache/product/demo")]
@@ -632,10 +860,36 @@ public class DemoController : ControllerBase
     // ========================================================================
 
     [HttpPost("chaos/trigger")]
-    public IActionResult TriggerChaos([FromBody] ChaosRequest request)
+    public async Task<IActionResult> TriggerChaos([FromBody] ChaosRequest request, CancellationToken ct)
     {
-        var traceId = Guid.NewGuid().ToString();
-        _logger.LogWarning("CHAOS (stub): scenario={Scenario} duration={Duration}s trace={TraceId}",
+        // T2.7: route through catalog-svc's /demo/chaos/trigger which sets
+        // an in-process flag for N seconds. While the flag is set, catalog's
+        // /demo/health-with-chaos returns 503 — combined with the circuit
+        // breaker demo, the breaker opens from real upstream chaos rather
+        // than the always-failing /demo/fail.
+        //
+        // Production version (Phase 2 brief T2.7): chaos flag in Vault KV
+        // so all service instances + the BFF agree on state. Today's
+        // single-process per-service flag is the dev/demo equivalent.
+        var client = _httpClientFactory.CreateClient(BackendClients.Catalog);
+        try
+        {
+            using var resp = await client.PostAsJsonAsync("/demo/chaos/trigger", request, ct);
+            if (resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync(ct);
+                return Content(body, "application/json");
+            }
+            _logger.LogWarning("Catalog chaos/trigger returned {Status}", resp.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Catalog chaos/trigger unreachable; falling back to local log");
+        }
+
+        // Local-only fallback so the frontend always gets a trace_id.
+        var traceId = Guid.NewGuid().ToString("N");
+        _logger.LogWarning("CHAOS (local fallback): scenario={Scenario} duration={Duration}s trace={TraceId}",
             request.Scenario, request.DurationSeconds, traceId);
         return Ok(new { trace_id = traceId });
     }

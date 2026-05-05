@@ -67,6 +67,17 @@ foreach (var name in new[]
     });
 }
 
+// T2.3: dedicated typed client for the circuit-breaker demo. Same target
+// as Catalog (resolved by Aspire service-discovery) but registered under a
+// separate name so the demo's policy doesn't affect real catalog traffic.
+// The Polly circuit breaker itself lives statically in DemoController so
+// it survives across requests (per-session state would defeat the point).
+builder.Services.AddHttpClient(BackendClients.CatalogDemo, client =>
+{
+    client.BaseAddress = new Uri($"https+http://{BackendClients.Catalog}");
+    client.Timeout = TimeSpan.FromSeconds(3);
+});
+
 // MassTransit + the bff-web-side SignalR-bridge consumer. Production
 // transport is RabbitMQ; the integration fixture grafts an in-memory
 // harness with this same consumer wired in.
@@ -76,6 +87,23 @@ if (!builder.Environment.IsEnvironment("Test"))
     {
         mt.SetKebabCaseEndpointNameFormatter();
         mt.AddConsumer<PaymentSessionCreatedConsumer>();
+
+        // T2.2 commit 2: bridge each saga state-change event to a SignalR
+        // OnSagaStep push so the portfolio's CheckoutDemo updates in real
+        // time as the saga progresses. One consumer per event; each
+        // translates to a step + progress percent matching the frontend's
+        // stage ladder. See SagaStepBridgeConsumers.cs.
+        mt.AddConsumer<StockReservedSagaBridge>();
+        mt.AddConsumer<StockReservationFailedSagaBridge>();
+        mt.AddConsumer<PaymentSessionCreatedSagaBridge>();
+        mt.AddConsumer<PaymentSessionFailedSagaBridge>();
+        mt.AddConsumer<PaymentCompletedSagaBridge>();
+
+        // T2.5: closes the persisted -> consumed loop for the event-flow demo.
+        // Subscribes to DemoOutboxEvent (relayed from payments-svc's outbox)
+        // and emits OnEventFlow stage='consumed' to the SignalR hub.
+        mt.AddConsumer<DemoOutboxEventConsumer>();
+
         mt.UsingRabbitMq((context, cfg) =>
         {
             var rabbitConn = builder.Configuration.GetConnectionString("rabbitmq")

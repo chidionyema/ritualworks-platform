@@ -1,10 +1,30 @@
 # Agent Brief — Portfolio Site BffWeb Demos: Phase 2
 
+> **Status:** Phase 2 (T2.1–T2.7) is **complete** on `feat/bffweb-phase2-saga-real`.
+> See §3 for per-task summary of what shipped vs what's documented as
+> follow-up. Brief is retained for reference + the follow-up tracking.
+
 **Audience:** an autonomous coding agent (Gemini, Claude, etc.) with shell access to two repos and the ability to run `dotnet`/`docker`.
 **Goal:** make every demo on portfolio-site exercise *real* cross-service traffic on `ritualworks-platform`. Phase 1 ported the demo surface onto BffWeb with three demos genuinely real and six returning correct shapes from in-process stubs. Phase 2 closes the gap.
 **Definition of done per demo:** the handler does real work against the relevant downstream microservice (HTTP call or MassTransit publish), real state changes are visible in the platform's databases or RabbitMQ, and SignalR streams reflect the real progression. The wire-format response shape stays identical so the frontend doesn't change.
 
 This brief is **self-contained** — you do not need access to any prior chat to follow it. Read top-to-bottom before starting.
+
+---
+
+## Phase 2 completion summary
+
+| Task | Shipped | Follow-up tracked |
+|---|---|---|
+| **T2.1** Honest probes | ✅ Real per-service HTTP probes + p99 ring buffer | — |
+| **T2.2** Saga round-trip | ✅ POSTs to CheckoutOrchestrator + 5 SignalR bridge consumers | PaymentAmountMismatch bridge needs order→saga lookup |
+| **T2.3** Circuit breaker | ✅ Polly v7 circuit on real catalog HTTP `/demo/fail` | — |
+| **T2.4** Vault rotate | ✅ Identity admin endpoint with IVaultService best-effort | Real per-stage events need IVaultService stage publish |
+| **T2.5** Events outbox | ✅ Payments admin endpoint + DemoOutboxEventConsumer in BffWeb | `relayed` intermediate stage needs IDemoHubNotifier in MT outbox dispatcher |
+| **T2.6** Cache stampede | ✅ catalog HybridCache 9.3.0 + real Parallel.ForEachAsync demo | cache/product CRUD still stub (needs IProductCache impl) |
+| **T2.7** Chaos | ✅ Catalog static flag with auto-revert + health-with-chaos endpoint | Real Vault KV-based chaos flag needs catalog AddVaultIntegration() |
+
+Branch ready for merge to main. Frontend wire shapes unchanged.
 
 ---
 

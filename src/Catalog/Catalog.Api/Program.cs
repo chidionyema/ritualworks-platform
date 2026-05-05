@@ -14,6 +14,10 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// T2.6: HybridCache for the cache-stampede demo. Default in-memory L1 only —
+// production should add a distributed L2 (Redis) via .AddDistributedCache().
+builder.Services.AddHybridCache();
+
 // Serilog with explicit Console fallback (per docs/runbooks/serilog-silent-swallow.md).
 builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 {
