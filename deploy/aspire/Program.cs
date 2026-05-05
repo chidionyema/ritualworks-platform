@@ -222,10 +222,19 @@ var payments = builder.AddProject<Projects.Payments_Api>("payments-svc")
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
 // --- bff-web ---------------------------------------------------------------
-// Public HTTP edge. Composes services via REST clients (Phase 7b) and
-// pushes checkout updates to connected browsers via SignalR (Phase 7c).
+// Public HTTP edge. Composes services via REST clients (Phase 7b),
+// pushes checkout updates to browsers via SignalR (Phase 7c), and hosts
+// the demo surface (DemoController + DemoHub) the portfolio site talks to
+// (Phase 9 — see docs/agent-briefs/portfolio-integration.md when written).
 // Owns no DB; consumes PaymentSessionCreatedEvent from RabbitMQ to bridge
 // the saga -> SignalR -> browser flow.
+//
+// Pinned to :5050 / :5051 because the portfolio site's .env.local hardcodes
+// PUBLIC_API_URL=http://localhost:5050. macOS Control Center owns :5000
+// so we shifted off it; :5050 is conventionally free. WithEndpoint(name,
+// mutator) is used instead of WithHttpEndpoint(name:) to avoid the
+// "Endpoint with name 'http' already exists" collision with the auto-
+// generated endpoint from launchSettings.
 var bffWeb = builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WaitFor(vault)
     .WithReference(rabbitmq)
@@ -234,6 +243,9 @@ var bffWeb = builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WithReference(orders)
     .WithReference(payments)
     .WithReference(checkout)
+    .WithEndpoint("http",  e => e.Port = 5050)
+    .WithEndpoint("https", e => e.Port = 5051)
+    .WithExternalHttpEndpoints()
     .WithEnvironment("Vault__Enabled",      "false")
     .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
     .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("bff-web"))
