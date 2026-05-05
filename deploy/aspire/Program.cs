@@ -144,13 +144,21 @@ var vaultSeed = builder.AddContainer("vault-seed", "hashicorp/vault", "1.15")
 //   • Vault credential paths for the service's own AppRole
 
 // --- identity-svc -----------------------------------------------------------
-// Identity is the only service with Vault__Enabled=true at boot — its
-// VaultConfigBootstrap loads JWT secrets via AppRole login during
-// Program.cs Main(). That login requires vault-init to have already
-// written the role_id + secret_id files under vault-creds/identity/,
-// which only happens after vault-seed completes. Other services tolerate
-// vault-not-ready (they use lazy access) so they can use the cheaper
-// WaitFor(vault) — only identity needs WaitForCompletion(vaultSeed).
+// Identity is the only service with Vault__Enabled=true at boot.
+// VaultConfigBootstrap.LoadAsync needs THREE things to be true:
+//   1. The role_id + secret_id files exist on disk under vault-creds/identity/
+//      (written by vault-init's first phase).
+//   2. The AppRole itself is configured on the Vault server with a policy
+//      that grants read access to secret/identity/* (vault-init's second phase).
+//   3. The KV secrets at secret/identity/* exist (vault-seed populates them).
+// All three are true only after vault-seed completes — `WaitFor(vault)`
+// looks tempting but identity then loses the AppRole-login race and
+// crash-loops because the AppRole isn't configured yet.
+//
+// Aspire 9.x's container reconciler bug means WaitForCompletion costs
+// ~25-30s extra wait, but it's the only correct gate. See
+// docs/architecture/vault-credential-delivery.md §4 for why naive
+// WaitFor(vault) breaks and the proper Layer 3 fix.
 var identity = builder.AddProject<Projects.Identity_Api>("identity-svc")
     .WaitForCompletion(vaultSeed)
     .WithReference(identityDb)
