@@ -8,6 +8,8 @@ using Haworks.BffWeb.Application.Interfaces;
 using Haworks.Contracts.Checkout;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Polly;
+using Polly.CircuitBreaker;
 
 namespace Haworks.BffWeb.Api.Controllers;
 
@@ -380,40 +382,62 @@ public class DemoController : ControllerBase
     }
 
     // ========================================================================
-    // Circuit Breaker — PHASE 2 will route through typed HttpClient + Polly
+    // Circuit Breaker — T2.3: real Polly circuit on real HTTP to catalog-svc
     // ========================================================================
-
-    private static int s_circuitFailureCount;
-    private const int CircuitFailureThreshold = 2;
+    //
+    // The circuit lives statically because Polly's state IS the demo —
+    // open/closed/half-open transitions across requests. shouldFail=true
+    // hits catalog-svc's /demo/fail (always 503); shouldFail=false hits
+    // /health (always 2xx). After 2 consecutive 503s the circuit opens for
+    // 6s; subsequent calls fail fast with BrokenCircuitException without
+    // hitting catalog at all. After the break window, the next call is
+    // half-open — success closes, another failure re-opens.
+    private static readonly AsyncCircuitBreakerPolicy<HttpResponseMessage> s_circuit =
+        Policy
+            .HandleResult<HttpResponseMessage>(r => !r.IsSuccessStatusCode)
+            .Or<HttpRequestException>()
+            .CircuitBreakerAsync(handledEventsAllowedBeforeBreaking: 2,
+                                  durationOfBreak: TimeSpan.FromSeconds(6));
 
     [HttpPost("circuit/request")]
     public async Task<IActionResult> CircuitRequest([FromBody] CircuitRequest request)
     {
         var sessionId = request.SessionId ?? Guid.NewGuid();
+        var client = _httpClientFactory.CreateClient(BackendClients.CatalogDemo);
+        var path = request.ShouldFail ? "/demo/fail" : "/health";
 
-        // PHASE 2: BffWeb's typed HttpClient to catalog-svc with an explicit
-        // Polly circuit. shouldFail=true hits a /demo/fail endpoint catalog
-        // exposes that returns 503 — Polly opens the circuit after 2 failures.
-        if (request.ShouldFail)
+        try
         {
-            var failures = Interlocked.Increment(ref s_circuitFailureCount);
-            var state = failures >= CircuitFailureThreshold ? "open" : "closed";
+            using var resp = await s_circuit.ExecuteAsync(() => client.GetAsync(path));
+            var stateAfter = MapState(s_circuit.CircuitState);
             await _notifier.NotifyCircuitBreakerStateAsync(new CircuitBreakerStateEvent(
-                sessionId, "demo-service", state, DateTime.UtcNow));
+                sessionId, "catalog-svc", stateAfter, DateTime.UtcNow));
 
-            if (state == "open")
+            return Ok(new
             {
-                return Ok(new { sessionId, success = false, circuitState = "open", isRejected = true });
-            }
-            return Ok(new { sessionId, success = false, circuitState = "closed" });
+                sessionId,
+                success = resp.IsSuccessStatusCode,
+                circuitState = stateAfter,
+                statusCode = (int)resp.StatusCode,
+            });
         }
-
-        // Successful call resets the failure count (matches Polly's behaviour
-        // on the first successful call after a failure).
-        Interlocked.Exchange(ref s_circuitFailureCount, 0);
-        await _notifier.NotifyCircuitBreakerStateAsync(new CircuitBreakerStateEvent(
-            sessionId, "demo-service", "closed", DateTime.UtcNow));
-        return Ok(new { sessionId, success = true, circuitState = "closed" });
+        catch (BrokenCircuitException)
+        {
+            await _notifier.NotifyCircuitBreakerStateAsync(new CircuitBreakerStateEvent(
+                sessionId, "catalog-svc", "open", DateTime.UtcNow));
+            return Ok(new { sessionId, success = false, circuitState = "open", isRejected = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Circuit demo: catalog-svc call threw {Type}", ex.GetType().Name);
+            return Ok(new
+            {
+                sessionId,
+                success = false,
+                circuitState = MapState(s_circuit.CircuitState),
+                error = ex.Message,
+            });
+        }
     }
 
     [HttpPost("circuit/toggle-failure")]
@@ -423,11 +447,24 @@ public class DemoController : ControllerBase
     [HttpPost("circuit/reset")]
     public async Task<IActionResult> ResetCircuit([FromBody] ResetRequest request)
     {
-        Interlocked.Exchange(ref s_circuitFailureCount, 0);
+        // Polly's manual Reset() returns the circuit to Closed regardless of
+        // current state. The demo's "Manual_Reset" button uses this to skip
+        // the half-open dance.
+        s_circuit.Reset();
         await _notifier.NotifyCircuitBreakerStateAsync(new CircuitBreakerStateEvent(
-            request.SessionId, "demo-service", "closed", DateTime.UtcNow));
+            request.SessionId, "catalog-svc", "closed", DateTime.UtcNow));
         return Ok(new { sessionId = request.SessionId });
     }
+
+    // Maps Polly's CircuitState enum to the kebab-case strings the frontend expects.
+    private static string MapState(CircuitState state) => state switch
+    {
+        CircuitState.Closed   => "closed",
+        CircuitState.Open     => "open",
+        CircuitState.HalfOpen => "half-open",
+        CircuitState.Isolated => "open", // manually isolated; demo doesn't distinguish
+        _                     => "closed",
+    };
 
     // ========================================================================
     // Vault / Secrets — PHASE 2 will trigger real Vault rotation via identity-svc

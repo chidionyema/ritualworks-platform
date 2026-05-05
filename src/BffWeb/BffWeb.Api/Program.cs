@@ -67,6 +67,17 @@ foreach (var name in new[]
     });
 }
 
+// T2.3: dedicated typed client for the circuit-breaker demo. Same target
+// as Catalog (resolved by Aspire service-discovery) but registered under a
+// separate name so the demo's policy doesn't affect real catalog traffic.
+// The Polly circuit breaker itself lives statically in DemoController so
+// it survives across requests (per-session state would defeat the point).
+builder.Services.AddHttpClient(BackendClients.CatalogDemo, client =>
+{
+    client.BaseAddress = new Uri($"https+http://{BackendClients.Catalog}");
+    client.Timeout = TimeSpan.FromSeconds(3);
+});
+
 // MassTransit + the bff-web-side SignalR-bridge consumer. Production
 // transport is RabbitMQ; the integration fixture grafts an in-memory
 // harness with this same consumer wired in.
