@@ -1,7 +1,11 @@
 using System.Collections.Concurrent;
+using System.Net.Http.Json;
+using System.Text.Json;
 using System.Threading.RateLimiting;
+using Haworks.BffWeb.Api;
 using Haworks.BffWeb.Api.Demo;
 using Haworks.BffWeb.Application.Interfaces;
+using Haworks.Contracts.Checkout;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -31,17 +35,20 @@ public class DemoController : ControllerBase
     private readonly IDemoHubNotifier _notifier;
     private readonly IDemoTraceStore _traceStore;
     private readonly DemoStateStore _stateStore;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<DemoController> _logger;
 
     public DemoController(
         IDemoHubNotifier notifier,
         IDemoTraceStore traceStore,
         DemoStateStore stateStore,
+        IHttpClientFactory httpClientFactory,
         ILogger<DemoController> logger)
     {
         _notifier = notifier;
         _traceStore = traceStore;
         _stateStore = stateStore;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
@@ -132,58 +139,180 @@ public class DemoController : ControllerBase
     private static string NewSpanId() => Guid.NewGuid().ToString("N").Substring(0, 16);
 
     // ========================================================================
-    // Saga (Checkout Flow) — PHASE 2 will route into CheckoutOrchestrator
+    // Saga (Checkout Flow) — T2.2: real CheckoutOrchestrator round-trip
     // ========================================================================
+    //
+    // BffWeb routes /api/demo/saga/start through to checkout-orchestrator-svc
+    // (POST /api/checkouts) via the typed HttpClient registered for
+    // BackendClients.Checkout. The saga's state machine handles the rest:
+    // publishes StockReservationRequestedEvent -> catalog reserves stock ->
+    // PaymentSessionRequestedEvent -> payments creates Stripe session -> ...
+    //
+    // What's still stub: SignalR push of saga state changes
+    // (NotifySagaStepAsync). The portfolio-site polls /api/demo/saga/{id}
+    // for status as a fallback, so the demo works without push. Real push
+    // is T2.2 commit 2 — adds MT consumers in BffWeb that listen for the
+    // saga's published events (StockReservationRequested, etc.) and
+    // translate each to OnSagaStep.
+    //
+    // Scenario coverage: only "success" + "stockFailure" work end-to-end
+    // today. "paymentFailure" + "stockRace" need catalog/payments to honor
+    // a DemoScenario MT header — separate task tracked in
+    // docs/agent-briefs/portfolio-bffweb-phase2.md.
 
     [HttpPost("saga/start")]
-    public Task<IActionResult> StartSaga([FromBody] SagaStartRequest request)
+    public async Task<IActionResult> StartSaga([FromBody] SagaStartRequest request, CancellationToken ct)
     {
-        var sessionId = Guid.NewGuid();
+        var sagaId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
-        _logger.LogInformation("Demo saga (stub): scenario={Scenario} sessionId={SessionId}",
-            request.ScenarioType, sessionId);
+        var idempotencyKey = $"demo-{sagaId:N}";
 
-        // PHASE 2: publish CheckoutInitiatedEvent via IPublishEndpoint with the
-        // DemoScenario header so the saga consumes it and the saga's state
-        // transitions stream back to the browser via the hub.
+        _logger.LogInformation(
+            "Saga demo: routing to checkout-orchestrator scenario={Scenario} sagaId={SagaId}",
+            request.ScenarioType, sagaId);
+
+        // Synthetic order data — one demo widget at $39.99. Real-product
+        // integration (catalog GET to pick a live product) is a follow-up.
+        var demoItems = new[]
+        {
+            new CheckoutItemData
+            {
+                ProductId = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                ProductName = "Demo Widget",
+                Quantity = request.ScenarioType == "stockRace" ? 3 : 1,
+                UnitPrice = 39.99m,
+            },
+        };
+
         if (request.ScenarioType == "stockRace")
         {
-            var sagaA = Guid.NewGuid();
+            // Two carts, one product, real saga concurrency. Both POSTs go
+            // to the orchestrator in parallel; the catalog stock reservation
+            // consumer's atomic UPDATE WHERE stock >= qty picks the winner.
             var sagaB = Guid.NewGuid();
-            return Task.FromResult<IActionResult>(Accepted(new
+            var (resA, resB) = await StartCartsRaceAsync(sagaId, sagaB, orderId, demoItems, idempotencyKey, ct);
+
+            return Accepted(new
             {
                 status = "RaceStarted",
-                sessionId = sagaA,
+                sessionId = sagaId,
                 races = new[]
                 {
-                    new { sagaId = sagaA, orderId = Guid.NewGuid(), label = "Cart_A" },
-                    new { sagaId = sagaB, orderId = Guid.NewGuid(), label = "Cart_B" },
+                    new { sagaId, orderId, label = "Cart_A", started = resA },
+                    new { sagaId = sagaB, orderId = Guid.NewGuid(), label = "Cart_B", started = resB },
                 },
-            }));
+            });
         }
 
-        return Task.FromResult<IActionResult>(Accepted(new
+        var ok = await PostStartCheckoutAsync(sagaId, orderId, demoItems, idempotencyKey, ct);
+        if (!ok)
         {
-            sessionId,
+            return StatusCode(502, new { sessionId = sagaId, status = "OrchestratorUnreachable" });
+        }
+
+        return Accepted(new
+        {
+            sessionId = sagaId,
             orderId,
             status = "Started",
             subscriptionToken = "demo-token",
-        }));
+        });
     }
 
     [HttpGet("saga/{sessionId}")]
-    public IActionResult GetSagaStatus(Guid sessionId)
+    public async Task<IActionResult> GetSagaStatus(Guid sessionId, CancellationToken ct)
     {
-        // PHASE 2: query CheckoutOrchestrator's saga state by sessionId (SagaId).
-        // Phase 1: return a plausible Completed shape so the UI doesn't 404.
-        return Ok(new
+        var client = _httpClientFactory.CreateClient(BackendClients.Checkout);
+        try
         {
-            sessionId,
-            orderId = Guid.NewGuid(),
-            status = "Completed",
-            isComplete = true,
-            isFailed = false,
-        });
+            using var resp = await client.GetAsync($"/api/checkouts/{sessionId}", ct);
+            if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return NotFound(new { sessionId, status = "NotFound" });
+            }
+            if (!resp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("CheckoutOrchestrator returned {Status} for saga {SagaId}",
+                    resp.StatusCode, sessionId);
+                return StatusCode((int)resp.StatusCode, new { sessionId, status = "OrchestratorError" });
+            }
+
+            using var stream = await resp.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            var root = doc.RootElement;
+
+            var currentState = root.TryGetProperty("currentState", out var s) ? s.GetString() : null;
+            var orderIdEl = root.TryGetProperty("orderId", out var o) ? o.GetGuid() : Guid.Empty;
+            var failureReason = root.TryGetProperty("failureReason", out var f) && f.ValueKind != JsonValueKind.Null
+                ? f.GetString() : null;
+            var paymentUrl = root.TryGetProperty("paymentCheckoutUrl", out var u) && u.ValueKind != JsonValueKind.Null
+                ? u.GetString() : null;
+
+            return Ok(new
+            {
+                sessionId,
+                orderId = orderIdEl,
+                status = currentState ?? "Unknown",
+                isComplete = currentState is "Completed" or "RequiresReview",
+                isFailed = currentState == "Abandoned",
+                failureReason,
+                paymentCheckoutUrl = paymentUrl,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to query CheckoutOrchestrator for saga {SagaId}", sessionId);
+            return StatusCode(503, new { sessionId, status = "OrchestratorUnreachable" });
+        }
+    }
+
+    private async Task<bool> PostStartCheckoutAsync(
+        Guid sagaId, Guid orderId, CheckoutItemData[] items, string idempotencyKey, CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient(BackendClients.Checkout);
+        try
+        {
+            // Shape matches Haworks.CheckoutOrchestrator.Api.Models.StartCheckoutRequest.
+            // BffWeb doesn't reference the orchestrator's API project (would couple
+            // BFF to a sibling-service implementation type, ADR-0001 boundary), so
+            // we hand-shape the payload — anonymous object serialised by STJ camelCase.
+            var payload = new
+            {
+                sagaId,
+                orderId,
+                userId = "demo-user",
+                customerEmail = "demo@haworks.dev",
+                totalAmount = items.Sum(i => i.UnitPrice * i.Quantity),
+                idempotencyKey,
+                items,
+            };
+            using var resp = await client.PostAsJsonAsync("/api/checkouts", payload, ct);
+            if (resp.IsSuccessStatusCode) return true;
+
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning(
+                "CheckoutOrchestrator rejected demo start: {Status} {Body}",
+                resp.StatusCode, body);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "PostStartCheckoutAsync failed for saga {SagaId}", sagaId);
+            return false;
+        }
+    }
+
+    private async Task<(bool A, bool B)> StartCartsRaceAsync(
+        Guid sagaA, Guid sagaB, Guid orderA,
+        CheckoutItemData[] items, string idempotencyKey, CancellationToken ct)
+    {
+        var orderB = Guid.NewGuid();
+        var idempA = idempotencyKey + "-A";
+        var idempB = idempotencyKey + "-B";
+        var taskA = PostStartCheckoutAsync(sagaA, orderA, items, idempA, ct);
+        var taskB = PostStartCheckoutAsync(sagaB, orderB, items, idempB, ct);
+        await Task.WhenAll(taskA, taskB);
+        return (await taskA, await taskB);
     }
 
     // ========================================================================
