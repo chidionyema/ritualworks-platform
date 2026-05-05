@@ -494,7 +494,14 @@ public class DemoController : ControllerBase
 
         try
         {
-            using var resp = await s_circuit.ExecuteAsync(() => client.GetAsync(path));
+            // Bypass path: skip the shared static breaker entirely so the
+            // caller observes raw upstream behaviour (success or full timeout)
+            // regardless of whether the breaker is open from concurrent traffic.
+            // The breaker's counters are NOT touched on the bypass path —
+            // bypassed calls don't trip or reset the circuit.
+            using var resp = request.BypassBreaker
+                ? await client.GetAsync(path)
+                : await s_circuit.ExecuteAsync(() => client.GetAsync(path));
             sw.Stop();
             var stateAfter = MapState(s_circuit.CircuitState);
 
@@ -1208,7 +1215,12 @@ public record RelayPauseRequest(bool Paused);
 public record IdempotencyRaceRequest(string Key, int Count, int? TtlSeconds);
 public record RaceOutcome(int RequestIndex, bool IsWinner, Guid OrderId, long LatencyMs);
 public record TraceStartRequest(string? Scenario);
-public record CircuitRequest(Guid? SessionId, bool ShouldFail);
+// `BypassBreaker` exists for the side-by-side "no-breaker baseline lane"
+// the frontend's CircuitBreakerDemo renders. When true, the request goes
+// directly through HttpClient without the static AsyncCircuitBreakerPolicy,
+// so the caller can observe the timeout cliff a circuit-less system would
+// experience. Default false preserves the original demo flow.
+public record CircuitRequest(Guid? SessionId, bool ShouldFail, bool BypassBreaker = false);
 public record ToggleFailureRequest(Guid SessionId, bool FailureMode);
 public record ResetRequest(Guid SessionId);
 public record StampedeRequest(int ConcurrentRequests, string CacheKey, string ProtectionMode, int SimulatedDbLatencyMs);
