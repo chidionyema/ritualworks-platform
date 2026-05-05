@@ -1,6 +1,9 @@
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BffWeb.Api;
+using Haworks.BffWeb.Api.Demo;
+using Haworks.BffWeb.Api.Middleware;
 using Haworks.BffWeb.Api.SignalR;
+using Haworks.BffWeb.Application.Interfaces;
 using MassTransit;
 using Serilog;
 
@@ -15,6 +18,38 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();
+
+// Demo surface for the portfolio site (https://github.com/chidionyema/portfolio-site).
+// SignalRDemoHubNotifier MUST be Singleton — registering Scoped triggers a
+// captive-dependency crash at boot when ValidateScopes is on. The notifier
+// only depends on IHubContext<DemoHub> + ILogger so Singleton is safe.
+// State store + trace store are also Singleton (in-process, lifetime of
+// the AppHost). See src/BffWeb/BffWeb.Api/Demo/ for impls.
+builder.Services.AddSingleton<IDemoHubNotifier, SignalRDemoHubNotifier>();
+builder.Services.AddSingleton<IDemoTraceStore, DemoTraceStore>();
+builder.Services.AddSingleton<DemoStateStore>();
+
+// T2.1: replaced Phase 1's hardcoded SystemController literals with real
+// probes. ActivityCounters tracks live request counts + p99 latency from
+// the rolling histogram fed by DemoActivityMiddleware. HealthProbe pings
+// each downstream microservice + RabbitMQ in parallel with a 2s per-target
+// timeout. See src/BffWeb/BffWeb.Api/Demo/{DemoActivityCounters, DependencyHealthProbe}.cs.
+builder.Services.AddSingleton<IDemoActivityCounters, DemoActivityCounters>();
+builder.Services.AddScoped<IDependencyHealthProbe, DependencyHealthProbe>();
+
+// CORS for the portfolio site dev server (http://localhost:4321 by default).
+// AllowCredentials is required for SignalR's negotiate handshake. Header
+// + method allowlists match what the demos actually send.
+builder.Services.AddCors(o => o.AddPolicy("portfolio-site", p => p
+    .WithOrigins("http://localhost:4321")
+    .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
+    .WithHeaders(
+        "Content-Type", "Authorization", "X-Correlation-ID",
+        "X-Requested-With", "Accept", "Origin",
+        "X-Demo-Session", "X-Idempotency-Key", "X-Idempotency-Ttl-Seconds",
+        "If-Match")
+    .WithExposedHeaders("X-Trace-Id", "X-Correlation-ID")
+    .AllowCredentials()));
 
 // Typed HttpClient keys for service composition. BaseAddress uses Aspire's
 // service-discovery URI form `https+http://<svc>` (configured by
@@ -70,10 +105,20 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+// CORS must run before auth so the preflight OPTIONS request is answered
+// without challenging credentials. Demo endpoints are AllowAnonymous so
+// position relative to UseAuthentication doesn't matter for the response,
+// but it does matter for the OPTIONS preflight.
+app.UseCors("portfolio-site");
+// Activity middleware sits before auth so a 401 still records traffic into
+// the IngressEvents24h counter. Path-scoped to /api/demo/* internally so
+// non-demo routes have zero overhead.
+app.UseDemoActivityCounters();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<CheckoutHub>("/hubs/checkout");
+app.MapHub<DemoHub>("/hubs/demo");
 
 app.Run();
 

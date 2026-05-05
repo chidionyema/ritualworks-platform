@@ -144,13 +144,21 @@ var vaultSeed = builder.AddContainer("vault-seed", "hashicorp/vault", "1.15")
 //   • Vault credential paths for the service's own AppRole
 
 // --- identity-svc -----------------------------------------------------------
-// Identity is the only service with Vault__Enabled=true at boot — its
-// VaultConfigBootstrap loads JWT secrets via AppRole login during
-// Program.cs Main(). That login requires vault-init to have already
-// written the role_id + secret_id files under vault-creds/identity/,
-// which only happens after vault-seed completes. Other services tolerate
-// vault-not-ready (they use lazy access) so they can use the cheaper
-// WaitFor(vault) — only identity needs WaitForCompletion(vaultSeed).
+// Identity is the only service with Vault__Enabled=true at boot.
+// VaultConfigBootstrap.LoadAsync needs THREE things to be true:
+//   1. The role_id + secret_id files exist on disk under vault-creds/identity/
+//      (written by vault-init's first phase).
+//   2. The AppRole itself is configured on the Vault server with a policy
+//      that grants read access to secret/identity/* (vault-init's second phase).
+//   3. The KV secrets at secret/identity/* exist (vault-seed populates them).
+// All three are true only after vault-seed completes — `WaitFor(vault)`
+// looks tempting but identity then loses the AppRole-login race and
+// crash-loops because the AppRole isn't configured yet.
+//
+// Aspire 9.x's container reconciler bug means WaitForCompletion costs
+// ~25-30s extra wait, but it's the only correct gate. See
+// docs/architecture/vault-credential-delivery.md §4 for why naive
+// WaitFor(vault) breaks and the proper Layer 3 fix.
 var identity = builder.AddProject<Projects.Identity_Api>("identity-svc")
     .WaitForCompletion(vaultSeed)
     .WithReference(identityDb)
@@ -222,10 +230,19 @@ var payments = builder.AddProject<Projects.Payments_Api>("payments-svc")
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
 // --- bff-web ---------------------------------------------------------------
-// Public HTTP edge. Composes services via REST clients (Phase 7b) and
-// pushes checkout updates to connected browsers via SignalR (Phase 7c).
+// Public HTTP edge. Composes services via REST clients (Phase 7b),
+// pushes checkout updates to browsers via SignalR (Phase 7c), and hosts
+// the demo surface (DemoController + DemoHub) the portfolio site talks to
+// (Phase 9 — see docs/agent-briefs/portfolio-integration.md when written).
 // Owns no DB; consumes PaymentSessionCreatedEvent from RabbitMQ to bridge
 // the saga -> SignalR -> browser flow.
+//
+// Pinned to :5050 / :5051 because the portfolio site's .env.local hardcodes
+// PUBLIC_API_URL=http://localhost:5050. macOS Control Center owns :5000
+// so we shifted off it; :5050 is conventionally free. WithEndpoint(name,
+// mutator) is used instead of WithHttpEndpoint(name:) to avoid the
+// "Endpoint with name 'http' already exists" collision with the auto-
+// generated endpoint from launchSettings.
 var bffWeb = builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WaitFor(vault)
     .WithReference(rabbitmq)
@@ -234,6 +251,9 @@ var bffWeb = builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WithReference(orders)
     .WithReference(payments)
     .WithReference(checkout)
+    .WithEndpoint("http",  e => e.Port = 5050)
+    .WithEndpoint("https", e => e.Port = 5051)
+    .WithExternalHttpEndpoints()
     .WithEnvironment("Vault__Enabled",      "false")
     .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
     .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("bff-web"))

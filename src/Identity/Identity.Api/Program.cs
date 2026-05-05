@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Extensions;
+using Haworks.BuildingBlocks.Persistence;
 using Haworks.BuildingBlocks.Vault;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -95,7 +96,8 @@ if (!app.Environment.IsEnvironment("Test"))
     // 1. Apply EF migrations (creates tables in 'identity' schema)
     var db = scope.ServiceProvider
         .GetRequiredService<Haworks.Identity.Infrastructure.AppIdentityDbContext>();
-    await db.Database.MigrateAsync();
+    var migrateLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    await db.Database.MigrateWithRetryAsync(migrateLogger);
 
     // 2. Seed canonical roles. RegisterCommand assigns new users to
     //    "ContentUploader" by default; without this seed step the first

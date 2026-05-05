@@ -1,4 +1,8 @@
 using FluentValidation;
+using Haworks.BuildingBlocks.Behaviors;
+using Haworks.BuildingBlocks.CurrentUser;
+using MediatR;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Haworks.Catalog.Application;
@@ -11,7 +15,12 @@ public static class DependencyInjection
     {
         var assembly = typeof(DependencyInjection).Assembly;
 
-        services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(assembly));
+        services.AddMediatR(cfg =>
+        {
+            cfg.RegisterServicesFromAssembly(assembly);
+            cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+        });
+
         services.AddValidatorsFromAssembly(assembly);
 
         // CurrentUserService needs IHttpContextAccessor to resolve Identity from

@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Extensions;
+using Haworks.BuildingBlocks.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -28,7 +29,8 @@ if (!app.Environment.IsEnvironment("Test"))
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider
         .GetRequiredService<Haworks.CheckoutOrchestrator.Infrastructure.CheckoutDbContext>();
-    await db.Database.MigrateAsync();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    await db.Database.MigrateWithRetryAsync(logger);
 }
 
 app.MapDefaultEndpoints();

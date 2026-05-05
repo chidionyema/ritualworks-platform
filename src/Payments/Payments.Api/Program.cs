@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Extensions;
+using Haworks.BuildingBlocks.Persistence;
 using Haworks.Payments.Api.Webhooks;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -40,7 +41,8 @@ if (!app.Environment.IsEnvironment("Test"))
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider
         .GetRequiredService<Haworks.Payments.Infrastructure.PaymentDbContext>();
-    await db.Database.MigrateAsync();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    await db.Database.MigrateWithRetryAsync(logger);
 }
 
 app.MapDefaultEndpoints();
