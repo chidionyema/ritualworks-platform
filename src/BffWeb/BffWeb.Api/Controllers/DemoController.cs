@@ -487,15 +487,38 @@ public class DemoController : ControllerBase
     }
 
     [HttpPost("vault/rotate")]
-    public IActionResult RotateVault()
+    public async Task<IActionResult> RotateVault(CancellationToken ct)
     {
         var sessionId = Guid.NewGuid();
         var previousVersion = s_vaultVersion;
         var newVersion = Interlocked.Increment(ref s_vaultVersion);
         s_vaultLeaseExpiry = DateTime.UtcNow.AddSeconds(3600);
 
-        // PHASE 2: hit identity-svc's /admin/vault/rotate endpoint and stream
-        // its real rotation stages (started -> activated -> grace_period -> revoked).
+        // T2.4: route through identity-svc's /admin/vault/rotate endpoint.
+        // Identity does the actual IVaultService.RefreshCredentials call (or
+        // logs warning + 202 if Vault integration isn't wired). BffWeb still
+        // owns the SignalR per-stage simulation — real per-stage events
+        // would require IVaultService to publish them, which is a larger
+        // refactor (BuildingBlocks/Vault scope) tracked as follow-up.
+        var client = _httpClientFactory.CreateClient(BackendClients.Identity);
+        try
+        {
+            using var resp = await client.PostAsync("/admin/vault/rotate-credentials?roleName=identity-jwt", content: null, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Identity vault-rotate returned {Status}", resp.StatusCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Identity vault-rotate request failed (continuing with simulated stages)");
+        }
+
+        // Stream the four-stage progression for the frontend's vault demo.
+        // Stages are simulated locally; identity-svc above is doing the
+        // actual rotation in the background. CancellationToken.None is
+        // intentional: this background task must outlive the request that
+        // started it (the request's ct fires when the response is sent).
         _ = Task.Run(async () =>
         {
             await _notifier.NotifyVaultRotationAsync(new VaultRotationEvent(
@@ -509,7 +532,7 @@ public class DemoController : ControllerBase
             await Task.Delay(300);
             await _notifier.NotifyVaultRotationAsync(new VaultRotationEvent(
                 sessionId, "revoked", newVersion, previousVersion.ToString(), DateTime.UtcNow));
-        });
+        }, CancellationToken.None);
 
         return Ok(new { sessionId, status = "Rotating" });
     }
