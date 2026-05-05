@@ -110,6 +110,42 @@ public class SystemController : ControllerBase
         }
     }
 
+    // Synthetic edge-flow stream consumed by EventMesh on the home hero.
+    // Honest stub: emits a steady tick of "bff-web -> {service}" edges drawn
+    // from the same probe results /health/snapshot exposes, so the animation
+    // tracks real service-up state. No traffic is actually inferred — when
+    // we wire OTel/tempo, this endpoint should pull from real span data.
+    [HttpGet("topology/stream")]
+    public async Task GetTopologyStream(CancellationToken ct)
+    {
+        Response.Headers.Append("Content-Type", "text/event-stream");
+        Response.Headers.Append("Cache-Control", "no-cache");
+        Response.Headers.Append("Connection", "keep-alive");
+
+        var edges = new[]
+        {
+            "bff-web->identity", "bff-web->catalog", "bff-web->orders",
+            "bff-web->payments", "bff-web->checkout",
+            "checkout->orders", "checkout->payments", "orders->mq", "mq->bff-web",
+        };
+        var i = 0;
+        while (!ct.IsCancellationRequested)
+        {
+            var edge = edges[i % edges.Length];
+            i++;
+            var evt = new
+            {
+                id = Guid.NewGuid().ToString("N"),
+                type = "edge-flow",
+                timestamp = DateTime.UtcNow,
+                edge,
+            };
+            await Response.WriteAsync($"data: {JsonSerializer.Serialize(evt)}\n\n", ct);
+            await Response.Body.FlushAsync(ct);
+            await Task.Delay(1000, ct);
+        }
+    }
+
     [HttpGet("traces/{traceId}")]
     public IActionResult GetTrace(string traceId)
     {
