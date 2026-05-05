@@ -334,9 +334,16 @@ public class DemoController : ControllerBase
     // (BuildingBlocks/Messaging plumbing). Tracked as follow-up.
 
     [HttpPost("events/trigger")]
-    public async Task<IActionResult> TriggerEvent([FromBody] EventTriggerRequest request, CancellationToken ct)
+    public async Task<IActionResult> TriggerEvent(
+        [FromBody] EventTriggerRequest request,
+        [FromHeader(Name = "X-Demo-Session")] Guid? demoSession,
+        CancellationToken ct)
     {
-        var sessionId = Guid.NewGuid();
+        // The frontend's per-page demo session lives in the X-Demo-Session
+        // header; subscribe + publish must agree on this id or the SignalR
+        // push lands in a group nobody is listening to. Generate a fresh
+        // one only if the caller didn't supply (preserves cURL-style use).
+        var sessionId = demoSession is { } id && id != Guid.Empty ? id : Guid.NewGuid();
 
         // Always publish through payments-svc. The OutboxMessage row commits
         // atomically with the demo-event handler's transaction. If the relay
@@ -585,9 +592,14 @@ public class DemoController : ControllerBase
     }
 
     [HttpPost("vault/rotate")]
-    public async Task<IActionResult> RotateVault(CancellationToken ct)
+    public async Task<IActionResult> RotateVault(
+        [FromHeader(Name = "X-Demo-Session")] Guid? demoSession,
+        CancellationToken ct)
     {
-        var sessionId = Guid.NewGuid();
+        // Carry the frontend's session id through to identity so the
+        // VaultRotationStageEvent publishes are tagged with the same id
+        // the browser is subscribed to.
+        var sessionId = demoSession is { } id && id != Guid.Empty ? id : Guid.NewGuid();
         var client = _httpClientFactory.CreateClient(BackendClients.Identity);
         try
         {
@@ -613,9 +625,10 @@ public class DemoController : ControllerBase
     public async Task<IActionResult> ProcessIdempotent(
         [FromHeader(Name = "X-Idempotency-Key")] string key,
         [FromHeader(Name = "X-Idempotency-Ttl-Seconds")] int? ttlSeconds,
+        [FromHeader(Name = "X-Demo-Session")] Guid? demoSession,
         [FromBody] object payload)
     {
-        var sessionId = Guid.NewGuid();
+        var sessionId = demoSession is { } id && id != Guid.Empty ? id : Guid.NewGuid();
         if (string.IsNullOrEmpty(key)) return BadRequest("Missing idempotency key");
 
         var now = DateTime.UtcNow;
@@ -937,9 +950,10 @@ public class DemoController : ControllerBase
     public async Task<IActionResult> UpdateInventory(
         string inventoryId,
         [FromBody] InventoryUpdate update,
-        [FromHeader(Name = "If-Match")] string ifMatch)
+        [FromHeader(Name = "If-Match")] string ifMatch,
+        [FromHeader(Name = "X-Demo-Session")] Guid? demoSession)
     {
-        var sessionId = Guid.NewGuid();
+        var sessionId = demoSession is { } id && id != Guid.Empty ? id : Guid.NewGuid();
         var currentVersion = _stateStore.InventoryVersions.GetOrAdd(inventoryId, 1);
         var expectedETag = $"\"{currentVersion}\"";
 
@@ -1000,9 +1014,11 @@ public class DemoController : ControllerBase
     }
 
     [HttpPost("ratelimit/burst")]
-    public async Task<IActionResult> RateLimitBurst([FromBody] BurstRequest request)
+    public async Task<IActionResult> RateLimitBurst(
+        [FromBody] BurstRequest request,
+        [FromHeader(Name = "X-Demo-Session")] Guid? demoSession)
     {
-        var sessionId = Guid.NewGuid();
+        var sessionId = demoSession is { } id && id != Guid.Empty ? id : Guid.NewGuid();
         var limiter = _stateStore.GetOrCreateLimiter(sessionId, 5, 60);
 
         var results = new List<object>(request.Count);
