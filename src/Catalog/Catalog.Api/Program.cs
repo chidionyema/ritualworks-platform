@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Extensions;
+using Haworks.BuildingBlocks.Middleware;
 using Haworks.BuildingBlocks.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -42,6 +43,11 @@ if (!app.Environment.IsEnvironment("Test"))
 }
 
 app.MapDefaultEndpoints();
+
+// Stamp X-Instance-Id on every response so the caller (BFF, portfolio-site)
+// can show which catalog replica handled the request. Active under
+// WithReplicas(N) in the AppHost; harmless under N=1 (constant id).
+app.UseInstanceIdHeader();
 
 if (app.Environment.IsDevelopment())
 {

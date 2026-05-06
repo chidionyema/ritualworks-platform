@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Extensions;
+using Haworks.BuildingBlocks.Middleware;
 using Haworks.BffWeb.Api;
 using Haworks.BffWeb.Api.Demo;
 using Haworks.BffWeb.Api.Middleware;
@@ -155,6 +156,13 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 var app = builder.Build();
 
 app.MapDefaultEndpoints();
+
+// Stamp X-Instance-Id on every response. BFF stays at one replica today
+// (the portfolio-site frontend hardcodes :5050 and the SignalR sticky-
+// routing story under WithReplicas needs its own validation), but the
+// header lets every demo show "this BFF instance" alongside whichever
+// upstream replica it called.
+app.UseInstanceIdHeader();
 
 if (app.Environment.IsDevelopment())
 {

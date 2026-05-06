@@ -113,7 +113,15 @@ var identity = builder.AddProject<Projects.Identity_Api>("identity-svc")
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
 // --- catalog-svc -----------------------------------------------------------
+// Replicated x2 so the BFF's HttpClient (which load-balances via Aspire's
+// reverse proxy) round-robins requests across both. Each replica stamps
+// X-Instance-Id on every response via UseInstanceIdHeader; the BFF
+// captures it on the demo wire so the portfolio-site receipt strip shows
+// the upstream replica that served the call. This is the visible proof
+// that the platform actually distributes — visitor presses Run a few
+// times and watches the catalog-svc-XXXX suffix rotate.
 var catalog = builder.AddProject<Projects.Catalog_Api>("catalog-svc")
+    .WithReplicas(2)
     .WaitFor(vault)
     .WaitFor(catalogDb)
     .WithReference(catalogDb)
