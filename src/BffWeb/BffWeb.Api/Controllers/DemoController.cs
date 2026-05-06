@@ -505,6 +505,15 @@ public class DemoController : ControllerBase
             sw.Stop();
             var stateAfter = MapState(s_circuit.CircuitState);
 
+            // Capture upstream replica identifier so the portfolio-site
+            // receipt strip can show "catalog-svc-7e3f" alongside the BFF's
+            // own X-Instance-Id. Aspire's WithReplicas(2) on catalog-svc
+            // means this header value rotates between requests as the
+            // proxy load-balances.
+            var upstreamInstance = resp.Headers.TryGetValues("X-Instance-Id", out var ids)
+                ? ids.FirstOrDefault()
+                : null;
+
             if (resp.IsSuccessStatusCode) Interlocked.Increment(ref s_circuitSuccess);
             else Interlocked.Increment(ref s_circuitFailure);
 
@@ -522,6 +531,7 @@ public class DemoController : ControllerBase
                 successCount = s_circuitSuccess,
                 rejectedCount = s_circuitRejected,
                 responseTimeMs = sw.ElapsedMilliseconds,
+                upstreamInstance,
                 message = resp.IsSuccessStatusCode ? "OK" : $"Upstream {(int)resp.StatusCode}",
             });
         }
