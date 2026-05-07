@@ -1,12 +1,15 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
 using Haworks.Content.Application.Interfaces;
 using Haworks.Content.Infrastructure.ExternalServices.Storage;
 using Haworks.Content.Infrastructure.ExternalServices.Validation;
+using Haworks.Content.Infrastructure.Options;
 using Haworks.Content.Infrastructure.Persistence;
 using Haworks.BuildingBlocks.Persistence;
 using Haworks.Content.Domain.Interfaces;
+using Minio;
 
 namespace Haworks.Content.Infrastructure;
 
@@ -40,6 +43,29 @@ public static class DependencyInjection
         services.AddScoped<IContentStorageService, ContentStorageService>();
         services.AddScoped<IFileSignatureValidator, FileSignatureValidator>();
         services.AddScoped<IVirusScanner, ClamAVScanner>();
+
+        // S3-compatible object storage (MinIO SDK works against MinIO,
+        // Fly Tigris, Cloudflare R2, AWS S3 — anything that speaks S3).
+        // Only registered when MinIO:Endpoint is supplied; without it,
+        // Content boots but any upload fails fast at request time with
+        // a clear DI-resolution error.
+        if (!string.IsNullOrWhiteSpace(configuration["MinIO:Endpoint"]))
+        {
+            services.AddOptions<MinioOptions>()
+                .Bind(configuration.GetSection(MinioOptions.SectionName))
+                .ValidateDataAnnotations()
+                .ValidateOnStart();
+
+            services.AddSingleton<IMinioClient>(sp =>
+            {
+                var opts = sp.GetRequiredService<IOptions<MinioOptions>>().Value;
+                return (IMinioClient)new MinioClient()
+                    .WithEndpoint(opts.Endpoint)
+                    .WithCredentials(opts.AccessKey, opts.SecretKey)
+                    .WithSSL(opts.Secure)
+                    .Build();
+            });
+        }
 
         return services;
     }

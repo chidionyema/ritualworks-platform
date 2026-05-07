@@ -71,69 +71,88 @@ public static class DependencyInjection
         // the external-auth controller. [Authorize] without an explicit
         // scheme name therefore expects a Bearer token and returns 401 (not
         // a 302 cookie redirect) for unauthenticated requests.
-        services.AddAuthentication(options =>
+        var authBuilder = services.AddAuthentication(options =>
         {
             options.DefaultAuthenticateScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
             options.DefaultChallengeScheme    = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
-        })
-            .AddJwtBearer(options =>
-            {
-                // TokenValidationParameters are filled in via JwtBearer
-                // PostConfigureOptions registered at the bottom of this
-                // method — the IssuerSigningKey comes from the Vault-backed
-                // signing-key provider which is initialized in Program.cs
-                // AFTER Build() but BEFORE the first request.
-                options.RequireHttpsMetadata = false;
-                options.SaveToken = true;
+        });
 
-                // After signature/issuer/audience validation, ALSO check our
-                // JTI revocation list — signature-only validation cannot catch
-                // a JWT that the user explicitly logged out. Per CLAUDE.md
-                // security mandate: "ALL authentication handlers MUST verify
-                // the token's jti against ITokenRevocationService."
-                options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
-                {
-                    OnTokenValidated = async context =>
-                    {
-                        var jti = context.Principal?.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
-                        if (string.IsNullOrEmpty(jti)) return;
-                        var revocation = context.HttpContext.RequestServices
-                            .GetRequiredService<ITokenRevocationService>();
-                        if (await revocation.IsTokenRevokedAsync(jti, context.HttpContext.RequestAborted))
-                        {
-                            context.Fail("Token has been revoked.");
-                        }
-                    },
-                };
-            })
-            .AddGoogle(options =>
+        authBuilder.AddJwtBearer(options =>
+        {
+            // TokenValidationParameters are filled in via JwtBearer
+            // PostConfigureOptions registered at the bottom of this
+            // method — the IssuerSigningKey comes from IJwtSigningKey
+            // Provider which is initialized in Program.cs AFTER Build()
+            // but BEFORE the first request.
+            options.RequireHttpsMetadata = false;
+            options.SaveToken = true;
+
+            // After signature/issuer/audience validation, ALSO check our
+            // JTI revocation list — signature-only validation cannot catch
+            // a JWT that the user explicitly logged out. Per CLAUDE.md
+            // security mandate: "ALL authentication handlers MUST verify
+            // the token's jti against ITokenRevocationService."
+            options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
             {
-                var section = configuration.GetSection("Authentication:Google");
-                options.ClientId     = section["ClientId"]     ?? throw new InvalidOperationException("Google ClientId missing");
-                options.ClientSecret = section["ClientSecret"] ?? throw new InvalidOperationException("Google ClientSecret missing");
+                OnTokenValidated = async context =>
+                {
+                    var jti = context.Principal?.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
+                    if (string.IsNullOrEmpty(jti)) return;
+                    var revocation = context.HttpContext.RequestServices
+                        .GetRequiredService<ITokenRevocationService>();
+                    if (await revocation.IsTokenRevokedAsync(jti, context.HttpContext.RequestAborted))
+                    {
+                        context.Fail("Token has been revoked.");
+                    }
+                },
+            };
+        });
+
+        // External providers are optional — only register the ones the
+        // operator has supplied credentials for. Lets Identity boot in
+        // environments (e.g. Fly without Vault) where OAuth isn't wired.
+        var googleSection = configuration.GetSection("Authentication:Google");
+        if (!string.IsNullOrWhiteSpace(googleSection["ClientId"]))
+        {
+            authBuilder.AddGoogle(options =>
+            {
+                options.ClientId     = googleSection["ClientId"]!;
+                options.ClientSecret = googleSection["ClientSecret"]
+                    ?? throw new InvalidOperationException("Authentication:Google:ClientSecret missing");
                 options.CallbackPath = new Microsoft.AspNetCore.Http.PathString("/api/external-authentication/google-callback");
                 options.SaveTokens   = true;
                 options.ClaimActions.MapJsonKey(System.Security.Claims.ClaimTypes.NameIdentifier, "id");
                 options.ClaimActions.MapJsonKey(System.Security.Claims.ClaimTypes.Name,           "name");
                 options.ClaimActions.MapJsonKey(System.Security.Claims.ClaimTypes.Email,          "email");
                 options.ClaimActions.MapJsonKey("picture", "picture");
-            })
-            .AddMicrosoftAccount(options =>
+            });
+        }
+
+        var microsoftSection = configuration.GetSection("Authentication:Microsoft");
+        if (!string.IsNullOrWhiteSpace(microsoftSection["ClientId"]))
+        {
+            authBuilder.AddMicrosoftAccount(options =>
             {
-                var section = configuration.GetSection("Authentication:Microsoft");
-                options.ClientId     = section["ClientId"]     ?? throw new InvalidOperationException("Microsoft ClientId missing");
-                options.ClientSecret = section["ClientSecret"] ?? throw new InvalidOperationException("Microsoft ClientSecret missing");
+                options.ClientId     = microsoftSection["ClientId"]!;
+                options.ClientSecret = microsoftSection["ClientSecret"]
+                    ?? throw new InvalidOperationException("Authentication:Microsoft:ClientSecret missing");
                 options.CallbackPath = new Microsoft.AspNetCore.Http.PathString("/api/external-authentication/microsoft-callback");
                 options.SaveTokens   = true;
-            })
-            .AddFacebook(options =>
+            });
+        }
+
+        var facebookSection = configuration.GetSection("Authentication:Facebook");
+        if (!string.IsNullOrWhiteSpace(facebookSection["AppId"]))
+        {
+            authBuilder.AddFacebook(options =>
             {
-                var section = configuration.GetSection("Authentication:Facebook");
-                options.AppId        = section["AppId"]        ?? throw new InvalidOperationException("Facebook AppId missing");
-                options.AppSecret    = section["AppSecret"]    ?? throw new InvalidOperationException("Facebook AppSecret missing");
+                options.AppId     = facebookSection["AppId"]!;
+                options.AppSecret = facebookSection["AppSecret"]
+                    ?? throw new InvalidOperationException("Authentication:Facebook:AppSecret missing");
                 options.CallbackPath = new Microsoft.AspNetCore.Http.PathString("/api/external-authentication/facebook-callback");
                 options.SaveTokens   = true;
             });
+        }
 
         // Domain repositories (EF-backed implementations from IdentityRepositories.cs).
         services.AddScoped<IUserRepository, IdentityUserRepository>();
@@ -144,23 +163,43 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 
-        // RSA signing keypair for JWT (RS256). Provider reads/writes
-        // secret/identity/jwt-signing in Vault. Singleton because the
-        // keypair lives for the process lifetime; Program.cs must call
-        // VaultJwtSigningKeyProvider.InitializeAsync once at startup
-        // before request handling.
+        // RSA signing keypair for JWT (RS256). Two paths:
+        //  - Vault:Enabled=true  → VaultJwtSigningKeyProvider reads/writes
+        //                          secret/identity/jwt-signing in Vault.
+        //                          Program.cs calls InitializeAsync at startup.
+        //  - Vault:Enabled=false → ConfigJwtSigningKeyProvider reads
+        //                          Jwt:SigningKeyPem (raw or base64 PEM) from
+        //                          configuration. Used on Fly where there is
+        //                          no Vault container.
+        // Singleton — keypair lives for the process lifetime.
         services.AddSingleton<IVaultAppRoleAuthenticator, VaultAppRoleAuthenticator>();
-        services.AddSingleton<IJwtSigningKeyProvider>(sp =>
+        if (configuration.GetValue("Vault:Enabled", false))
         {
-            var cfg          = sp.GetRequiredService<IConfiguration>();
-            var address      = cfg["Vault:Address"]      ?? throw new InvalidOperationException("Vault:Address missing");
-            var roleIdPath   = cfg["Vault:RoleIdPath"]   ?? throw new InvalidOperationException("Vault:RoleIdPath missing");
-            var secretIdPath = cfg["Vault:SecretIdPath"] ?? throw new InvalidOperationException("Vault:SecretIdPath missing");
-            var roleId       = File.ReadAllText(roleIdPath).Trim();
-            var secretId     = File.ReadAllText(secretIdPath).Trim();
-            var auth         = sp.GetRequiredService<IVaultAppRoleAuthenticator>();
-            return new VaultJwtSigningKeyProvider(address, "identity", auth, roleId, secretId);
-        });
+            services.AddSingleton<IJwtSigningKeyProvider>(sp =>
+            {
+                var cfg          = sp.GetRequiredService<IConfiguration>();
+                var address      = cfg["Vault:Address"]      ?? throw new InvalidOperationException("Vault:Address missing");
+                var roleIdPath   = cfg["Vault:RoleIdPath"]   ?? throw new InvalidOperationException("Vault:RoleIdPath missing");
+                var secretIdPath = cfg["Vault:SecretIdPath"] ?? throw new InvalidOperationException("Vault:SecretIdPath missing");
+                var roleId       = File.ReadAllText(roleIdPath).Trim();
+                var secretId     = File.ReadAllText(secretIdPath).Trim();
+                var auth         = sp.GetRequiredService<IVaultAppRoleAuthenticator>();
+                return new VaultJwtSigningKeyProvider(address, "identity", auth, roleId, secretId);
+            });
+        }
+        else
+        {
+            services.AddSingleton<IJwtSigningKeyProvider>(sp =>
+            {
+                var cfg = sp.GetRequiredService<IConfiguration>();
+                var pem = cfg["Jwt:SigningKeyPem"]
+                    ?? throw new InvalidOperationException(
+                        "Jwt:SigningKeyPem is required when Vault:Enabled=false. " +
+                        "Provide an RSA PEM private key (raw or base64-encoded).");
+                var keyId = cfg["Jwt:KeyId"] ?? "config-1";
+                return new ConfigJwtSigningKeyProvider(pem, keyId);
+            });
+        }
 
         // Late-bind JwtBearer.TokenValidationParameters from IJwtSigningKey
         // Provider on first JwtBearerOptions access (PostConfigure runs lazily).

@@ -45,29 +45,33 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApplication(builder.Configuration);
 
 // Vault probe HttpClient — used by AdminController.GetVaultStatus to
-// make a real /v1/sys/health round-trip every time it's called. Vault
-// IVaultService caches its token info locally and reports healthy even
-// when the container is paused; this client bypasses that path.
-builder.Services.AddHttpClient<Haworks.Identity.Api.Controllers.VaultProbeClient>((sp, c) =>
+// make a real /v1/sys/health round-trip every time it's called. Only
+// registered when Vault is enabled, since both DI factories below
+// require Vault:Address. AdminController callers will get a 404/500
+// from missing DI when Vault is off, which matches the runtime reality.
+if (builder.Configuration.GetValue("Vault:Enabled", false))
 {
-    var address = sp.GetRequiredService<IConfiguration>()["Vault:Address"]
-        ?? throw new InvalidOperationException("Vault:Address is required for the vault probe client");
-    c.BaseAddress = new Uri(address);
-    c.Timeout = TimeSpan.FromSeconds(2);
-});
-builder.Services.AddSingleton(sp =>
-{
-    // Re-resolve the typed-client wrapper so we get the BaseAddress
-    // alongside the HttpClient. AddHttpClient<T> registers T as
-    // transient with a typed HttpClient; the wrapper closes over the
-    // address for the controller's response payload.
-    var factory = sp.GetRequiredService<IHttpClientFactory>();
-    var address = sp.GetRequiredService<IConfiguration>()["Vault:Address"]
-        ?? throw new InvalidOperationException("Vault:Address is required");
-    return new Haworks.Identity.Api.Controllers.VaultProbeClient(
-        factory.CreateClient(nameof(Haworks.Identity.Api.Controllers.VaultProbeClient)),
-        new Uri(address));
-});
+    builder.Services.AddHttpClient<Haworks.Identity.Api.Controllers.VaultProbeClient>((sp, c) =>
+    {
+        var address = sp.GetRequiredService<IConfiguration>()["Vault:Address"]
+            ?? throw new InvalidOperationException("Vault:Address is required for the vault probe client");
+        c.BaseAddress = new Uri(address);
+        c.Timeout = TimeSpan.FromSeconds(2);
+    });
+    builder.Services.AddSingleton(sp =>
+    {
+        // Re-resolve the typed-client wrapper so we get the BaseAddress
+        // alongside the HttpClient. AddHttpClient<T> registers T as
+        // transient with a typed HttpClient; the wrapper closes over the
+        // address for the controller's response payload.
+        var factory = sp.GetRequiredService<IHttpClientFactory>();
+        var address = sp.GetRequiredService<IConfiguration>()["Vault:Address"]
+            ?? throw new InvalidOperationException("Vault:Address is required");
+        return new Haworks.Identity.Api.Controllers.VaultProbeClient(
+            factory.CreateClient(nameof(Haworks.Identity.Api.Controllers.VaultProbeClient)),
+            new Uri(address));
+    });
+}
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
