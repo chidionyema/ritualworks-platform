@@ -38,6 +38,23 @@ builder.Services.AddSingleton<DemoStateStore>();
 builder.Services.AddSingleton<IDemoActivityCounters, DemoActivityCounters>();
 builder.Services.AddScoped<IDependencyHealthProbe, DependencyHealthProbe>();
 
+// Live console broadcaster — Singleton ring buffer + SignalR fan-out for the
+// visitor-facing activity dock. See LiveConsoleBroadcaster + LiveConsoleHub.
+builder.Services.AddSingleton<LiveConsoleBroadcaster>();
+
+// HttpContext access for the upstream-capture handler. Required so the
+// per-call DelegatingHandler can append its hop to the live HTTP request's
+// items dictionary (no AsyncLocal indirection needed).
+builder.Services.AddHttpContextAccessor();
+
+// Chaos manager — only in dev. Pauses .NET service processes (kill -STOP)
+// or docker containers (docker pause) so a visitor can take a node down
+// from the topology map and watch other demos route around it.
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddSingleton<ChaosManager>();
+}
+
 // CORS for the portfolio site dev server (http://localhost:4321 by default).
 // AllowCredentials is required for SignalR's negotiate handshake. Header
 // + method allowlists match what the demos actually send.
@@ -66,10 +83,26 @@ foreach (var name in new[]
     BackendClients.Payments, BackendClients.Checkout,
 })
 {
+    var serviceName = name; // capture for handlers
     builder.Services.AddHttpClient(name, client =>
     {
         client.BaseAddress = new Uri($"https+http://{name}");
-    });
+    })
+    // Chaos fault injection runs FIRST: while "paused" via the topology
+    // map, the request short-circuits to a synthetic 503 before any
+    // network call. Order matters — must compose before the instance-id
+    // capture handler so an injected response doesn't pollute the
+    // upstream-hop list.
+    .AddHttpMessageHandler(sp => new ChaosFaultInjectionHandler(
+        sp.GetService<ChaosManager>(),
+        serviceName))
+    // Record the upstream replica's X-Instance-Id into the live-console
+    // hop list. Service name is closed over so the handler knows which
+    // backend the call is targeting (the resolved URI host loses that
+    // friendly name post Aspire service-discovery).
+    .AddHttpMessageHandler(sp => new UpstreamInstanceCaptureHandler(
+        sp.GetRequiredService<IHttpContextAccessor>(),
+        serviceName));
 }
 
 // T2.3: dedicated typed client for the circuit-breaker demo. Same target
@@ -89,6 +122,12 @@ builder.Services.AddHttpClient(BackendClients.CatalogDemo, client =>
     client.BaseAddress = new Uri($"https+http://{BackendClients.Catalog}");
     client.Timeout = TimeSpan.FromSeconds(3);
 })
+.AddHttpMessageHandler(sp => new ChaosFaultInjectionHandler(
+    sp.GetService<ChaosManager>(),
+    BackendClients.Catalog))
+.AddHttpMessageHandler(sp => new UpstreamInstanceCaptureHandler(
+    sp.GetRequiredService<IHttpContextAccessor>(),
+    BackendClients.Catalog))
 .AddStandardResilienceHandler(o =>
 {
     // Outer demo Polly does retry/breaker; this handler must be a no-op for
@@ -185,11 +224,17 @@ app.UseCors("portfolio-site");
 // the IngressEvents24h counter. Path-scoped to /api/demo/* internally so
 // non-demo routes have zero overhead.
 app.UseDemoActivityCounters();
+// Live console: emit a structured event per /api/* request so the
+// portfolio's bottom-right dock can render real activity. Must run after
+// CORS + activity counters so the dock only sees requests the browser
+// was allowed to send and we don't double-instrument latency.
+app.UseLiveConsole();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<CheckoutHub>("/hubs/checkout");
 app.MapHub<DemoHub>("/hubs/demo");
+app.MapHub<LiveConsoleHub>("/hubs/console");
 
 app.Run();
 
