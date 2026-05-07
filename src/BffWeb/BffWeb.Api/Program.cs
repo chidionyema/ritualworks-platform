@@ -56,11 +56,24 @@ if (builder.Environment.IsDevelopment())
     builder.Services.AddSingleton<ChaosManager>();
 }
 
-// CORS for the portfolio site dev server (http://localhost:4321 by default).
+// CORS for the portfolio site. Origins read from Cors:AllowedOrigins
+// (Fly secret on prod, appsettings on dev). Defaults cover the Astro dev
+// server + the canonical Cloudflare Pages URL so a fresh prod deploy
+// works without an extra config step. Add a custom domain by setting
+// Cors__AllowedOrigins__N=https://your-domain on the BFF Fly app.
+//
 // AllowCredentials is required for SignalR's negotiate handshake. Header
 // + method allowlists match what the demos actually send.
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? new[]
+    {
+        "http://localhost:4321",
+        "https://ritualworks.pages.dev",
+        "https://portfolio-showcase.pages.dev",
+    };
+
 builder.Services.AddCors(o => o.AddPolicy("portfolio-site", p => p
-    .WithOrigins("http://localhost:4321")
+    .WithOrigins(corsOrigins)
     .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
     .WithHeaders(
         "Content-Type", "Authorization", "X-Correlation-ID",

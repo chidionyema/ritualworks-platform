@@ -132,6 +132,17 @@ bff_extra=(
   "Services__payments-svc__http__0=http://ritualworks-payments.flycast:8080"
   "Services__checkout-svc__http__0=http://ritualworks-checkout.flycast:8080"
 )
+# CORS origins for the Cloudflare-Pages-hosted UI. The BFF has sensible
+# defaults baked in (localhost dev + canonical pages.dev URLs); only set
+# this when a custom domain is in play.
+if [[ -n "${PORTFOLIO_SITE_URL:-}" ]]; then
+  bff_extra+=(
+    "Cors__AllowedOrigins__0=http://localhost:4321"
+    "Cors__AllowedOrigins__1=https://ritualworks.pages.dev"
+    "Cors__AllowedOrigins__2=https://portfolio-showcase.pages.dev"
+    "Cors__AllowedOrigins__3=$PORTFOLIO_SITE_URL"
+  )
+fi
 set_secrets "$PUBLIC_APP" "${common[@]}" "${bff_extra[@]}"
 
 # Identity-specific: JWT key + optional issuer/audience + optional OAuth.
