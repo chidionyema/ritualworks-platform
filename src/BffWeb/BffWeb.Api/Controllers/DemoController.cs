@@ -698,112 +698,144 @@ public class DemoController : ControllerBase
     // Idempotency — REAL in-process via DemoStateStore
     // ========================================================================
 
+    // Idempotency demo: proxies to orders-svc /demo/idempotency/* which
+    // exposes the SAME mechanism the production Orders aggregate uses —
+    // a Postgres UNIQUE constraint on the key column with INSERT...ON
+    // CONFLICT for atomic dedup. No in-process state, no fake. Pause
+    // postgres via the topology chaos and these endpoints return real
+    // 503s from the orders-svc -> postgres failure cascade.
+
     [HttpPost("idempotency/process")]
     public async Task<IActionResult> ProcessIdempotent(
         [FromHeader(Name = "X-Idempotency-Key")] string key,
         [FromHeader(Name = "X-Idempotency-Ttl-Seconds")] int? ttlSeconds,
         [FromHeader(Name = "X-Demo-Session")] Guid? demoSession,
-        [FromBody] object payload)
+        [FromBody] object payload,
+        CancellationToken ct = default)
     {
         var sessionId = demoSession is { } id && id != Guid.Empty ? id : Guid.NewGuid();
         if (string.IsNullOrEmpty(key)) return BadRequest("Missing idempotency key");
 
-        var now = DateTime.UtcNow;
-        var ttl = TimeSpan.FromSeconds(Math.Clamp(ttlSeconds ?? 30, 5, 600));
+        var ttl = Math.Clamp(ttlSeconds ?? 30, 5, 600);
 
-        // Atomic claim. AddOrUpdate's update factory replaces an expired entry;
-        // if the existing entry is still valid the loser receives it. Reference
-        // equality on the returned entry tells us whether we won.
-        var newEntry = new IdempotencyEntry(
-            new IdempotencyResult(Guid.NewGuid(), "Created", now), now, now.Add(ttl));
-
-        var settled = _stateStore.IdempotencyKeys.AddOrUpdate(
-            key,
-            newEntry,
-            (_, prev) => prev.IsExpired(now) ? newEntry : prev);
-
-        var isWinner = ReferenceEquals(settled, newEntry);
-
-        await _notifier.NotifyConcurrencyEventAsync(new ConcurrencyEvent(
-            sessionId, "idempotency_check", key, isWinner ? "new" : "duplicate", 0, now));
-
-        // Wire shape matches portfolio-site IdempotencyResponse:
-        //   { sessionId, idempotencyKey, isDuplicate, result: { orderId,
-        //     status }, keyInfo: { createdAt, expiresAt, ttlSeconds } }
-        return Ok(new
+        var client = _httpClientFactory.CreateClient(BackendClients.Orders);
+        try
         {
-            sessionId,
-            idempotencyKey = key,
-            isDuplicate = !isWinner,
-            isWinner,
-            result = new
+            using var req = new HttpRequestMessage(
+                HttpMethod.Post, $"/demo/idempotency/claim?ttlSeconds={ttl}");
+            req.Headers.TryAddWithoutValidation("X-Idempotency-Key", key);
+            using var resp = await client.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode)
             {
-                orderId = settled.Result.OrderId,
-                status = settled.Result.Status,
-            },
-            keyInfo = new
+                return StatusCode((int)resp.StatusCode, new
+                {
+                    error = "orders idempotency claim failed",
+                    statusCode = (int)resp.StatusCode,
+                });
+            }
+            var body = await resp.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            var isWinner = body.GetProperty("isWinner").GetBoolean();
+
+            await _notifier.NotifyConcurrencyEventAsync(new ConcurrencyEvent(
+                sessionId, "idempotency_check", key,
+                isWinner ? "new" : "duplicate", 0, DateTime.UtcNow), ct);
+
+            // Re-shape orders' response into the wire format the portfolio's
+            // IdempotencyDemo expects (orderId in result, sessionId at top).
+            var claimId = body.GetProperty("claimId").GetGuid();
+            var keyInfo = body.GetProperty("keyInfo");
+            return Ok(new
             {
-                createdAt = settled.CreatedAt,
-                expiresAt = settled.ExpiresAt,
-                ttlSeconds = (int)ttl.TotalSeconds,
-            },
-            cacheAgeSeconds = (int)(now - settled.CreatedAt).TotalSeconds,
-        });
+                sessionId,
+                idempotencyKey = key,
+                isDuplicate = !isWinner,
+                isWinner,
+                result = new
+                {
+                    orderId = claimId,
+                    status = isWinner ? "Created" : "Existing",
+                },
+                keyInfo = new
+                {
+                    createdAt = keyInfo.GetProperty("createdAt").GetDateTime(),
+                    expiresAt = keyInfo.GetProperty("expiresAt").GetDateTime(),
+                    ttlSeconds = keyInfo.GetProperty("ttlSeconds").GetInt32(),
+                },
+                cacheAgeSeconds = body.GetProperty("cacheAgeSeconds").GetInt32(),
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Idempotency: orders-svc unreachable");
+            return StatusCode(503, new { error = "orders unreachable" });
+        }
     }
 
     [HttpGet("idempotency/key/{key}")]
-    public IActionResult GetIdempotencyStatus(string key)
+    public async Task<IActionResult> GetIdempotencyStatus(string key, CancellationToken ct)
     {
-        if (_stateStore.IdempotencyKeys.TryGetValue(key, out var entry))
+        // GET status hits the same upstream mechanism by attempting a no-op
+        // claim with TTL=5 — orders' ON CONFLICT returns the existing row
+        // with isWinner=false if the key already exists. Cheap and honest;
+        // no separate "lookup" endpoint needed.
+        var client = _httpClientFactory.CreateClient(BackendClients.Orders);
+        try
         {
-            var now = DateTime.UtcNow;
+            using var req = new HttpRequestMessage(
+                HttpMethod.Post, "/demo/idempotency/claim?ttlSeconds=5");
+            req.Headers.TryAddWithoutValidation("X-Idempotency-Key", key);
+            using var resp = await client.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                return StatusCode((int)resp.StatusCode, new { key, exists = false });
+            }
+            var body = await resp.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            var isWinner = body.GetProperty("isWinner").GetBoolean();
             return Ok(new
             {
                 key,
-                exists = !entry.IsExpired(now),
-                expiresInSeconds = (int)Math.Max(0, (entry.ExpiresAt - now).TotalSeconds),
-                cacheAgeSeconds = (int)(now - entry.CreatedAt).TotalSeconds,
-                result = entry.Result,
+                exists = !isWinner,
+                cacheAgeSeconds = body.GetProperty("cacheAgeSeconds").GetInt32(),
+                result = new
+                {
+                    OrderId = body.GetProperty("claimId").GetGuid(),
+                    Status = "Created",
+                    CreatedAt = body.GetProperty("keyInfo").GetProperty("createdAt").GetDateTime(),
+                },
             });
         }
-        return Ok(new { key, exists = false });
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Idempotency status: orders-svc unreachable");
+            return StatusCode(503, new { key, exists = false, error = "orders unreachable" });
+        }
     }
 
     [HttpPost("idempotency/race")]
-    public IActionResult ProcessIdempotencyRace([FromBody] IdempotencyRaceRequest request)
+    public async Task<IActionResult> ProcessIdempotencyRace(
+        [FromBody] IdempotencyRaceRequest request,
+        CancellationToken ct)
     {
         if (string.IsNullOrEmpty(request.Key)) return BadRequest("Missing key");
 
-        var count = Math.Clamp(request.Count, 2, 10);
-        var ttl = TimeSpan.FromSeconds(Math.Clamp(request.TtlSeconds ?? 30, 5, 600));
-
-        _stateStore.IdempotencyKeys.TryRemove(request.Key, out _);
-
-        var outcomes = new ConcurrentBag<RaceOutcome>();
-        Parallel.For(0, count, i =>
+        // Race endpoint lives on orders too — fires N parallel claims into
+        // a real Postgres UNIQUE constraint and reports who won.
+        var client = _httpClientFactory.CreateClient(BackendClients.Orders);
+        try
         {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            var now = DateTime.UtcNow;
-            var newEntry = new IdempotencyEntry(
-                new IdempotencyResult(Guid.NewGuid(), "Created", now), now, now.Add(ttl));
-
-            var settled = _stateStore.IdempotencyKeys.AddOrUpdate(
-                request.Key,
-                newEntry,
-                (_, prev) => prev.IsExpired(now) ? newEntry : prev);
-
-            sw.Stop();
-            outcomes.Add(new RaceOutcome(
-                i, ReferenceEquals(settled, newEntry), settled.Result.OrderId, sw.ElapsedMilliseconds));
-        });
-
-        return Ok(new
+            using var resp = await client.PostAsJsonAsync("/demo/idempotency/race", request, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                return StatusCode((int)resp.StatusCode, new { error = "orders race failed" });
+            }
+            var json = await resp.Content.ReadAsStringAsync(ct);
+            return Content(json, "application/json");
+        }
+        catch (Exception ex)
         {
-            key = request.Key,
-            count,
-            ttlSeconds = (int)ttl.TotalSeconds,
-            outcomes = outcomes.OrderBy(o => o.RequestIndex).ToArray(),
-        });
+            _logger.LogWarning(ex, "Idempotency race: orders-svc unreachable");
+            return StatusCode(503, new { error = "orders unreachable" });
+        }
     }
 
     // ========================================================================
