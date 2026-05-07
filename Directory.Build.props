@@ -33,6 +33,7 @@
       CA1805;  <!-- Explicit init to default — clarity > pedantry -->
       CA1812;  <!-- Unused internal class — false positive for DI-registered services -->
       CA1848;  <!-- LoggerMessage delegates — micro-optimization not worth the verbosity -->
+      CA1873;  <!-- Cache and reuse log argument — same family as CA1848, same trade-off -->
       CA1859;  <!-- Concrete return type — over-rigid in extension methods -->
       CA1062;  <!-- Null param check — nullable reference types handle this -->
       CA1513;  <!-- ObjectDisposedException.ThrowIf — fine but not breaking -->
