@@ -150,6 +150,29 @@ public class SystemController : ControllerBase
     // expose this surface again with actual cross-service span data.
 
     /// <summary>
+    /// Build identity for the BFF process — instance id, git SHA, and
+    /// process start time. Used by the portfolio's hero fingerprint line
+    /// so visitors can read "Backend bff-yzjnq · sha 996f12a · uptime 2h"
+    /// above the fold without expanding the live console dock. Same data
+    /// as the dock's <c>OnConsoleHello</c> message, exposed over REST so
+    /// the hero doesn't need a SignalR connection just to render its
+    /// header.
+    /// </summary>
+    [HttpGet("system/identity")]
+    public IActionResult GetSystemIdentity(
+        [FromServices] Haworks.BffWeb.Api.Demo.LiveConsoleBroadcaster broadcaster)
+    {
+        var hello = broadcaster.Hello;
+        return Ok(new
+        {
+            service = hello.Service,
+            instanceId = hello.InstanceId,
+            gitSha = hello.GitSha,
+            processStartedAt = hello.ProcessStartedAt,
+        });
+    }
+
+    /// <summary>
     /// Shared shape for /health/snapshot + /health/stream. Field names match
     /// portfolio-site's <c>HealthSnapshot</c> + <c>ServiceHealth</c> TypeScript
     /// types (src/lib/api/demo-client.ts). <c>message</c> not <c>note</c> —
