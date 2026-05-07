@@ -1054,51 +1054,92 @@ public class DemoController : ControllerBase
     public sealed record UpdateProductRequest(string? Name, decimal? Price, Guid? SessionId);
 
     // ========================================================================
-    // Optimistic Concurrency — REAL in-process (DemoStateStore.InventoryVersions)
+    // Optimistic Concurrency — proxies to catalog-svc /demo/inventory/*
+    // which uses Postgres' xmin column as the EF concurrency token (the
+    // SAME mechanism the production ReserveStockCommand depends on).
+    // Pause postgres / catalog via the topology chaos panel and these
+    // endpoints surface as real 503/504s instead of phantom in-memory
+    // counters incrementing forever.
     // ========================================================================
 
-    [HttpGet("inventory/{inventoryId}")]
-    public IActionResult GetInventory(string inventoryId)
+    [HttpGet("inventory/{inventoryId:guid}")]
+    public async Task<IActionResult> GetInventory(Guid inventoryId, CancellationToken ct)
     {
-        var version = _stateStore.InventoryVersions.GetOrAdd(inventoryId, 1);
-        return Ok(new
+        var client = _httpClientFactory.CreateClient(BackendClients.Catalog);
+        try
         {
-            inventory = new { id = inventoryId, name = "Demo Stock", quantity = 100, version },
-        });
+            using var resp = await client.GetAsync($"/demo/inventory/{inventoryId}", ct);
+            if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return NotFound(new { inventoryId });
+            }
+            resp.EnsureSuccessStatusCode();
+            var json = await resp.Content.ReadAsStringAsync(ct);
+            return Content(json, "application/json");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Inventory get: catalog-svc unreachable");
+            return StatusCode(503, new { error = "catalog unreachable", inventoryId });
+        }
     }
 
-    [HttpPut("inventory/{inventoryId}")]
+    [HttpPut("inventory/{inventoryId:guid}")]
     public async Task<IActionResult> UpdateInventory(
-        string inventoryId,
+        Guid inventoryId,
         [FromBody] InventoryUpdate update,
-        [FromHeader(Name = "If-Match")] string ifMatch,
-        [FromHeader(Name = "X-Demo-Session")] Guid? demoSession)
+        [FromHeader(Name = "If-Match")] string? ifMatch,
+        [FromHeader(Name = "X-Demo-Session")] Guid? demoSession,
+        CancellationToken ct = default)
     {
         var sessionId = demoSession is { } id && id != Guid.Empty ? id : Guid.NewGuid();
-        var currentVersion = _stateStore.InventoryVersions.GetOrAdd(inventoryId, 1);
-        var expectedETag = $"\"{currentVersion}\"";
-
-        if (ifMatch != expectedETag)
+        var client = _httpClientFactory.CreateClient(BackendClients.Catalog);
+        try
         {
-            await _notifier.NotifyConcurrencyEventAsync(new ConcurrencyEvent(
-                sessionId, "update_inventory", inventoryId, "conflict", currentVersion, DateTime.UtcNow));
-            return Conflict(new
+            // Catalog's /demo/inventory/{id} expects raw xmin in If-Match
+            // (no ETag quoting). Strip surrounding quotes the frontend may
+            // send via the standard ETag wire shape.
+            var normalisedIfMatch = ifMatch?.Trim('"');
+            using var req = new HttpRequestMessage(HttpMethod.Put, $"/demo/inventory/{inventoryId}")
             {
-                message = "Optimistic concurrency failure: Version mismatch",
-                currentVersion,
-            });
+                Content = JsonContent.Create(update),
+            };
+            if (!string.IsNullOrEmpty(normalisedIfMatch))
+            {
+                req.Headers.TryAddWithoutValidation("If-Match", normalisedIfMatch);
+            }
+
+            using var resp = await client.SendAsync(req, ct);
+            var body = await resp.Content.ReadAsStringAsync(ct);
+
+            if (resp.StatusCode == System.Net.HttpStatusCode.PreconditionFailed
+                || resp.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                await _notifier.NotifyConcurrencyEventAsync(new ConcurrencyEvent(
+                    sessionId, "update_inventory", inventoryId.ToString(),
+                    "conflict", 0, DateTime.UtcNow), ct);
+                // Pass through catalog's response body — it includes the
+                // current version + quantity so the client can retry.
+                return StatusCode((int)resp.StatusCode, System.Text.Json.JsonSerializer.Deserialize<JsonElement>(body));
+            }
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                return StatusCode((int)resp.StatusCode,
+                    new { error = "catalog inventory update failed" });
+            }
+
+            await _notifier.NotifyConcurrencyEventAsync(new ConcurrencyEvent(
+                sessionId, "update_inventory", inventoryId.ToString(),
+                "success", 0, DateTime.UtcNow), ct);
+
+            return Content(body, "application/json");
         }
-
-        var newVersion = currentVersion + 1;
-        _stateStore.InventoryVersions[inventoryId] = newVersion;
-
-        await _notifier.NotifyConcurrencyEventAsync(new ConcurrencyEvent(
-            sessionId, "update_inventory", inventoryId, "success", newVersion, DateTime.UtcNow));
-
-        return Ok(new
+        catch (Exception ex)
         {
-            inventory = new { id = inventoryId, name = "Demo Stock", quantity = update.Quantity, version = newVersion },
-        });
+            _logger.LogWarning(ex, "Inventory update: catalog-svc unreachable");
+            return StatusCode(503, new { error = "catalog unreachable", inventoryId });
+        }
     }
 
     // ========================================================================
