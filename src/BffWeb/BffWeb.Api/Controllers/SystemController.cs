@@ -25,18 +25,15 @@ namespace Haworks.BffWeb.Api.Controllers;
 [AllowAnonymous]
 public class SystemController : ControllerBase
 {
-    private readonly IDemoTraceStore _traceStore;
     private readonly IDemoActivityCounters _activityCounters;
     private readonly IDependencyHealthProbe _healthProbe;
     private readonly ILogger<SystemController> _logger;
 
     public SystemController(
-        IDemoTraceStore traceStore,
         IDemoActivityCounters activityCounters,
         IDependencyHealthProbe healthProbe,
         ILogger<SystemController> logger)
     {
-        _traceStore = traceStore;
         _activityCounters = activityCounters;
         _healthProbe = healthProbe;
         _logger = logger;
@@ -146,30 +143,11 @@ public class SystemController : ControllerBase
         }
     }
 
-    [HttpGet("traces/{traceId}")]
-    public IActionResult GetTrace(string traceId)
-    {
-        var trace = _traceStore.Get(traceId);
-        if (trace is null) return NotFound();
-
-        return Ok(new
-        {
-            traceId = trace.TraceId,
-            rootSpanId = trace.RootSpanId,
-            durationMs = trace.DurationMs,
-            spans = trace.Spans.Select(s => new
-            {
-                spanId = s.SpanId,
-                parentSpanId = s.ParentSpanId,
-                service = s.Service,
-                operation = s.Operation,
-                startMs = s.StartMs,
-                durationMs = s.DurationMs,
-                status = s.Status,
-                attributes = s.Attributes,
-            }),
-        });
-    }
+    // /api/traces/{traceId} removed alongside the hardcoded tracing demo.
+    // The IDemoTraceStore was only ever populated by /api/demo/tracing/start,
+    // which generated a synthetic 7-span tree — surfacing it here as a
+    // generic "trace lookup" was misleading. Real OTel via Tempo will
+    // expose this surface again with actual cross-service span data.
 
     /// <summary>
     /// Shared shape for /health/snapshot + /health/stream. Field names match

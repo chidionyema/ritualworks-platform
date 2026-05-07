@@ -27,7 +27,8 @@ builder.Services.AddSignalR();
 // State store + trace store are also Singleton (in-process, lifetime of
 // the AppHost). See src/BffWeb/BffWeb.Api/Demo/ for impls.
 builder.Services.AddSingleton<IDemoHubNotifier, SignalRDemoHubNotifier>();
-builder.Services.AddSingleton<IDemoTraceStore, DemoTraceStore>();
+// IDemoTraceStore + DemoTraceStore registration removed alongside the
+// hardcoded tracing demo. Real OTel via Tempo will replace this path.
 builder.Services.AddSingleton<DemoStateStore>();
 
 // T2.1: replaced Phase 1's hardcoded SystemController literals with real

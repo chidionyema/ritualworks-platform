@@ -35,110 +35,29 @@ namespace Haworks.BffWeb.Api.Controllers;
 public class DemoController : ControllerBase
 {
     private readonly IDemoHubNotifier _notifier;
-    private readonly IDemoTraceStore _traceStore;
     private readonly DemoStateStore _stateStore;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<DemoController> _logger;
 
     public DemoController(
         IDemoHubNotifier notifier,
-        IDemoTraceStore traceStore,
         DemoStateStore stateStore,
         IHttpClientFactory httpClientFactory,
         ILogger<DemoController> logger)
     {
         _notifier = notifier;
-        _traceStore = traceStore;
         _stateStore = stateStore;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
     // ========================================================================
-    // Distributed Tracing — synthesizes a structurally honest 7-span trace
+    // Distributed Tracing demo removed. The previous /api/demo/tracing/start
+    // synthesised a hardcoded 7-span flame graph; durations and tree shape
+    // were baked into the controller, not real OTel data. Real Tempo +
+    // cross-service span propagation will land separately before the demo
+    // returns.
     // ========================================================================
-
-    [HttpPost("tracing/start")]
-    public IActionResult StartTrace([FromBody] TraceStartRequest? request)
-    {
-        var scenario = request?.Scenario ?? "happyPath";
-        var traceId = Guid.NewGuid().ToString("N");
-
-        var spans = new List<DemoSpan>();
-        var rootSpanId = NewSpanId();
-
-        var rootDuration = scenario == "withFailure" ? 142 : 128;
-        spans.Add(new DemoSpan(
-            rootSpanId, null, "bff-web", "POST /api/demo/tracing/start",
-            StartMs: 0, DurationMs: rootDuration, Status: "OK",
-            new Dictionary<string, object>
-            {
-                ["http.method"] = "POST",
-                ["http.route"] = "/api/demo/tracing/start",
-                ["scenario"] = scenario,
-            }));
-
-        var validateId = NewSpanId();
-        spans.Add(new DemoSpan(
-            validateId, rootSpanId, "orders-svc", "validate-cart",
-            StartMs: 4, DurationMs: 6, Status: "OK",
-            new Dictionary<string, object> { ["cart.items"] = 1, ["cart.total"] = 39.99 }));
-
-        var inventoryId = NewSpanId();
-        spans.Add(new DemoSpan(
-            inventoryId, rootSpanId, "catalog-svc", "reserve-stock",
-            StartMs: 12, DurationMs: 18, Status: "OK",
-            new Dictionary<string, object>
-            {
-                ["product.id"] = "demo-widget",
-                ["quantity"] = 1,
-                ["reservation.ttl"] = 30,
-            }));
-
-        var paymentsStart = 32;
-        var paymentsDuration = scenario == "withFailure" ? 95 : 78;
-        var paymentsId = NewSpanId();
-        spans.Add(new DemoSpan(
-            paymentsId, rootSpanId, "payments-svc", "create-session",
-            StartMs: paymentsStart, DurationMs: paymentsDuration,
-            Status: scenario == "withFailure" ? "Error" : "OK",
-            new Dictionary<string, object>
-            {
-                ["payment.provider"] = "stripe",
-                ["amount"] = 39.99,
-                ["currency"] = "GBP",
-            }));
-
-        var stripeId = NewSpanId();
-        spans.Add(new DemoSpan(
-            stripeId, paymentsId, "external-stripe", "POST /v1/checkout/sessions",
-            StartMs: paymentsStart + 4, DurationMs: paymentsDuration - 8,
-            Status: scenario == "withFailure" ? "Error" : "OK",
-            new Dictionary<string, object> { ["http.method"] = "POST", ["http.host"] = "api.stripe.com" }));
-
-        var notifyId = NewSpanId();
-        spans.Add(new DemoSpan(
-            notifyId, rootSpanId, "checkout-orchestrator", "saga-step-paymentcompleted",
-            StartMs: paymentsStart + paymentsDuration + 2, DurationMs: 4, Status: "OK",
-            new Dictionary<string, object> { ["saga.state"] = "Completed" }));
-
-        var outboxId = NewSpanId();
-        spans.Add(new DemoSpan(
-            outboxId, rootSpanId, "ef-outbox", "publish-OrderCompletedEvent",
-            StartMs: paymentsStart + paymentsDuration + 6, DurationMs: 6, Status: "OK",
-            new Dictionary<string, object>
-            {
-                ["event.type"] = "OrderCompletedEvent",
-                ["broker"] = "rabbitmq",
-            }));
-
-        _traceStore.Record(new DemoTrace(traceId, rootSpanId, rootDuration, spans));
-        Response.Headers["X-Trace-Id"] = traceId;
-
-        return Ok(new { traceId, rootSpanId, durationMs = rootDuration, spanCount = spans.Count, scenario });
-    }
-
-    private static string NewSpanId() => Guid.NewGuid().ToString("N").Substring(0, 16);
 
     // ========================================================================
     // Saga (Checkout Flow) — T2.2: real CheckoutOrchestrator round-trip
@@ -1289,7 +1208,6 @@ public record EventTriggerRequest(string EventType, object Payload);
 public record RelayPauseRequest(bool Paused);
 public record IdempotencyRaceRequest(string Key, int Count, int? TtlSeconds);
 public record RaceOutcome(int RequestIndex, bool IsWinner, Guid OrderId, long LatencyMs);
-public record TraceStartRequest(string? Scenario);
 // `BypassBreaker` exists for the side-by-side "no-breaker baseline lane"
 // the frontend's CircuitBreakerDemo renders. When true, the request goes
 // directly through HttpClient without the static AsyncCircuitBreakerPolicy,
