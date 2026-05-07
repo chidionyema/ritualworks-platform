@@ -46,13 +46,22 @@ public static class DependencyInjection
 
         // S3-compatible object storage (MinIO SDK works against MinIO,
         // Fly Tigris, Cloudflare R2, AWS S3 — anything that speaks S3).
-        // Only registered when MinIO:Endpoint is supplied; without it,
-        // Content boots but any upload fails fast at request time with
-        // a clear DI-resolution error.
-        if (!string.IsNullOrWhiteSpace(configuration["MinIO:Endpoint"]))
+        // Only registered when ALL required MinIO fields are supplied;
+        // partial config is treated as "not configured" so test fixtures
+        // and dev environments without MinIO can boot. Content still boots
+        // without it, but any upload fails fast at request time with a
+        // clear DI-resolution error.
+        var minioSection = configuration.GetSection(MinioOptions.SectionName);
+        var hasFullMinioConfig =
+            !string.IsNullOrWhiteSpace(minioSection["Endpoint"]) &&
+            !string.IsNullOrWhiteSpace(minioSection["AccessKey"]) &&
+            !string.IsNullOrWhiteSpace(minioSection["SecretKey"]) &&
+            !string.IsNullOrWhiteSpace(minioSection["BucketName"]);
+
+        if (hasFullMinioConfig)
         {
             services.AddOptions<MinioOptions>()
-                .Bind(configuration.GetSection(MinioOptions.SectionName))
+                .Bind(minioSection)
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
