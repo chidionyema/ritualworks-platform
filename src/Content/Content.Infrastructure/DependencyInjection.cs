@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
 using Haworks.Content.Application.Interfaces;
@@ -15,7 +16,10 @@ namespace Haworks.Content.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment env)
     {
         // Connection string resolution order matches Identity/Catalog/Payments:
         //   1. Aspire-injected ConnectionStrings__content

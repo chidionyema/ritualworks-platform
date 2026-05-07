@@ -1,5 +1,7 @@
 using System.Text.Json;
 using MassTransit;
+using Microsoft.Extensions.Options;
+using Haworks.CheckoutOrchestrator.Application.Options;
 using Haworks.Contracts.Catalog;
 using Haworks.Contracts.Checkout;
 using Haworks.Contracts.Payments;
@@ -37,8 +39,9 @@ namespace Haworks.CheckoutOrchestrator.Application.Sagas;
 /// </summary>
 public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
 {
-    public CheckoutSaga()
+    public CheckoutSaga(IOptions<CheckoutOptions> checkoutOptions)
     {
+        var options = checkoutOptions.Value;
         InstanceState(s => s.CurrentState);
 
         // TODO Phase 5+: payment-expiry timeout schedule.
@@ -116,8 +119,8 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                             UnitAmountCents = (long)(li.UnitPrice * 100m),
                             Quantity = li.Quantity,
                         }).ToList(),
-                    SuccessUrl = "https://app.example.com/checkout/success",
-                    CancelUrl = "https://app.example.com/checkout/cancel",
+                    SuccessUrl = options.SuccessUrl,
+                    CancelUrl = options.CancelUrl,
                     IdempotencyKey = ctx.Saga.IdempotencyKey,
                 }))
                 .TransitionTo(StockReservedState),

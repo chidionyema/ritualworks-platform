@@ -1,6 +1,7 @@
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.CheckoutOrchestrator.Application.Sagas;
 
@@ -10,7 +11,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHostEnvironment env)
     {
         var connectionString = configuration.GetConnectionString("checkout")
             ?? throw new InvalidOperationException(
@@ -23,8 +25,7 @@ public static class DependencyInjection
                 npgsql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromMilliseconds(500), errorCodesToAdd: null);
             }));
 
-        var aspNetEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-        if (string.Equals(aspNetEnv, "Test", StringComparison.OrdinalIgnoreCase))
+        if (env.IsEnvironment("Test"))
         {
             return services;
         }
@@ -64,6 +65,11 @@ public static class DependencyInjection
         });
 
         services.AddDomainEventPublisher();
+
+        services.AddOptions<Haworks.CheckoutOrchestrator.Application.Options.CheckoutOptions>()
+            .Bind(configuration.GetSection(Haworks.CheckoutOrchestrator.Application.Options.CheckoutOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
         return services;
     }

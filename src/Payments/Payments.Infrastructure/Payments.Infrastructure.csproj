@@ -11,6 +11,12 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.0" />
     <PackageReference Include="MassTransit.RabbitMQ" Version="8.3.4" />
-    <PackageReference Include="Stripe.net" Version="47.2.0" />
+    <PackageReference Include="Stripe.net" Version="44.10.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Haworks.Payments.Unit" />
+    <InternalsVisibleTo Include="Haworks.Payments.Integration" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 </Project>

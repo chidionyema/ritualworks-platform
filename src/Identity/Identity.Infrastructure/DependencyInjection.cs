@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +13,10 @@ namespace Haworks.Identity.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment env)
     {
         // Vault DI: registers IVaultService + supporting types from
         // BuildingBlocks.Vault. Required for the demo vault-rotation
@@ -214,8 +218,7 @@ public static class DependencyInjection
         // routes through IPublishEndpoint either way. Skipped in Test
         // environment so the unit/integration fixtures can supply their own
         // bus or dispense with one entirely.
-        var aspNetEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-        if (!string.Equals(aspNetEnv, "Test", StringComparison.OrdinalIgnoreCase))
+        if (!env.IsEnvironment("Test"))
         {
             services.AddMassTransit(mt =>
             {

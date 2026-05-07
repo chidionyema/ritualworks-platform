@@ -15,6 +15,6 @@
     <!-- Stripe.net types referenced by IStripeClientFactory abstraction. The
          concrete client lives in Payments.Infrastructure; the interface in
          Application needs the Stripe.net types it abstracts. -->
-    <PackageReference Include="Stripe.net" Version="47.2.0" />
+    <PackageReference Include="Stripe.net" Version="44.10.0" />
   </ItemGroup>
 </Project>

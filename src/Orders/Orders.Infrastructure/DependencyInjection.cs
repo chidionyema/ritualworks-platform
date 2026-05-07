@@ -1,6 +1,7 @@
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Orders.Application.Consumers;
 using Haworks.Orders.Infrastructure.Messaging;
@@ -12,7 +13,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHostEnvironment env)
     {
         var connectionString = configuration.GetConnectionString("orders")
             ?? throw new InvalidOperationException(
@@ -31,8 +33,7 @@ public static class DependencyInjection
         services.AddScoped<IOrderRepository, OrderRepository>();
 
         // Test fixture wires its own MassTransit harness + IDomainEventPublisher.
-        var aspNetEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-        if (string.Equals(aspNetEnv, "Test", StringComparison.OrdinalIgnoreCase))
+        if (env.IsEnvironment("Test"))
         {
             return services;
         }

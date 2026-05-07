@@ -2,6 +2,7 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Catalog.Application.Consumers;
 using Haworks.Catalog.Application.Interfaces;
@@ -18,7 +19,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHostEnvironment env)
     {
         var connectionString = configuration.GetConnectionString("catalog")
             ?? throw new InvalidOperationException(
@@ -49,8 +51,7 @@ public static class DependencyInjection
         // Skipped in Test environment — the integration fixture wires its
         // own AddMassTransitTestHarness with the in-memory transport so
         // tests can assert publishes synchronously without RabbitMQ.
-        var aspNetEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-        if (string.Equals(aspNetEnv, "Test", StringComparison.OrdinalIgnoreCase))
+        if (env.IsEnvironment("Test"))
         {
             // Tests provide their own bus + IDomainEventPublisher; bail early.
             return services;

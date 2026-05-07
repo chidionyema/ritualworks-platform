@@ -41,7 +41,7 @@ if (builder.Configuration.GetValue("Vault:Enabled", false)
     builder.Configuration.AddInMemoryCollection(vaultSecrets);
 }
 
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddApplication(builder.Configuration);
 
 // Vault probe HttpClient — used by AdminController.GetVaultStatus to

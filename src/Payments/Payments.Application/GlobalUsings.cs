@@ -8,3 +8,4 @@ global using Haworks.BuildingBlocks.CurrentUser;
 global using Haworks.BuildingBlocks.Messaging;
 global using Haworks.Payments.Domain;
 global using Haworks.Payments.Domain.Interfaces;
+global using Haworks.Payments.Application.Interfaces;

@@ -1,10 +1,13 @@
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Payments.Application.Consumers;
+using Haworks.Payments.Application.Interfaces;
 using Haworks.Payments.Infrastructure.Messaging;
 using Haworks.Payments.Infrastructure.Repositories;
+using Haworks.Payments.Infrastructure.Stripe;
 
 namespace Haworks.Payments.Infrastructure;
 
@@ -12,7 +15,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHostEnvironment env)
     {
         var connectionString = configuration.GetConnectionString("payments")
             ?? throw new InvalidOperationException(
@@ -38,9 +42,24 @@ public static class DependencyInjection
 
         services.AddScoped<IPaymentRepository, PaymentRepository>();
 
+        // Stripe registrations
+        services.AddOptions<Haworks.Payments.Infrastructure.Options.PaymentProviderOptions>()
+            .Bind(configuration.GetSection(Haworks.Payments.Infrastructure.Options.PaymentProviderOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services.AddSingleton<IStripeClientFactory, Haworks.Payments.Infrastructure.Stripe.StripeClientFactory>();
+        services.AddScoped<ICheckoutSessionService, Haworks.Payments.Infrastructure.Stripe.StripeCheckoutSessionService>();
+        services.AddScoped<IPaymentSessionCache, Haworks.Payments.Infrastructure.Stripe.StripePaymentSessionCacheService>();
+        services.AddScoped<IPaymentSessionProcessor, Haworks.Payments.Infrastructure.Stripe.StripePaymentProcessor>();
+        services.AddScoped<IWebhookProcessor, Haworks.Payments.Infrastructure.Stripe.StripeWebhookProcessor>();
+        services.AddScoped<IWebhookIdempotencyGuard, Haworks.Payments.Infrastructure.Webhooks.WebhookIdempotencyGuard>();
+        services.AddScoped<IPaymentGateway, Haworks.Payments.Infrastructure.PaymentGateway>();
+        services.AddScoped<Haworks.Payments.Application.Interfaces.IIdempotencyKeyGenerator, Haworks.Payments.Application.Common.IdempotencyKeyGenerator>();
+        services.AddScoped<Haworks.Payments.Application.Interfaces.IPaymentAmountMismatchHandler, Haworks.Payments.Application.Webhooks.PaymentAmountMismatchHandler>();
+
         // Test fixture supplies its own MassTransit harness + IDomainEventPublisher.
-        var aspNetEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-        if (string.Equals(aspNetEnv, "Test", StringComparison.OrdinalIgnoreCase))
+        if (env.IsEnvironment("Test"))
         {
             return services;
         }

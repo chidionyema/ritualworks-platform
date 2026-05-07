@@ -37,6 +37,8 @@ namespace Haworks.Payments.Application.Consumers;
 public sealed class PaymentSessionRequestedConsumer(
     IConfiguration configuration,
     IDomainEventPublisher eventPublisher,
+    ICheckoutSessionService checkoutService,
+    Haworks.Payments.Domain.Interfaces.IPaymentRepository paymentRepository,
     ILogger<PaymentSessionRequestedConsumer> logger
 ) : IConsumer<PaymentSessionRequestedEvent>
 {
@@ -45,13 +47,87 @@ public sealed class PaymentSessionRequestedConsumer(
         var evt = context.Message;
         var isDemoMode = configuration.GetValue<bool>("Payments:DemoMode", true);
 
-        if (!isDemoMode)
+        if (isDemoMode)
         {
-            // Production path via Stripe is not yet implemented.
-            throw new NotImplementedException(
-                "Production mode (Stripe) is not implemented. Set Payments:DemoMode=true.");
+            await HandleDemoModeAsync(context, evt);
+            return;
         }
 
+        logger.LogInformation(
+            "Processing PaymentSessionRequestedEvent via Stripe. OrderId={OrderId}, SagaId={SagaId}",
+            evt.OrderId, evt.SagaId);
+
+        try
+        {
+            // 1. Create the Payment aggregate (Status = Pending)
+            var payment = Haworks.Payments.Domain.Payment.Create(
+                evt.OrderId,
+                evt.CustomerEmail, // Using email as UserId for now if UserId not in event, but event has it?
+                evt.Amount,
+                0m, // Tax not in event?
+                evt.Currency,
+                Haworks.Payments.Domain.PaymentProvider.Stripe,
+                evt.SagaId);
+
+            await paymentRepository.AddAsync(payment, context.CancellationToken);
+
+            // 2. Request session from provider
+            var request = new CreateCheckoutSessionRequest
+            {
+                SuccessUrl = evt.SuccessUrl,
+                CancelUrl = evt.CancelUrl,
+                CustomerEmail = evt.CustomerEmail,
+                IdempotencyKey = evt.IdempotencyKey ?? Guid.NewGuid().ToString(),
+                LineItems = evt.LineItems.Select(li => new LineItem
+                {
+                    Name = li.Name,
+                    Description = li.Description,
+                    UnitAmountCents = li.UnitAmountCents,
+                    Quantity = li.Quantity,
+                    Currency = evt.Currency
+                }).ToList(),
+                OrderId = evt.OrderId,
+                Metadata = evt.Metadata ?? new()
+            };
+
+            var result = await checkoutService.CreateSessionAsync(request, context.CancellationToken);
+
+            // 3. Update payment with provider details (Status = Processing)
+            payment.AttachProviderSession(result.SessionId, result.SessionUrl);
+            await paymentRepository.SaveChangesAsync(context.CancellationToken);
+
+            // 4. Notify saga
+            await eventPublisher.PublishAsync(new PaymentSessionCreatedEvent
+            {
+                OrderId = evt.OrderId,
+                SagaId = evt.SagaId,
+                PaymentId = payment.Id,
+                SessionId = result.SessionId,
+                CheckoutUrl = result.SessionUrl,
+                Provider = Haworks.Payments.Domain.PaymentProvider.Stripe.ToString(),
+                Amount = evt.Amount,
+                Currency = evt.Currency
+            }, context.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to create Stripe payment session for OrderId={OrderId}", evt.OrderId);
+
+            await eventPublisher.PublishAsync(new PaymentSessionFailedEvent
+            {
+                OrderId = evt.OrderId,
+                SagaId = evt.SagaId,
+                Provider = Haworks.Payments.Domain.PaymentProvider.Stripe.ToString(),
+                ErrorCode = "provider_error",
+                ErrorMessage = ex.Message,
+                AttemptNumber = 1,
+                IsFinalAttempt = true
+            }, context.CancellationToken);
+        }
+    }
+
+    private async Task HandleDemoModeAsync(ConsumeContext<PaymentSessionRequestedEvent> context, PaymentSessionRequestedEvent evt)
+    {
         logger.LogInformation(
             "Processing PaymentSessionRequestedEvent in DEMO MODE. OrderId={OrderId}, SagaId={SagaId}",
             evt.OrderId, evt.SagaId);

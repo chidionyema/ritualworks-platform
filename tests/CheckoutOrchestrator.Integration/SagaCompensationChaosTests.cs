@@ -310,7 +310,14 @@ public sealed class SagaCompensationFixture : WebApplicationFactory<Program>, IA
                     ["ConnectionStrings:catalog"] = CatalogConnectionString,
                 })
                 .Build();
-            Haworks.Catalog.Infrastructure.DependencyInjection.AddInfrastructure(services, catalogConfig);
+            // The fixture is in Test env; we synthesize an IHostEnvironment
+            // for the side-call so Catalog's AddInfrastructure short-circuits
+            // its production MassTransit wiring (same path as the env-var
+            // pattern that used to be threaded via OS-level env globals).
+            Haworks.Catalog.Infrastructure.DependencyInjection.AddInfrastructure(
+                services,
+                catalogConfig,
+                new TestHostEnvironment("Test"));
 
             // Combined harness — saga + catalog consumer share one in-memory
             // bus. Production runs them in separate processes against
@@ -343,4 +350,19 @@ public sealed class SagaCompensationFixture : WebApplicationFactory<Program>, IA
         var catalogDb = scope.ServiceProvider.GetRequiredService<Haworks.Catalog.Infrastructure.CatalogDbContext>();
         await catalogDb.Database.MigrateAsync();
     }
+}
+
+/// <summary>
+/// Minimal IHostEnvironment for test-side calls to AddInfrastructure that
+/// happen outside a normal Program.cs flow. The concrete HostingEnvironment
+/// types in ASP.NET Core are internal; this stub satisfies the interface
+/// without pulling in extra infrastructure.
+/// </summary>
+internal sealed class TestHostEnvironment(string environmentName) : Microsoft.Extensions.Hosting.IHostEnvironment
+{
+    public string EnvironmentName { get; set; } = environmentName;
+    public string ApplicationName { get; set; } = "Tests";
+    public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+    public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } =
+        new Microsoft.Extensions.FileProviders.PhysicalFileProvider(AppContext.BaseDirectory);
 }
