@@ -46,6 +46,16 @@ public sealed class IdentityWebAppFactory : WebApplicationFactory<Program>, IAsy
         // visible to AddInfrastructure(builder.Configuration). Env vars are
         // read by ConfigurationBuilder.AddEnvironmentVariables which IS
         // active by default inside CreateBuilder, so they ARE visible.
+
+        // ASPNETCORE_ENVIRONMENT must be set as an OS env var, not just
+        // via builder.UseEnvironment("Test") below. Identity.Infrastructure's
+        // MassTransit guard reads Environment.GetEnvironmentVariable directly
+        // (not IHostEnvironment), so UseEnvironment alone leaves the guard
+        // false and the bus factory tries to resolve a nonexistent rabbit
+        // connection at startup. Setting both keeps the host AND the DI
+        // guard agreeing on "Test".
+        Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Test");
+
         Environment.SetEnvironmentVariable("ConnectionStrings__identity", ConnectionString);
         Environment.SetEnvironmentVariable("Jwt__Key",      "TestEnvJwtKeyAtLeast32CharactersLongForValidationXxxxxx");
         Environment.SetEnvironmentVariable("Jwt__Issuer",   "test-issuer");
