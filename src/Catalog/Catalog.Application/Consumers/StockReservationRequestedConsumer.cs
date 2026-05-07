@@ -5,25 +5,37 @@ using Haworks.Contracts.Checkout;
 namespace Haworks.Catalog.Application.Consumers;
 
 /// <summary>
-/// Reservation consumer. Triggered by checkout-svc' CheckoutSaga when a new
-/// checkout is initiated. Reserves each requested item via
-/// <see cref="Product.ReserveStock"/> and publishes either
-/// <see cref="StockReservedEvent"/> (all items reserved) or
-/// <see cref="StockReservationFailedEvent"/> (any item insufficient / unknown).
+/// Saga choreography role: drives the
+/// <c>Initiated → StockReserved | Abandoned</c> transition of
+/// <c>CheckoutSaga</c> (in
+/// src/CheckoutOrchestrator/CheckoutOrchestrator.Application/Sagas/
+/// CheckoutSaga.cs — no project reference per ADR-0009 bounded-context
+/// isolation, so the cref is text-only).
 ///
-/// Closes the Phase 4 gap: the saga publishes
-/// <see cref="StockReservationRequestedEvent"/>; before this consumer existed
-/// nothing in the platform handled it and the saga stalled at Initiated.
-/// The synchronous REST flow exposed by <c>ReserveStockCommand</c> stays in
-/// place for callers (e.g. tests) that don't want event-driven semantics.
+/// The saga's <c>Initially</c> block (CheckoutSaga.cs around line 71)
+/// publishes <see cref="StockReservationRequestedEvent"/> when it transitions
+/// from Initial to Initiated. This consumer picks up that event from
+/// RabbitMQ, reserves each requested item via
+/// <see cref="Product.ReserveStock"/>, and publishes EITHER:
 ///
-/// Idempotency: same layers as the release consumer — MT inbox dedupes
-/// transport replays, EF xmin shadow concurrency catches concurrent writers.
+/// <list type="bullet">
+///   <item><see cref="StockReservedEvent"/> — all items reserved → saga
+///         transitions Initiated → StockReserved (CheckoutSaga.cs around
+///         line 100, "During(Initiated, When(StockReserved)...)")</item>
+///   <item><see cref="StockReservationFailedEvent"/> — any item
+///         insufficient → saga transitions Initiated → Abandoned (no
+///         compensation needed, nothing was reserved)</item>
+/// </list>
 ///
-/// Per ADR-0009 the consumer touches no foreign-context state: only catalog
-/// Product aggregates. All cross-context fields needed downstream
-/// (TotalAmount, CustomerEmail, OrderLineItems, …) are propagated forward
-/// onto the published event so PaymentSession can act without querying out.
+/// Idempotency: MT inbox dedupes transport replays; EF xmin shadow
+/// concurrency catches concurrent writers (UPDATE Products SET ...
+/// WHERE xmin = N — same mechanism the ConcurrencyDemo demonstrates).
+///
+/// Per ADR-0009 the consumer touches no foreign-context state: only
+/// catalog Product aggregates. All cross-context fields needed
+/// downstream (TotalAmount, CustomerEmail, OrderLineItems, …) are
+/// propagated forward on the published event so PaymentSession can act
+/// without querying out.
 /// </summary>
 public sealed class StockReservationRequestedConsumer(
     IProductRepository products,

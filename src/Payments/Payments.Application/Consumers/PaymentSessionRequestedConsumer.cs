@@ -6,9 +6,33 @@ using Haworks.Contracts.Payments;
 namespace Haworks.Payments.Application.Consumers;
 
 /// <summary>
-/// Demo-mode payment consumer. Orchestrates the payment flow by mocking
-/// the provider's behavior. In DemoMode, it automatically transitions
-/// from session creation to completion (or failure if requested).
+/// Saga choreography role: drives the
+/// <c>StockReserved → ReadyForPayment → Completed | Compensating</c>
+/// transitions of <c>CheckoutSaga</c> (in
+/// src/CheckoutOrchestrator/CheckoutOrchestrator.Application/Sagas/
+/// CheckoutSaga.cs — no project reference per ADR-0009 bounded-context
+/// isolation, so the cref is text-only).
+///
+/// When the saga lands in StockReserved (CheckoutSaga.cs around line 100,
+/// "During(Initiated, When(StockReserved)...)") it publishes
+/// <see cref="PaymentSessionRequestedEvent"/>. This consumer picks that
+/// event up from RabbitMQ and either:
+///
+/// <list type="bullet">
+///   <item>Publishes <see cref="PaymentSessionCreatedEvent"/> followed by
+///         <see cref="PaymentCompletedEvent"/> — the saga transitions
+///         StockReserved → ReadyForPayment → Completed (final).</item>
+///   <item>Publishes <see cref="PaymentSessionFailedEvent"/> — saga
+///         transitions to Compensating, which publishes a
+///         <c>StockReleaseRequestedEvent</c> back to catalog so the
+///         reserved units return to inventory.</item>
+/// </list>
+///
+/// Demo-mode behaviour: failure scenarios are encoded by the BFF as a
+/// substring in <c>IdempotencyKey</c> ("paymentFailure"); production
+/// will replace this branch with a real Stripe Checkout API call. The
+/// scenario-tag pattern lets the saga + frontend exercise the full
+/// compensation path without a real Stripe outage.
 /// </summary>
 public sealed class PaymentSessionRequestedConsumer(
     IConfiguration configuration,
