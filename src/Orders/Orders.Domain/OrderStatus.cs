@@ -16,4 +16,7 @@ public enum OrderStatus
 
     /// <summary>Order didn't complete (consumed PaymentSessionFailed or StockReservationFailed).</summary>
     Abandoned = 2,
+
+    /// <summary>Stripe checkout session expired before completion.</summary>
+    Expired = 3,
 }

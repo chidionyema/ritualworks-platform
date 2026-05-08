@@ -23,16 +23,11 @@ namespace Haworks.Orders.Integration;
 ///     not produce a duplicate OrderCompletedEvent (the consumer treats the
 ///     no-op transition as already-processed).
 /// </summary>
-public sealed class OrderFlowsTests : IClassFixture<OrdersWebAppFactory>, IAsyncLifetime
+[Collection("Orders Integration")]
+public sealed class OrderFlowsTests(OrdersWebAppFactory factory) : IAsyncLifetime
 {
-    private readonly OrdersWebAppFactory _factory;
-    private readonly HttpClient _client;
-
-    public OrderFlowsTests(OrdersWebAppFactory factory)
-    {
-        _factory = factory;
-        _client = factory.CreateClient();
-    }
+    private readonly OrdersWebAppFactory _factory = factory;
+    private readonly HttpClient _client = factory.CreateClient();
 
     public async Task InitializeAsync()
     {
@@ -120,7 +115,7 @@ public sealed class OrderFlowsTests : IClassFixture<OrdersWebAppFactory>, IAsync
         // when the test wakes up). Poll for the downstream event with a
         // generous deadline; the assertion below tells us the consumer
         // actually ran AND succeeded.
-        await PollUntilAsync(() => harness.Published.Select<OrderCompletedEvent>().Any(),
+        await PollUntilAsync(() => harness.Published.Select<OrderCompletedEvent>().Any(p => p.Context.Message.OrderId == orderId),
             TimeSpan.FromSeconds(30));
 
         var completed = harness.Published.Select<OrderCompletedEvent>()
