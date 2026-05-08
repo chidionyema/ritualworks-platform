@@ -17,12 +17,17 @@ primary_region = "iad"
   # Keys must match BackendClients.cs constants exactly (the hyphenated names
   # are intentional). These live here, not in `flyctl secrets`, because Fly's
   # secrets API rejects hyphens in names — and these aren't secrets anyway,
-  # just internal flycast hostnames.
-  "Services__identity-svc__http__0"  = "http://ritualworks-identity.flycast:8080"
-  "Services__catalog-svc__http__0"   = "http://ritualworks-catalog.flycast:8080"
-  "Services__orders-svc__http__0"    = "http://ritualworks-orders.flycast:8080"
-  "Services__payments-svc__http__0"  = "http://ritualworks-payments.flycast:8080"
-  "Services__checkout-svc__http__0"  = "http://ritualworks-checkout.flycast:8080"
+  # just internal Fly 6PN hostnames.
+  #
+  # Why .internal not .flycast: .flycast is Fly's load-balanced private
+  # endpoint, but its proxy was returning "Connection reset by peer" for
+  # this cluster's HTTP/8080 traffic. .internal hits the machine's 6PN
+  # IP directly, no LB in the path.
+  "Services__identity-svc__http__0"  = "http://ritualworks-identity.internal:8080"
+  "Services__catalog-svc__http__0"   = "http://ritualworks-catalog.internal:8080"
+  "Services__orders-svc__http__0"    = "http://ritualworks-orders.internal:8080"
+  "Services__payments-svc__http__0"  = "http://ritualworks-payments.internal:8080"
+  "Services__checkout-svc__http__0"  = "http://ritualworks-checkout.internal:8080"
 
 [http_service]
   internal_port       = 8080
