@@ -15,7 +15,8 @@ namespace Haworks.Catalog.Integration;
 /// must publish CategoryUpdatedEvent through the EF outbox so search-svc
 /// can re-denormalize categoryName on indexed products.
 /// </summary>
-public sealed class CategoryEventsTests : IClassFixture<CatalogWebAppFactory>, IAsyncLifetime
+[Collection("Catalog Integration")]
+public sealed class CategoryEventsTests : IAsyncLifetime
 {
     private readonly CatalogWebAppFactory _factory;
     private readonly HttpClient _client;

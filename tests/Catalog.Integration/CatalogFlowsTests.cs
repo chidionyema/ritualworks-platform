@@ -12,7 +12,8 @@ namespace Haworks.Catalog.Integration;
 /// End-to-end catalog-svc tests against a real Postgres (Testcontainers) +
 /// in-memory MassTransit. Asserts both HTTP behavior and event publication.
 /// </summary>
-public sealed class CatalogFlowsTests : IClassFixture<CatalogWebAppFactory>, IAsyncLifetime
+[Collection("Catalog Integration")]
+public sealed class CatalogFlowsTests : IAsyncLifetime
 {
     private readonly CatalogWebAppFactory _factory;
     private readonly HttpClient _client;
