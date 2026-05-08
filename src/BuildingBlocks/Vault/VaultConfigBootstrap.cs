@@ -46,15 +46,45 @@ public static class VaultConfigBootstrap
             return new Dictionary<string, string?>();
         }
 
-        var address      = Required(configuration, "Vault:Address");
-        var roleIdPath   = Required(configuration, "Vault:RoleIdPath");
-        var secretIdPath = Required(configuration, "Vault:SecretIdPath");
+        var address = Required(configuration, "Vault:Address");
 
-        await WaitForFileAsync(roleIdPath,   TimeSpan.FromSeconds(60), ct);
-        await WaitForFileAsync(secretIdPath, TimeSpan.FromSeconds(60), ct);
+        // Two ways to supply AppRole creds, in order of preference:
+        //
+        // 1. Direct config (Vault:RoleId + Vault:SecretId) — staged as Fly
+        //    secrets at bootstrap time. Eliminates any startup round-trip
+        //    to vault for fetching creds. Restarts of identity become
+        //    independent of vault availability.
+        //
+        // 2. Path-based (Vault:RoleIdPath + Vault:SecretIdPath) — legacy
+        //    file-on-disk pattern. The shim writes the files at boot
+        //    after fetching from vault. Kept for backwards compatibility
+        //    with the old bootstrap-shim approach.
+        //
+        // Direct wins if both are present, so an operator can override a
+        // path-based deployment without redeploying the image.
+        var directRoleId   = configuration["Vault:RoleId"];
+        var directSecretId = configuration["Vault:SecretId"];
 
-        var roleId   = (await File.ReadAllTextAsync(roleIdPath,   ct)).Trim();
-        var secretId = (await File.ReadAllTextAsync(secretIdPath, ct)).Trim();
+        string roleId;
+        string secretId;
+        if (!string.IsNullOrWhiteSpace(directRoleId) && !string.IsNullOrWhiteSpace(directSecretId))
+        {
+            roleId = directRoleId.Trim();
+            secretId = directSecretId.Trim();
+            logger?.LogInformation("[VaultBootstrap] Using AppRole creds from config (Vault:RoleId/SecretId)");
+        }
+        else
+        {
+            var roleIdPath   = Required(configuration, "Vault:RoleIdPath");
+            var secretIdPath = Required(configuration, "Vault:SecretIdPath");
+
+            await WaitForFileAsync(roleIdPath,   TimeSpan.FromSeconds(60), ct);
+            await WaitForFileAsync(secretIdPath, TimeSpan.FromSeconds(60), ct);
+
+            roleId   = (await File.ReadAllTextAsync(roleIdPath,   ct)).Trim();
+            secretId = (await File.ReadAllTextAsync(secretIdPath, ct)).Trim();
+            logger?.LogInformation("[VaultBootstrap] Using AppRole creds from disk paths (legacy)");
+        }
 
         // Bootstrap runs before DI; if the caller didn't pass an authenticator,
         // construct one directly. Logger is intentionally null here because we

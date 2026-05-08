@@ -1,17 +1,18 @@
 #!/bin/sh
-# Identity entrypoint shim — fetches the AppRole role_id + secret_id from
-# Vault at startup so the .NET service can read them from disk (the path
-# VaultConfigBootstrap expects).
+# Identity entrypoint shim. Two modes, in order of preference:
 #
-# Required env when Vault__Enabled=true:
-#   Vault__Address       — e.g. http://ritualworks-vault.internal:8200
-#   VAULT_ROOT_TOKEN     — one-shot token used only here, not by the app
-#   Vault__RoleIdPath    — defaults to /tmp/vault/role_id
-#   Vault__SecretIdPath  — defaults to /tmp/vault/secret_id
+#  1. DIRECT (steady state) — Vault__RoleId and Vault__SecretId are
+#     supplied as Fly secrets at bootstrap time. The shim is a no-op:
+#     exec dotnet immediately, the .NET VaultConfigBootstrap reads the
+#     creds straight from config. Identity startup has zero dependency
+#     on vault availability or boot order.
 #
-# When Vault__Enabled is anything other than "true", we skip the fetch
-# and exec the app directly — useful for the current deploy state where
-# identity boots without Vault.
+#  2. LEGACY FETCH (first-ever bootstrap, before vault is deployed) —
+#     VAULT_ROOT_TOKEN is set, role_id/secret_id are fetched from vault
+#     and written to disk for VaultConfigBootstrap's path-based reader.
+#     Falls open after a 30s wait so a vault outage doesn't crash-loop
+#     identity.
+#
 # Note: no `set -e` — we *want* to fall through to the .NET app even if the
 # vault fetch fails. A vault outage shouldn't take identity down with it; it
 # just means demos that need vault won't work until vault recovers.
@@ -22,6 +23,13 @@ fail_open() {
   unset VAULT_ROOT_TOKEN
   exec dotnet Identity.Api.dll
 }
+
+# Mode 1: direct creds present → no fetch needed. Most common path now
+# that bootstrap.sh stages role_id/secret_id at deploy time.
+if [ -n "${Vault__RoleId:-}" ] && [ -n "${Vault__SecretId:-}" ]; then
+  echo "[bootstrap] Direct AppRole creds present — skipping vault round-trip"
+  exec dotnet Identity.Api.dll
+fi
 
 if [ "${Vault__Enabled:-false}" = "true" ]; then
   if [ -z "${Vault__Address:-}" ]; then

@@ -219,22 +219,75 @@ fi
 echo "==> Vault setup"
 set_secrets "$VAULT_APP" "VAULT_DEV_ROOT_TOKEN_ID=$VAULT_DEV_ROOT_TOKEN"
 
+# Pull AppRole creds from the live vault and stage them DIRECTLY on
+# identity as Fly secrets. This eliminates the boot-time round-trip
+# from identity → vault that used to live in vault-bootstrap.sh —
+# identity now starts in <5s and works regardless of vault availability
+# at boot. Vault is still consumed at runtime for the actual rotation
+# operations (the demo still works); it's just no longer on the
+# critical-path startup dependency.
+#
+# Skipped silently if the vault app isn't running yet — first-ever
+# bootstrap creates the app but doesn't deploy it. After
+# `flyctl deploy -c fly.vault.toml` (or the auto-deploy chain) lands,
+# re-run bootstrap.sh and the creds get staged.
+APPROLE_ROLE_ID=""
+APPROLE_SECRET_ID=""
+if flyctl status -a "$VAULT_APP" 2>/dev/null | grep -qE 'started\s'; then
+  echo "    fetching AppRole role_id/secret_id from $VAULT_APP"
+  # Run the vault CLI inside the vault container itself — that's the only
+  # place ritualworks-vault.internal resolves and the dev root token is
+  # available. flyctl ssh prepends a "Connecting to ..." line; tail -1 is
+  # the only thing we want from each invocation.
+  read_role_cmd='export VAULT_ADDR=http://[::1]:8200 VAULT_TOKEN=$VAULT_DEV_ROOT_TOKEN_ID; vault read -field=role_id auth/approle/role/haworks-identity-app/role-id'
+  read_secret_cmd='export VAULT_ADDR=http://[::1]:8200 VAULT_TOKEN=$VAULT_DEV_ROOT_TOKEN_ID; vault write -force -field=secret_id auth/approle/role/haworks-identity-app/secret-id'
+
+  APPROLE_ROLE_ID=$(flyctl ssh console -a "$VAULT_APP" -C "sh -c '$read_role_cmd'" 2>/dev/null | tr -d '\r' | tail -1 | tr -d ' ')
+  APPROLE_SECRET_ID=$(flyctl ssh console -a "$VAULT_APP" -C "sh -c '$read_secret_cmd'" 2>/dev/null | tr -d '\r' | tail -1 | tr -d ' ')
+
+  # Sanity-check: AppRole ids are UUIDs (36 chars with hyphens). If the
+  # parsed value isn't UUID-shaped, treat as failure so we don't ship
+  # garbage to the .NET config.
+  if echo "$APPROLE_ROLE_ID" | grep -qE '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' \
+     && echo "$APPROLE_SECRET_ID" | grep -qE '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+    echo "    ✓ fetched (role_id=${APPROLE_ROLE_ID:0:8}..., secret_id=${APPROLE_SECRET_ID:0:8}...)"
+  else
+    echo "    ! parsed values aren't UUID-shaped — falling back to legacy file-on-disk path"
+    APPROLE_ROLE_ID=""
+    APPROLE_SECRET_ID=""
+  fi
+else
+  echo "    $VAULT_APP not yet deployed — staging path-based creds; re-run bootstrap.sh after first deploy"
+fi
+
 # Identity-specific: JWT key + Vault wiring + optional issuer/audience + optional OAuth.
 # Vault__Enabled=true here overrides the common Vault__Enabled=false above
-# (later set_secrets call wins). The bootstrap shim fails open if vault is
-# unreachable, so a vault outage degrades the demo gracefully instead of
-# crash-looping identity.
+# (later set_secrets call wins).
 id_extra=(
   "Jwt__SigningKeyPem=$JWT_SIGNING_KEY_PEM"
   "Jwt__KeyId=${JWT_KEY_ID:-fly-1}"
   "Vault__Enabled=true"
   "Vault__Address=http://ritualworks-vault.internal:8200"
-  "Vault__RoleIdPath=/tmp/vault/role_id"
-  "Vault__SecretIdPath=/tmp/vault/secret_id"
   "Vault__RequireHmacValidation=false"
   "Vault__CaCertPath="
-  "VAULT_ROOT_TOKEN=$VAULT_DEV_ROOT_TOKEN"
 )
+if [[ -n "$APPROLE_ROLE_ID" && -n "$APPROLE_SECRET_ID" ]]; then
+  # Direct mode: VaultConfigBootstrap reads Vault:RoleId/SecretId straight
+  # from config, no disk I/O, no startup dependency on vault.
+  id_extra+=(
+    "Vault__RoleId=$APPROLE_ROLE_ID"
+    "Vault__SecretId=$APPROLE_SECRET_ID"
+  )
+else
+  # Legacy fallback: vault-bootstrap.sh writes role_id/secret_id to /tmp
+  # at container start. Kept so first-ever bootstraps (before vault has
+  # been deployed) still produce a working identity once vault is up.
+  id_extra+=(
+    "Vault__RoleIdPath=/tmp/vault/role_id"
+    "Vault__SecretIdPath=/tmp/vault/secret_id"
+    "VAULT_ROOT_TOKEN=$VAULT_DEV_ROOT_TOKEN"
+  )
+fi
 [[ -n "${JWT_ISSUER:-}"   ]] && id_extra+=("Jwt__Issuer=$JWT_ISSUER")
 [[ -n "${JWT_AUDIENCE:-}" ]] && id_extra+=("Jwt__Audience=$JWT_AUDIENCE")
 [[ -n "${OAUTH_GOOGLE_CLIENT_ID:-}" ]] && id_extra+=(
