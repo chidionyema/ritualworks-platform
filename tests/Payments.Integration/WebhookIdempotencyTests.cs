@@ -21,7 +21,8 @@ namespace Haworks.Payments.Integration;
 /// 2. WebhookEvent unique index (database-level atomic deduplication)
 /// 3. Application-level check in PaymentWebhookValidatedConsumer
 /// </summary>
-public sealed class WebhookIdempotencyTests : IClassFixture<PaymentsWebAppFactory>, IAsyncLifetime
+[Collection("Payments Integration")]
+public sealed class WebhookIdempotencyTests : IAsyncLifetime
 {
     private readonly PaymentsWebAppFactory _factory;
     private readonly HttpClient _client;

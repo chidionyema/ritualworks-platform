@@ -15,7 +15,8 @@ namespace Haworks.Search.Integration;
 /// upsert/get/delete roundtrips, and the SearchAsync method (B6 depends
 /// on it actually working — without this test it's easy to ship a stub).
 /// </summary>
-public sealed class MeilisearchIndexTests : IClassFixture<SearchWebAppFactory>, IAsyncLifetime
+[Collection("Search Integration")]
+public sealed class MeilisearchIndexTests : IAsyncLifetime
 {
     private readonly SearchWebAppFactory _factory;
     private IServiceScope _scope = null!;

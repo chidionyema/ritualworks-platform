@@ -14,7 +14,8 @@ namespace Haworks.Search.Integration;
 /// Black-box coverage of GET /search. Spec §9.2 list — every test name
 /// here matches the brief verbatim.
 /// </summary>
-public sealed class SearchEndpointTests : IClassFixture<SearchWebAppFactory>, IAsyncLifetime
+[Collection("Search Integration")]
+public sealed class SearchEndpointTests : IAsyncLifetime
 {
     private readonly SearchWebAppFactory _factory;
     private readonly HttpClient _client;

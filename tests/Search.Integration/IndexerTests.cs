@@ -18,7 +18,8 @@ namespace Haworks.Search.Integration;
 /// served by WireMock (the SearchWebAppFactory wires Catalog:BaseAddress
 /// to the WireMock URL).
 /// </summary>
-public sealed class IndexerTests : IClassFixture<SearchWebAppFactory>, IAsyncLifetime
+[Collection("Search Integration")]
+public sealed class IndexerTests : IAsyncLifetime
 {
     private readonly SearchWebAppFactory _factory;
 

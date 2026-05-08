@@ -21,7 +21,8 @@ namespace Haworks.Payments.Integration;
 ///   • Idempotency: replaying the same Stripe EventId 3× yields exactly one
 ///     state transition (one PaymentCompletedEvent published).
 /// </summary>
-public sealed class WebhookFlowsTests : IClassFixture<PaymentsWebAppFactory>, IAsyncLifetime
+[Collection("Payments Integration")]
+public sealed class WebhookFlowsTests : IAsyncLifetime
 {
     private readonly PaymentsWebAppFactory _factory;
     private readonly HttpClient _client;

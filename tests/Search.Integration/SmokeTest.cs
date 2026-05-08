@@ -2,7 +2,8 @@ using Xunit;
 
 namespace Haworks.Search.Integration;
 
-public sealed class SmokeTest : IClassFixture<SearchWebAppFactory>
+[Collection("Search Integration")]
+public sealed class SmokeTest
 {
     private readonly SearchWebAppFactory _factory;
 
