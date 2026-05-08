@@ -41,10 +41,29 @@ vault write auth/approle/role/haworks-identity-app \
   secret_id_ttl=0 \
   bind_secret_id=true >/dev/null
 
-ROLE_ID=$(vault read -format=json auth/approle/role/haworks-identity-app/role-id \
-  | jq -r '.data.role_id')
-SECRET_ID=$(vault write -force -format=json auth/approle/role/haworks-identity-app/secret-id \
-  | jq -r '.data.secret_id')
+# Deterministic role_id + secret_id, supplied via env vars at deploy time
+# (set by deploy/fly/bootstrap.sh from .env.local). When present, register
+# them as the role's custom values so the same creds survive every
+# in-memory-state wipe of dev-mode vault — operators don't have to
+# re-stage identity's secrets after every vault redeploy.
+#
+# Falls back to vault's auto-generated values when the env vars aren't set
+# (e.g. during local development without bootstrap.sh).
+if [ -n "${VAULT_HAWORKS_IDENTITY_ROLE_ID:-}" ] && [ -n "${VAULT_HAWORKS_IDENTITY_SECRET_ID:-}" ]; then
+  echo "[seed] applying deterministic role_id/secret_id from env"
+  vault write auth/approle/role/haworks-identity-app/custom-role-id \
+    role_id="$VAULT_HAWORKS_IDENTITY_ROLE_ID" >/dev/null
+  vault write auth/approle/role/haworks-identity-app/custom-secret-id \
+    secret_id="$VAULT_HAWORKS_IDENTITY_SECRET_ID" >/dev/null
+  ROLE_ID="$VAULT_HAWORKS_IDENTITY_ROLE_ID"
+  SECRET_ID="$VAULT_HAWORKS_IDENTITY_SECRET_ID"
+else
+  echo "[seed] no deterministic creds in env — using vault-generated values"
+  ROLE_ID=$(vault read -format=json auth/approle/role/haworks-identity-app/role-id \
+    | jq -r '.data.role_id')
+  SECRET_ID=$(vault write -force -format=json auth/approle/role/haworks-identity-app/secret-id \
+    | jq -r '.data.secret_id')
+fi
 
 # Stash both at a well-known KV path. The identity service reads this with
 # its VAULT_ROOT_TOKEN at startup, writes the values to disk, then auths
