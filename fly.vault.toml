@@ -1,0 +1,38 @@
+# Vault for the cluster's demo (dev-mode, in-memory).
+#
+# Reach from other Fly machines at:
+#   http://ritualworks-vault.internal:8200
+#
+# Deploy:
+#   flyctl apps create ritualworks-vault              # one-time
+#   flyctl deploy -c fly.vault.toml                   # builds deploy/vault/Dockerfile
+#
+# State is in-memory (dev-mode), so a machine restart wipes secrets.
+# entrypoint.sh re-runs seed.sh on every start to make that self-healing.
+
+app            = "ritualworks-vault"
+primary_region = "iad"
+
+[build]
+  dockerfile = "deploy/vault/Dockerfile"
+  # Build context is repo root; deploy/vault/{Dockerfile,entrypoint.sh,seed.sh}
+  # all live under the same directory for COPY simplicity.
+
+[env]
+  VAULT_ADDR = "http://127.0.0.1:8200"
+  # VAULT_DEV_ROOT_TOKEN_ID is staged as a Fly secret by deploy/fly/bootstrap.sh
+  # — same value is also staged on ritualworks-identity as VAULT_ROOT_TOKEN so
+  # the bootstrap shim can fetch role_id/secret_id at startup.
+
+[http_service]
+  internal_port        = 8200
+  force_https          = false
+  auto_stop_machines   = "off"
+  auto_start_machines  = true
+  min_machines_running = 1
+  processes            = ["app"]
+
+[[vm]]
+  memory   = "256mb"
+  cpu_kind = "shared"
+  cpus     = 1

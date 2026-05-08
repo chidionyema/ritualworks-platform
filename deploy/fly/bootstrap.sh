@@ -61,6 +61,26 @@ if [[ -z "${JWT_SIGNING_KEY_PEM:-}" ]]; then
   echo "    written to $ENV_FILE (gitignored)"
 fi
 
+# Auto-generate Vault dev-mode root token on first run. Same value is staged
+# on the vault app (as VAULT_DEV_ROOT_TOKEN_ID — what `vault server -dev`
+# expects) and on identity (as VAULT_ROOT_TOKEN — what the bootstrap shim
+# reads). Persisting to .env.local means restaging is idempotent across runs.
+if [[ -z "${VAULT_DEV_ROOT_TOKEN:-}" ]]; then
+  echo "==> Generating Vault dev root token (first run)"
+  token="rw-dev-$(head -c 24 /dev/urandom | base64 | tr -d '\n=+/' | head -c 32)"
+  if grep -qE '^VAULT_DEV_ROOT_TOKEN=' "$ENV_FILE"; then
+    if [[ "$(uname)" == "Darwin" ]]; then
+      sed -i '' "s|^VAULT_DEV_ROOT_TOKEN=.*|VAULT_DEV_ROOT_TOKEN=$token|" "$ENV_FILE"
+    else
+      sed -i "s|^VAULT_DEV_ROOT_TOKEN=.*|VAULT_DEV_ROOT_TOKEN=$token|" "$ENV_FILE"
+    fi
+  else
+    printf '\nVAULT_DEV_ROOT_TOKEN=%s\n' "$token" >> "$ENV_FILE"
+  fi
+  VAULT_DEV_ROOT_TOKEN="$token"
+  echo "    written to $ENV_FILE (gitignored)"
+fi
+
 # Auto-generate Meilisearch master key on first run (32 bytes urandom, base64).
 if [[ -z "${MEILI_MASTER_KEY:-}" ]]; then
   echo "==> Generating Meilisearch master key (first run)"
@@ -79,6 +99,7 @@ if [[ -z "${MEILI_MASTER_KEY:-}" ]]; then
 fi
 
 PUBLIC_APP="ritualworks-bffweb"
+VAULT_APP="ritualworks-vault"
 INTERNAL_APPS=(
   ritualworks-identity
   ritualworks-catalog
@@ -91,7 +112,10 @@ INTERNAL_APPS=(
 if [[ "$DEPLOY_CONTENT" == "true" ]]; then
   INTERNAL_APPS+=(ritualworks-content)
 fi
-ALL_APPS=("$PUBLIC_APP" "${INTERNAL_APPS[@]}")
+# Vault is created here but kept out of INTERNAL_APPS because it doesn't take
+# the standard common secrets (no Postgres/RabbitMQ/Redis); secrets staged
+# separately below.
+ALL_APPS=("$PUBLIC_APP" "$VAULT_APP" "${INTERNAL_APPS[@]}")
 
 echo "==> Creating Fly apps (skip if exists)"
 for app in "${ALL_APPS[@]}"; do
@@ -188,10 +212,28 @@ else
   set_secrets "$PUBLIC_APP" "${common[@]}"
 fi
 
-# Identity-specific: JWT key + optional issuer/audience + optional OAuth.
+# Vault dev-mode app: only secret is the dev root token, used by both the
+# `vault server -dev` flag and (mirrored as VAULT_ROOT_TOKEN) the identity
+# bootstrap shim. Vault is reachable at http://ritualworks-vault.internal:8200
+# from any other ritualworks-* machine inside Fly's 6PN.
+echo "==> Vault setup"
+set_secrets "$VAULT_APP" "VAULT_DEV_ROOT_TOKEN_ID=$VAULT_DEV_ROOT_TOKEN"
+
+# Identity-specific: JWT key + Vault wiring + optional issuer/audience + optional OAuth.
+# Vault__Enabled=true here overrides the common Vault__Enabled=false above
+# (later set_secrets call wins). The bootstrap shim fails open if vault is
+# unreachable, so a vault outage degrades the demo gracefully instead of
+# crash-looping identity.
 id_extra=(
   "Jwt__SigningKeyPem=$JWT_SIGNING_KEY_PEM"
   "Jwt__KeyId=${JWT_KEY_ID:-fly-1}"
+  "Vault__Enabled=true"
+  "Vault__Address=http://ritualworks-vault.internal:8200"
+  "Vault__RoleIdPath=/tmp/vault/role_id"
+  "Vault__SecretIdPath=/tmp/vault/secret_id"
+  "Vault__RequireHmacValidation=false"
+  "Vault__CaCertPath="
+  "VAULT_ROOT_TOKEN=$VAULT_DEV_ROOT_TOKEN"
 )
 [[ -n "${JWT_ISSUER:-}"   ]] && id_extra+=("Jwt__Issuer=$JWT_ISSUER")
 [[ -n "${JWT_AUDIENCE:-}" ]] && id_extra+=("Jwt__Audience=$JWT_AUDIENCE")

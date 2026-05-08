@@ -41,9 +41,26 @@ jobs:
             echo 'services=["identity","catalog","orders","payments","checkout","search","meilisearch"]' >> "$GITHUB_OUTPUT"
           fi
 
+  deploy-vault:
+    # Vault has to be up before identity's container starts, otherwise the
+    # bootstrap shim's 30s wait expires and identity falls back to
+    # Vault__Enabled=false (degraded demo). Running it as a serial step
+    # before deploy-backends keeps that path clean.
+    name: Deploy vault
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy vault
+        run: flyctl deploy -c fly.vault.toml --remote-only
+
   deploy-backends:
     name: Deploy ${{ matrix.svc }}
-    needs: plan
+    needs: [plan, deploy-vault]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
