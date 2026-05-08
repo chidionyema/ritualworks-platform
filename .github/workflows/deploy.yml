@@ -28,7 +28,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        svc: [identity, catalog, orders, payments, checkout, content]
+        # `content` is omitted: bootstrap.sh only creates the app when
+        # DEPLOY_CONTENT=true. Add it back here when content goes live.
+        svc: [identity, catalog, orders, payments, checkout]
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
