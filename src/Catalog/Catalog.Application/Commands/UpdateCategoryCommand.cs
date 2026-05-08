@@ -1,6 +1,8 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Messaging;
 using Haworks.Catalog.Application.DTOs;
 using Haworks.Catalog.Domain.Interfaces;
+using Haworks.Contracts.Catalog;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -11,13 +13,16 @@ public sealed record UpdateCategoryCommand(Guid CategoryId, string Name) : IRequ
 internal sealed class UpdateCategoryCommandHandler : IRequestHandler<UpdateCategoryCommand, Result<CategoryDto>>
 {
     private readonly ICategoryRepository _repository;
+    private readonly IDomainEventPublisher _eventPublisher;
     private readonly ILogger<UpdateCategoryCommandHandler> _logger;
 
     public UpdateCategoryCommandHandler(
         ICategoryRepository repository,
+        IDomainEventPublisher eventPublisher,
         ILogger<UpdateCategoryCommandHandler> logger)
     {
         _repository = repository;
+        _eventPublisher = eventPublisher;
         _logger = logger;
     }
 
@@ -40,6 +45,16 @@ internal sealed class UpdateCategoryCommandHandler : IRequestHandler<UpdateCateg
         }
 
         category.Rename(request.Name);
+
+        // Publish before SaveChanges so the outbox row lands in the same TX
+        // as the rename. Search-svc relies on this event to re-denormalize
+        // the cached categoryName on every product in the affected category.
+        await _eventPublisher.PublishAsync(new CategoryUpdatedEvent
+        {
+            CategoryId = category.Id,
+            Name = category.Name,
+        }, cancellationToken);
+
         await _repository.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Category updated {CategoryId}", request.CategoryId);
