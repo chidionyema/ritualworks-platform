@@ -35,11 +35,13 @@ if [ "${Vault__Enabled:-false}" = "true" ]; then
   SECRET_ID_PATH="${Vault__SecretIdPath:-/tmp/vault/secret_id}"
   mkdir -p "$(dirname "$ROLE_ID_PATH")" "$(dirname "$SECRET_ID_PATH")"
 
-  # Wait up to 30s for Vault. Dev-mode comes up fast, but may be restarting
-  # alongside identity on a deploy. Beyond that we give up and fail open.
+  # Wait up to 90s for Vault. Even though deploy.yml runs deploy-vault
+  # before deploy-backends, Fly's 6PN DNS for the new vault machine can
+  # take 30-60s to propagate to a fresh identity machine on the same
+  # rollout. 90s covers that. Beyond it we give up and fail open.
   echo "[bootstrap] waiting for Vault at $Vault__Address..."
   vault_ready=0
-  for i in $(seq 1 30); do
+  for i in $(seq 1 90); do
     if curl -fsS -o /dev/null "$Vault__Address/v1/sys/health"; then
       vault_ready=1
       break
@@ -48,7 +50,7 @@ if [ "${Vault__Enabled:-false}" = "true" ]; then
   done
 
   if [ "$vault_ready" != "1" ]; then
-    fail_open "Vault did not respond within 30s at $Vault__Address"
+    fail_open "Vault did not respond within 90s at $Vault__Address"
   fi
 
   echo "[bootstrap] fetching bootstrap creds from secret/identity/bootstrap..."

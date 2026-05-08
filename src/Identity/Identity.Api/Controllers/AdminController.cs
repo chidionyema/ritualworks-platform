@@ -1,6 +1,7 @@
 using Haworks.BuildingBlocks.Vault;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Haworks.Identity.Api.Controllers;
 
@@ -32,11 +33,19 @@ public sealed class VaultProbeClient
 [Route("admin")]
 [AllowAnonymous]
 public sealed class AdminController(
-    IVaultService vault,
-    VaultProbeClient probe,
+    // IServiceProvider so we can resolve Vault deps at action time instead
+    // of constructor time. When Vault:Enabled=false (which the bootstrap
+    // shim sets if vault was unreachable at boot — fail-open path),
+    // VaultProbeClient and IVaultService aren't registered. Constructor-
+    // time injection used to crash AdminController activation outright;
+    // this path returns a clean "Disabled" response instead.
+    IServiceProvider services,
+    IConfiguration configuration,
     Haworks.BuildingBlocks.Messaging.IDomainEventPublisher publisher,
     ILogger<AdminController> logger) : ControllerBase
 {
+    private bool VaultEnabled => configuration.GetValue("Vault:Enabled", false);
+
     /// <summary>
     /// Forces a Vault credential refresh for a named AppRole and emits
     /// per-stage events through the EF outbox so BffWeb's
@@ -59,6 +68,35 @@ public sealed class AdminController(
     [HttpGet("vault/status")]
     public async Task<IActionResult> GetVaultStatus(CancellationToken ct)
     {
+        if (!VaultEnabled)
+        {
+            // Vault disabled at runtime (config flag false, or bootstrap
+            // shim hit fail-open because vault was unreachable at startup).
+            // Returning 200 with status="Disabled" is honest: identity is
+            // up and serving, this *demo* feature just isn't wired here.
+            return Ok(new
+            {
+                status = "Disabled",
+                message = "Vault is not enabled in this environment.",
+                enabled = false,
+            });
+        }
+
+        var probe = services.GetService<VaultProbeClient>();
+        var vault = services.GetService<IVaultService>();
+        if (probe is null || vault is null)
+        {
+            // Config says enabled but DI didn't register the deps — means
+            // the conditional registration in Program.cs ran with stale
+            // config. Treat as disabled rather than crash.
+            return Ok(new
+            {
+                status = "Disabled",
+                message = "Vault is enabled in config but probe client is unregistered.",
+                enabled = false,
+            });
+        }
+
         // Raw HTTP probe to vault's /v1/sys/health endpoint (unauthenticated
         // by spec). This bypasses IVaultService entirely — its
         // GetTokenInfoAsync reads from the local lease cache and would
@@ -110,6 +148,15 @@ public sealed class AdminController(
         [FromQuery] string roleName = "haworks-identity",
         [FromQuery] Guid? sessionId = null)
     {
+        if (!VaultEnabled)
+        {
+            return StatusCode(503, new { status = "Disabled", message = "Vault is not enabled in this environment." });
+        }
+        var vault = services.GetService<IVaultService>();
+        if (vault is null)
+        {
+            return StatusCode(503, new { status = "Disabled", message = "Vault service is not registered." });
+        }
         var resolvedSession = sessionId ?? Guid.NewGuid();
 
         // Fire-and-forget: the actual Vault round-trip can take several
