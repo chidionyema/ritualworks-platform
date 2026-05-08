@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Haworks.Search.Application</RootNamespace>
+    <AssemblyName>Search.Application</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../Search.Domain/Search.Domain.csproj" />
+    <ProjectReference Include="../../Contracts/Haworks.Contracts.csproj" />
+  </ItemGroup>
+</Project>

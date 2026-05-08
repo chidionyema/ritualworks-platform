@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Haworks.Search.Domain</RootNamespace>
+    <AssemblyName>Search.Domain</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../BuildingBlocks/Haworks.BuildingBlocks.csproj" />
+  </ItemGroup>
+</Project>

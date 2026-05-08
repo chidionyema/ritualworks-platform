@@ -36,9 +36,9 @@ jobs:
       - id: set
         run: |
           if [[ "${{ vars.DEPLOY_CONTENT }}" == "true" ]]; then
-            echo 'services=["identity","catalog","orders","payments","checkout","content"]' >> "$GITHUB_OUTPUT"
+            echo 'services=["identity","catalog","orders","payments","checkout","content","search","meilisearch"]' >> "$GITHUB_OUTPUT"
           else
-            echo 'services=["identity","catalog","orders","payments","checkout"]' >> "$GITHUB_OUTPUT"
+            echo 'services=["identity","catalog","orders","payments","checkout","search","meilisearch"]' >> "$GITHUB_OUTPUT"
           fi
 
   deploy-backends:

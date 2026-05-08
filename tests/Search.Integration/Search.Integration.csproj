@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Haworks.Search.Integration</RootNamespace>
+    <AssemblyName>Search.Integration</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AnalysisLevel>none</AnalysisLevel>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="FluentAssertions" Version="7.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.0.0" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.0.0" />
+    <PackageReference Include="MassTransit.TestFramework" Version="8.3.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Search/Search.Api/Search.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Per-assembly Testcontainers / Docker Desktop fixes. See
+         src/BuildingBlocks.Testing/TestModuleInitializer.cs for the rationale.
+         Linked rather than referenced because [ModuleInitializer] only fires
+         for the assembly the attribute is compiled into. -->
+    <Compile Include="../../src/BuildingBlocks.Testing/TestModuleInitializer.cs"
+             Link="TestModuleInitializer.cs" />
+  </ItemGroup>
+
+</Project>

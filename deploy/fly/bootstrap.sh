@@ -61,6 +61,23 @@ if [[ -z "${JWT_SIGNING_KEY_PEM:-}" ]]; then
   echo "    written to $ENV_FILE (gitignored)"
 fi
 
+# Auto-generate Meilisearch master key on first run (32 bytes urandom, base64).
+if [[ -z "${MEILI_MASTER_KEY:-}" ]]; then
+  echo "==> Generating Meilisearch master key (first run)"
+  key="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
+  if grep -qE '^MEILI_MASTER_KEY=' "$ENV_FILE"; then
+    if [[ "$(uname)" == "Darwin" ]]; then
+      sed -i '' "s|^MEILI_MASTER_KEY=.*|MEILI_MASTER_KEY=$key|" "$ENV_FILE"
+    else
+      sed -i "s|^MEILI_MASTER_KEY=.*|MEILI_MASTER_KEY=$key|" "$ENV_FILE"
+    fi
+  else
+    printf '\nMEILI_MASTER_KEY=%s\n' "$key" >> "$ENV_FILE"
+  fi
+  MEILI_MASTER_KEY="$key"
+  echo "    written to $ENV_FILE (gitignored)"
+fi
+
 PUBLIC_APP="ritualworks-bffweb"
 INTERNAL_APPS=(
   ritualworks-identity
@@ -68,6 +85,8 @@ INTERNAL_APPS=(
   ritualworks-orders
   ritualworks-payments
   ritualworks-checkout
+  ritualworks-search
+  ritualworks-meilisearch
 )
 if [[ "$DEPLOY_CONTENT" == "true" ]]; then
   INTERNAL_APPS+=(ritualworks-content)
@@ -125,10 +144,25 @@ PG_HOST="${pg_rest##*@}"
 # support associative arrays, so use the simple convention directly.
 echo "==> Per-service secrets"
 for app in "${INTERNAL_APPS[@]}"; do
+  if [[ "$app" == "ritualworks-meilisearch" ]]; then
+    continue
+  fi
   db="${app#ritualworks-}"
   conn="Host=${PG_HOST};Port=5432;Database=${db};Username=${PG_USER};Password=${PG_PASS};SslMode=Require;Trust Server Certificate=true"
   set_secrets "$app" "${common[@]}" "ConnectionStrings__${db}=$conn"
 done
+
+# Meilisearch volume + master key secrets.
+echo "==> Meilisearch setup"
+if ! flyctl volumes list -a ritualworks-meilisearch 2>/dev/null | grep -q "meili_data"; then
+  echo "    creating meili_data volume"
+  flyctl volumes create meili_data --size 1 --region "$REGION" -a ritualworks-meilisearch --yes
+else
+  echo "    meili_data volume exists"
+fi
+
+set_secrets ritualworks-meilisearch "MEILI_MASTER_KEY=$MEILI_MASTER_KEY"
+set_secrets ritualworks-search "Meilisearch__MasterKey=$MEILI_MASTER_KEY"
 
 # BFF: only secrets here. Service-discovery overrides for the BFF's
 # HttpClients (Services__<svc>__http__0=...flycast:8080) live in
