@@ -13,11 +13,13 @@ set -e
 export VAULT_ADDR="http://127.0.0.1:8200"
 export VAULT_TOKEN="$VAULT_DEV_ROOT_TOKEN_ID"
 
-# Start Vault dev-mode. -dev-listen-address binds to all interfaces so the
-# Fly proxy and other 6PN machines can reach it.
+# Start Vault dev-mode. Bind to [::]:8200 (IPv6 wildcard, dual-stack on
+# Linux) so other Fly machines can reach us via 6PN — Fly's .internal
+# DNS only returns IPv6, so binding to 0.0.0.0 (IPv4 only) leaves the
+# vault unreachable from inside the cluster even though it's "up".
 vault server \
   -dev \
-  -dev-listen-address=0.0.0.0:8200 \
+  -dev-listen-address='[::]:8200' \
   -dev-root-token-id="$VAULT_DEV_ROOT_TOKEN_ID" &
 VAULT_PID=$!
 
