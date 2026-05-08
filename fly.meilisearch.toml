@@ -12,7 +12,11 @@ primary_region = "iad"
   MEILI_NO_ANALYTICS = "true"
   MEILI_ENV          = "production"
   MEILI_DB_PATH      = "/meili_data/data.ms"
-  MEILI_HTTP_ADDR    = "0.0.0.0:7700"
+  # Bind to IPv6 wildcard (also accepts IPv4 on dual-stack). Fly's 6PN
+  # private network — which the .internal DNS resolves to — is IPv6, so
+  # an IPv4-only bind ("0.0.0.0:7700") gets "connection refused" from
+  # other Fly apps even though Meilisearch logs say it's listening.
+  MEILI_HTTP_ADDR    = "[::]:7700"
 
 [mounts]
   source       = "meili_data"
