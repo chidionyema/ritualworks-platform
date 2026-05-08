@@ -14,6 +14,7 @@
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageReference Include="FluentAssertions" Version="7.0.0" />
+    <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.0.0" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.0.0" />
     <PackageReference Include="MassTransit.TestFramework" Version="8.3.4" />
@@ -21,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Payments/Payments.Api/Payments.Api.csproj" />
+    <ProjectReference Include="../../src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

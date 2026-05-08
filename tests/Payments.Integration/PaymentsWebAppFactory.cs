@@ -10,6 +10,7 @@ using Xunit;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.BuildingBlocks.Telemetry;
 using Haworks.BuildingBlocks.Resilience;
+using Haworks.BuildingBlocks.Testing.Authentication;
 using Haworks.Payments.Application.Consumers;
 using Haworks.Payments.Api.Webhooks;
 using Haworks.Payments.Infrastructure;
@@ -103,6 +104,9 @@ public class PaymentsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
             services.AddDomainEventPublisher();
             services.AddSingleton<ITelemetryService>(_ => NullTelemetryService.Instance);
             services.AddSingleton<IResiliencePolicyFactory, ResiliencePolicyFactory>();
+
+            // [Authorize]-decorated endpoints need an authentication scheme.
+            services.AddAuthentication(TestAuthenticationHandler.SchemeName).AddTestAuth();
         });
     }
 
