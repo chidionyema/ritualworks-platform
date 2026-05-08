@@ -1,4 +1,6 @@
-# Internal-only service. Reach via http://ritualworks-search.flycast:8080
+# Internal-only service. Reach via http://ritualworks-search.internal:8080
+# (same .internal-not-.flycast convention as the rest of this cluster — see
+# fly.bffweb.toml's [env] comment for the rationale).
 
 app            = "ritualworks-search"
 primary_region = "iad"
@@ -9,7 +11,7 @@ primary_region = "iad"
 [env]
   ASPNETCORE_URLS        = "http://+:8080"
   ASPNETCORE_ENVIRONMENT = "Production"
-  Meilisearch__Url       = "http://ritualworks-meilisearch.flycast:7700"
+  Meilisearch__Url       = "http://ritualworks-meilisearch.internal:7700"
 
 [http_service]
   internal_port        = 8080
