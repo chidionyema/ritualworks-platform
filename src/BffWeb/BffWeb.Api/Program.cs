@@ -43,6 +43,13 @@ builder.Services.AddScoped<IDependencyHealthProbe, DependencyHealthProbe>();
 // visitor-facing activity dock. See LiveConsoleBroadcaster + LiveConsoleHub.
 builder.Services.AddSingleton<LiveConsoleBroadcaster>();
 
+// Journey scheduler — BackgroundService that fires a rotating canonical
+// journey through the cluster every ~20s (place-order saga, idempotent
+// retry burst, OCC race). Drives the always-on "watch the system work"
+// view on the portfolio site without requiring a visitor to click anything.
+// Runs in every environment, including production.
+builder.Services.AddHostedService<JourneyScheduler>();
+
 // HttpContext access for the upstream-capture handler. Required so the
 // per-call DelegatingHandler can append its hop to the live HTTP request's
 // items dictionary (no AsyncLocal indirection needed).
