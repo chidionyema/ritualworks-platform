@@ -64,7 +64,8 @@ internal sealed class OrderRepository(OrderDbContext db) : IOrderRepository
         var rowsAffected = await db.Orders
             .Where(o => o.Id == orderId && o.Status != newStatus)
             .ExecuteUpdateAsync(setters => setters
-                .SetProperty(o => o.Status, newStatus), ct);
+                .SetProperty(o => o.Status, newStatus)
+                .SetProperty(o => o.AbandonReason, reason), ct);
 
         return rowsAffected > 0;
     }

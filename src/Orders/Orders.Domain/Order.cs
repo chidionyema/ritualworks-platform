@@ -106,4 +106,15 @@ public class Order : AuditableEntity
         LastModifiedDate = DateTime.UtcNow;
         return true;
     }
+
+    /// <summary>Transitions to Expired. Same idempotent-no-op semantics as MarkPaid.</summary>
+    public bool MarkExpired(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (Status != OrderStatus.Created) return false;
+        Status = OrderStatus.Expired;
+        AbandonReason = reason;
+        LastModifiedDate = DateTime.UtcNow;
+        return true;
+    }
 }
