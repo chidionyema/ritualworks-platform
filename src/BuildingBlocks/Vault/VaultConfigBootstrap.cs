@@ -30,7 +30,7 @@ public static class VaultConfigBootstrap
     ///   new KvMapping("identity/oauth/microsoft","Authentication:Microsoft"),
     ///   new KvMapping("identity/oauth/facebook", "Authentication:Facebook"),
     /// </summary>
-    public sealed record KvMapping(string VaultPath, string ConfigPrefix);
+    public sealed record KvMapping(string VaultPath, string ConfigPrefix, bool Optional = false);
 
     public static async Task<IReadOnlyDictionary<string, string?>> LoadAsync(
         IConfiguration configuration,
@@ -66,8 +66,9 @@ public static class VaultConfigBootstrap
         var client = new VaultClient(new VaultClientSettings(address, new TokenAuthMethodInfo(login.ClientToken)));
 
         var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (vaultPath, configPrefix) in kvMappings)
+        foreach (var mapping in kvMappings)
         {
+            var (vaultPath, configPrefix, optional) = (mapping.VaultPath, mapping.ConfigPrefix, mapping.Optional);
             try
             {
                 var resp = await client.V1.Secrets.KeyValue.V2.ReadSecretAsync(
@@ -78,6 +79,15 @@ public static class VaultConfigBootstrap
                 }
                 logger?.LogInformation("[VaultBootstrap] Loaded {Count} keys from secret/{Path} -> {Prefix}",
                     resp.Data.Data.Count, vaultPath, configPrefix);
+            }
+            catch (Exception ex) when (optional)
+            {
+                // Optional path — skip cleanly if vault returns 404 / empty data.
+                // Identity's OAuth providers are conditionally registered downstream
+                // when blank, so a missing KV path is the same as "not configured".
+                logger?.LogInformation(
+                    "[VaultBootstrap] Optional secret/{Path} not present ({ExType}) — skipping",
+                    vaultPath, ex.GetType().Name);
             }
             catch (Exception ex)
             {

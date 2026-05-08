@@ -55,4 +55,15 @@ vault kv put secret/identity/bootstrap \
 vault kv put secret/identity/jwt \
   signing_key="dev-only-not-for-prod-$(date +%s)" >/dev/null 2>&1 || true
 
+# Identity's VaultConfigBootstrap (Program.cs) reads secret/identity/oauth/*
+# at startup and rethrows on any 404. The Identity.Infrastructure
+# conditional-registration code tolerates *blank* OAuth credentials, but
+# the read itself must succeed. Write empty placeholders so identity
+# starts cleanly without OAuth providers wired (the actual registration
+# fix lives in Identity.Infrastructure.DependencyInjection).
+for provider in google microsoft facebook; do
+  vault kv put "secret/identity/oauth/$provider" \
+    client_id="" client_secret="" >/dev/null 2>&1 || true
+done
+
 echo "[seed] done. role_id=${ROLE_ID:0:8}... (full value at secret/identity/bootstrap)"

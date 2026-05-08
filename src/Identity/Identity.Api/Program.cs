@@ -32,9 +32,14 @@ if (builder.Configuration.GetValue("Vault:Enabled", false)
         new[]
         {
             new VaultConfigBootstrap.KvMapping("identity/jwt",             "Jwt"),
-            new VaultConfigBootstrap.KvMapping("identity/oauth/google",    "Authentication:Google"),
-            new VaultConfigBootstrap.KvMapping("identity/oauth/microsoft", "Authentication:Microsoft"),
-            new VaultConfigBootstrap.KvMapping("identity/oauth/facebook",  "Authentication:Facebook"),
+            // OAuth providers are conditionally registered in
+            // Identity.Infrastructure.DependencyInjection when ClientId is blank,
+            // so the KV path being missing or empty is fine — mark as Optional
+            // so VaultBootstrap doesn't fail-fast on 404 / empty-data responses
+            // (Vault dev-mode + VaultSharp throws 404-shaped on empty KV reads).
+            new VaultConfigBootstrap.KvMapping("identity/oauth/google",    "Authentication:Google",    Optional: true),
+            new VaultConfigBootstrap.KvMapping("identity/oauth/microsoft", "Authentication:Microsoft", Optional: true),
+            new VaultConfigBootstrap.KvMapping("identity/oauth/facebook",  "Authentication:Facebook",  Optional: true),
         },
         bootstrapLogger);
 
