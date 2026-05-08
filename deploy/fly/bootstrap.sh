@@ -104,27 +104,26 @@ common=(
   "Vault__Enabled=false"
 )
 
-declare -A DB_NAME=(
-  [ritualworks-identity]=identity
-  [ritualworks-catalog]=catalog
-  [ritualworks-orders]=orders
-  [ritualworks-payments]=payments
-  [ritualworks-checkout]=checkout
-  [ritualworks-content]=content
-)
-declare -A DB_KEY=(
-  [ritualworks-identity]=ConnectionStrings__identity
-  [ritualworks-catalog]=ConnectionStrings__catalog
-  [ritualworks-orders]=ConnectionStrings__orders
-  [ritualworks-payments]=ConnectionStrings__payments
-  [ritualworks-checkout]=ConnectionStrings__checkout
-  [ritualworks-content]=ConnectionStrings__content
-)
+# Parse POSTGRES_BASE (postgres://USER:PASS@HOST) into components for
+# ADO.NET-form connection string assembly. Npgsql 9 chokes on Neon's
+# URL-form connection strings (they include params like
+# `channel_binding=require` that trigger a KeyNotFoundException when
+# parsed as keyword/value pairs); ADO.NET form is the native shape and
+# parses cleanly. POSTGRES_QUERY is ignored — sslmode is set explicitly
+# below as the only param Neon needs from us.
+pg_rest="${POSTGRES_BASE#postgres://}"
+PG_USER="${pg_rest%%:*}"
+pg_rest="${pg_rest#*:}"
+PG_PASS="${pg_rest%%@*}"
+PG_HOST="${pg_rest##*@}"
 
+# Service name == database name on Neon. Bash 3.2 (default macOS) doesn't
+# support associative arrays, so use the simple convention directly.
 echo "==> Per-service secrets"
 for app in "${INTERNAL_APPS[@]}"; do
-  conn="${POSTGRES_BASE}/${DB_NAME[$app]}${POSTGRES_QUERY}"
-  set_secrets "$app" "${common[@]}" "${DB_KEY[$app]}=$conn"
+  db="${app#ritualworks-}"
+  conn="Host=${PG_HOST};Port=5432;Database=${db};Username=${PG_USER};Password=${PG_PASS};SslMode=Require;Trust Server Certificate=true"
+  set_secrets "$app" "${common[@]}" "ConnectionStrings__${db}=$conn"
 done
 
 # BFF: only secrets here. Service-discovery overrides for the BFF's
