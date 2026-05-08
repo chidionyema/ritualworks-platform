@@ -7,6 +7,12 @@ name: Deploy
 # Runtime secrets (Postgres, RabbitMQ, etc.) are NOT touched here. They live
 # in Fly secrets and are set once via deploy/fly/bootstrap.sh from a developer
 # machine. CI only knows the Fly API token.
+#
+# Service set: identity/catalog/orders/payments/checkout always deploy. The
+# content service deploys only when the repo variable DEPLOY_CONTENT == "true"
+# AND bootstrap.sh was run with DEPLOY_CONTENT=true (so the Fly app exists).
+# The two switches share the same name on purpose: one source of truth, set
+# in two places that can't talk to each other.
 
 on:
   workflow_run:
@@ -20,17 +26,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  plan:
+    name: Plan service matrix
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.set.outputs.services }}
+    steps:
+      - id: set
+        run: |
+          if [[ "${{ vars.DEPLOY_CONTENT }}" == "true" ]]; then
+            echo 'services=["identity","catalog","orders","payments","checkout","content"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'services=["identity","catalog","orders","payments","checkout"]' >> "$GITHUB_OUTPUT"
+          fi
+
   deploy-backends:
     name: Deploy ${{ matrix.svc }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        # `content` is omitted: bootstrap.sh only creates the app when
-        # DEPLOY_CONTENT=true. Add it back here when content goes live.
-        svc: [identity, catalog, orders, payments, checkout]
+        svc: ${{ fromJSON(needs.plan.outputs.services) }}
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:

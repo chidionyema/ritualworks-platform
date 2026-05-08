@@ -30,6 +30,10 @@ for v in "${required[@]}"; do
 done
 
 REGION="${REGION:-iad}"
+# DEPLOY_CONTENT gates the optional content service. Two places must agree:
+#   1. .env.local DEPLOY_CONTENT=true  → this script creates the Fly app + secrets
+#   2. GitHub repo variable DEPLOY_CONTENT=true  → deploy.yml adds it to the matrix
+# Setting only one creates a mismatch (app missing on deploy, or secrets unset).
 DEPLOY_CONTENT="${DEPLOY_CONTENT:-false}"
 
 # Auto-generate JWT signing keypair on first run, persist back to .env.local.
