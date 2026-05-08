@@ -1,4 +1,6 @@
+using Haworks.BuildingBlocks.Resilience;
 using Haworks.Search.Application.Interfaces;
+using Haworks.Search.Infrastructure.Catalog;
 using Haworks.Search.Infrastructure.Meilisearch;
 using Haworks.Search.Infrastructure.Options;
 using Meilisearch;
@@ -28,6 +30,17 @@ public static class DependencyInjection
         });
 
         services.AddScoped<ISearchIndex, MeilisearchIndex>();
+
+        // Catalog HTTP client. The resilience policy is constructed inside
+        // CatalogProductsApiClient and wraps each call — matching the
+        // Stripe/PayPal pattern — so AddPolicyHandler isn't needed here.
+        services.AddSingleton<IResiliencePolicyFactory, ResiliencePolicyFactory>();
+        services.AddHttpClient<ICatalogProductsApi, CatalogProductsApiClient>(c =>
+        {
+            c.BaseAddress = new Uri(configuration["Catalog:BaseAddress"]
+                ?? "http://ritualworks-catalog.flycast:8080");
+            c.Timeout = TimeSpan.FromSeconds(5);
+        });
 
         return services;
     }
