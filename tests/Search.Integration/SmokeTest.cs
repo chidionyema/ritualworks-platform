@@ -1,19 +1,18 @@
-using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
 namespace Haworks.Search.Integration;
 
-public class SmokeTest : IClassFixture<WebApplicationFactory<Program>>
+public sealed class SmokeTest : IClassFixture<SearchWebAppFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly SearchWebAppFactory _factory;
 
-    public SmokeTest(WebApplicationFactory<Program> factory)
+    public SmokeTest(SearchWebAppFactory factory)
     {
         _factory = factory;
     }
 
     [Fact]
-    public async Task Health_Endpoint_Returns_Success()
+    public async Task Health_endpoint_returns_success()
     {
         var client = _factory.CreateClient();
         var response = await client.GetAsync("/health");
