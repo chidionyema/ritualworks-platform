@@ -19,12 +19,18 @@ if ! vault auth list -format=json | jq -e '."approle/"' >/dev/null 2>&1; then
 fi
 
 echo "[seed] writing policy haworks-identity-app..."
+# Identity needs create/update on secret/data/identity/* because
+# VaultJwtSigningKeyProvider generates and persists the JWT signing
+# key on first run if it's missing. Read-only crashed startup with
+# "permission denied" on the first WriteSecretAsync call.
 vault policy write haworks-identity-app - <<'POLICY'
-path "secret/data/*"            { capabilities = ["read", "list"] }
-path "secret/metadata/*"        { capabilities = ["read", "list"] }
-path "database/creds/*"         { capabilities = ["read"] }
-path "auth/token/lookup-self"   { capabilities = ["read"] }
-path "auth/token/renew-self"    { capabilities = ["update"] }
+path "secret/data/identity/*"     { capabilities = ["create", "read", "update", "patch", "list"] }
+path "secret/metadata/identity/*" { capabilities = ["read", "list"] }
+path "secret/data/*"              { capabilities = ["read", "list"] }
+path "secret/metadata/*"          { capabilities = ["read", "list"] }
+path "database/creds/*"           { capabilities = ["read"] }
+path "auth/token/lookup-self"     { capabilities = ["read"] }
+path "auth/token/renew-self"      { capabilities = ["update"] }
 POLICY
 
 echo "[seed] writing role haworks-identity-app..."
