@@ -9,6 +9,13 @@
     <ProjectReference Include="../../Contracts/Haworks.Contracts.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Per .claude/rules/dotnet-clean-arch.md handlers + validators are
+         internal sealed; the Unit test project relies on InternalsVisibleTo
+         to exercise them. (L3 unblock — added because the L1.G tests landed
+         without it and the project no longer compiles otherwise.) -->
+    <InternalsVisibleTo Include="Haworks.Notifications.Unit" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="MediatR" Version="12.4.1" />
     <PackageReference Include="FluentValidation" Version="11.10.0" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.10.0" />

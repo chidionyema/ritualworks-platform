@@ -2,235 +2,193 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.CircuitBreaker;
-using Haworks.BuildingBlocks.Resilience;
-using Haworks.BuildingBlocks.Resilience.Exceptions;
 using Haworks.Notifications.Application.Channels;
-using Haworks.Notifications.Application.Consumers;
-using Haworks.Notifications.Application.Templates;
 using Haworks.Notifications.Domain.Entities;
 using Haworks.Notifications.Domain.ValueObjects;
 
 namespace Haworks.Notifications.Infrastructure.Channels.Email;
 
 /// <summary>
-/// L3 — Email channel gateway. Implements both:
-///   * <see cref="IEmailChannelGateway"/> (the L0 contract — fire-and-forget Task).
-///   * <see cref="IChannelDispatcher"/> (the L3 contract — returns
-///     <see cref="DeliveryOutcome"/> so the dispatch consumer can drive
-///     the Notification state machine).
+/// L3 email channel gateway. Iterates registered <see cref="IEmailProvider"/>
+/// implementations in DI registration order (SES -> SendGrid -> Mailgun, etc.)
+/// and stops at the first <see cref="ProviderSendResult.IsSuccess"/> result
+/// or first <see cref="ProviderSendResult.IsRetryable"/>=false (terminal).
 ///
-/// Iterates registered <see cref="IEmailProvider"/>s in DI registration
-/// order (priority is established at registration time). Each provider
-/// call is wrapped in a per-provider Polly policy (combined retry +
-/// circuit breaker, lifted from
-/// <see cref="ResilienceOptions.ForExternalApi"/>). Per-provider state
-/// is critical: an unhealthy SES circuit must NOT poison the SendGrid
-/// path, so each provider gets its own breaker keyed by
-/// <see cref="IEmailProvider.Name"/>.
+/// Per-provider Polly circuit breaker: an in-memory <see cref="ResiliencePipeline"/>
+/// is lazily constructed per provider name. After a configurable number of
+/// consecutive failures (see <see cref="EmailChannelResilienceConstants"/>)
+/// the breaker opens for the configured break duration; while open, calls to
+/// that provider are skipped (the gateway falls through to the next provider
+/// in the list rather than failing the notification outright).
 ///
-/// Decision tree per provider:
-///   * <c>IsSuccess</c> → <see cref="DeliveryOutcome.Sent"/>. Stop.
-///   * <c>IsRetryable=false</c> → <see cref="DeliveryOutcome.Failed"/>.
-///     Stop. (Invalid recipient / domain rejection / account suspension
-///     produces the same answer at every provider — short-circuit.)
-///   * <c>IsRetryable=true</c> → record + advance to next provider.
-///   * Open circuit (<see cref="BrokenCircuitException"/> or
-///     <see cref="CircuitBreakerOpenException"/>) → record + advance.
-///   * Any other thrown exception → record + advance (defensive — providers
-///     are supposed to translate exceptions into <see cref="ProviderSendResult"/>).
-///
-/// Per-provider attempts are appended to
-/// <see cref="Notification.DeliveryAttempts"/> via
-/// Notification.RecordAttempt(...) when the L1.A domain method is
-/// implemented; until then attempts are still logged at the gateway.
+/// Aggregate side-effects (per <see cref="Notification"/> state machine):
+///   - On Success  -> <see cref="Notification.RecordAttempt(DeliveryAttempt)"/> (success) +
+///                    <see cref="Notification.MarkSent(string)"/>.
+///   - On NonRetryable -> <see cref="Notification.RecordAttempt(DeliveryAttempt)"/> (failure) +
+///                    <see cref="Notification.MarkFailed(string)"/> (no further providers tried).
+///   - On Retryable -> <see cref="Notification.RecordAttempt(DeliveryAttempt)"/> (failure) +
+///                    continue to the next provider.
+///   - All exhausted -> <see cref="Notification.MarkFailed(string)"/> with reason
+///                    <c>all-providers-exhausted</c>.
 /// </summary>
-public sealed class EmailChannelGateway : IEmailChannelGateway, IChannelDispatcher
+public sealed class EmailChannelGateway(
+    IEnumerable<IEmailProvider> providers,
+    ILogger<EmailChannelGateway> logger
+) : IEmailChannelGateway
 {
-    // Per-provider policy cache. Built on first use, keyed by provider
-    // name. ConcurrentDictionary so multiple consumers running in
-    // parallel share the same circuit-breaker state per provider — a
-    // 500 from SES surfaces in every consumer's view of the circuit,
-    // which is the whole point of having a circuit breaker.
-    private readonly ConcurrentDictionary<string, IAsyncPolicy<ProviderSendResult>> _policies = new();
+    /// <summary>Provider name -> ResiliencePipeline. Static so per-provider
+    /// breaker state persists across the gateway's Scoped instances (one per
+    /// consumer scope — gateway must be Scoped because providers like SES are
+    /// registered Scoped). Concurrent because multiple consumer worker
+    /// threads invoke the gateway in parallel.</summary>
+    private static readonly ConcurrentDictionary<string, ResiliencePipeline> s_breakers = new();
 
-    private readonly IReadOnlyList<IEmailProvider> _providers;
-    private readonly IResiliencePolicyFactory _policyFactory;
-    private readonly ILogger<EmailChannelGateway> _logger;
+    private readonly IReadOnlyList<IEmailProvider> _providers = providers.ToList();
 
-    public EmailChannelGateway(
-        IEnumerable<IEmailProvider> providers,
-        IResiliencePolicyFactory policyFactory,
-        ILogger<EmailChannelGateway> logger)
-    {
-        ArgumentNullException.ThrowIfNull(providers);
-        _policyFactory = policyFactory ?? throw new ArgumentNullException(nameof(policyFactory));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-        _providers = providers.ToList();
-    }
-
-    /// <summary>
-    /// L0-compatible entrypoint. Drives the dispatch using whatever
-    /// rendering is already on the aggregate (Subject / Body) — callers
-    /// going through this overload do not yet have a
-    /// <see cref="RenderedNotification"/>. The consumer pipeline always
-    /// uses <see cref="DispatchAsync"/> instead.
-    /// </summary>
-    public Task SendAsync(Notification notification, CancellationToken ct)
+    public async Task SendAsync(Notification notification, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(notification);
-
-        var rendered = new RenderedNotification(
-            notification.Subject ?? string.Empty,
-            notification.Body ?? string.Empty,
-            null);
-
-        return DispatchAsync(notification, rendered, ct);
-    }
-
-    public async Task<DeliveryOutcome> DispatchAsync(
-        Notification notification,
-        RenderedNotification rendered,
-        CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(notification);
-        ArgumentNullException.ThrowIfNull(rendered);
 
         if (_providers.Count == 0)
         {
-            _logger.LogError(
-                "No IEmailProvider registered; cannot dispatch notification {NotificationId}",
+            logger.LogError(
+                "No IEmailProvider implementations registered; cannot dispatch notification {NotificationId}",
                 notification.Id);
-            RecordAttemptSafe(notification, "no-provider", null, success: false, "no-provider-registered");
-            return DeliveryOutcome.Exhausted("no-provider-registered");
+            notification.MarkFailed("no-email-providers-registered");
+            return;
         }
-
-        var recipient = notification.Recipient;
-        var subject = rendered.Subject;
-        var body = rendered.Body;
-        string? lastError = null;
 
         foreach (var provider in _providers)
         {
-            ct.ThrowIfCancellationRequested();
+            var pipeline = s_breakers.GetOrAdd(provider.Name, BuildBreakerPipeline);
 
-            var policy = _policies.GetOrAdd(provider.Name, BuildPolicy);
-
-            ProviderSendResult result;
+            ProviderSendResult? result = null;
             try
             {
-                result = await policy.ExecuteAsync(
-                    (_, token) => provider.SendAsync(recipient, subject, body, token),
-                    new Context($"email:{provider.Name}"),
-                    ct).ConfigureAwait(false);
+                result = await pipeline.ExecuteAsync(
+                    async token => await provider.SendAsync(
+                        notification.Recipient,
+                        notification.Subject,
+                        notification.Body,
+                        token),
+                    ct);
             }
-            catch (BrokenCircuitException ex)
+            catch (BrokenCircuitException)
             {
-                _logger.LogWarning(ex,
-                    "Email provider {Provider} circuit is open; advancing for notification {NotificationId}",
+                // Breaker is open for this provider — log + try the next one.
+                logger.LogWarning(
+                    "Provider {Provider} circuit OPEN for notification {NotificationId}; falling through",
                     provider.Name, notification.Id);
-                lastError = $"{provider.Name}-circuit-open";
-                RecordAttemptSafe(notification, provider.Name, null, success: false, lastError);
+                notification.RecordAttempt(new DeliveryAttempt(
+                    AttemptedAt: DateTime.UtcNow,
+                    ProviderName: provider.Name,
+                    ProviderMessageId: null,
+                    IsSuccess: false,
+                    ErrorMessage: "circuit-open"));
                 continue;
             }
-            catch (CircuitBreakerOpenException ex)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                _logger.LogWarning(ex,
-                    "Email provider {Provider} circuit is open; advancing for notification {NotificationId}",
-                    provider.Name, notification.Id);
-                lastError = $"{provider.Name}-circuit-open";
-                RecordAttemptSafe(notification, provider.Name, null, success: false, lastError);
-                continue;
-            }
-            catch (OperationCanceledException)
-            {
-                // Cooperative cancellation — surface to the consumer so
-                // MassTransit's retry pipeline can take over.
+                // Honour the caller's cancellation immediately; don't try further providers.
                 throw;
             }
             catch (Exception ex)
             {
-                // Defensive: providers should translate exceptions into
-                // ProviderSendResult; leak protection so a single
-                // misbehaving provider doesn't sink the whole chain.
-                _logger.LogWarning(ex,
-                    "Email provider {Provider} threw unhandled exception; advancing for notification {NotificationId}",
+                // Treat exceptions as retryable per provider — log + try next.
+                // Polly's CB inside the pipeline will count this toward the
+                // failure threshold, so a flapping provider naturally gets
+                // skipped on subsequent calls.
+                logger.LogWarning(ex,
+                    "Provider {Provider} threw for notification {NotificationId}; treating as retryable",
                     provider.Name, notification.Id);
-                lastError = $"{provider.Name}-exception";
-                RecordAttemptSafe(notification, provider.Name, null, success: false, lastError);
+                notification.RecordAttempt(new DeliveryAttempt(
+                    AttemptedAt: DateTime.UtcNow,
+                    ProviderName: provider.Name,
+                    ProviderMessageId: null,
+                    IsSuccess: false,
+                    ErrorMessage: ex.Message));
                 continue;
             }
 
             if (result.IsSuccess)
             {
-                RecordAttemptSafe(notification, provider.Name, result.ProviderMessageId, success: true, errorMessage: null);
-                return DeliveryOutcome.Sent(provider.Name, result.ProviderMessageId);
+                var providerMessageId = result.ProviderMessageId ?? Guid.NewGuid().ToString("N");
+                notification.RecordAttempt(new DeliveryAttempt(
+                    AttemptedAt: DateTime.UtcNow,
+                    ProviderName: provider.Name,
+                    ProviderMessageId: providerMessageId,
+                    IsSuccess: true,
+                    ErrorMessage: null));
+                notification.MarkSent(providerMessageId);
+                logger.LogInformation(
+                    "Notification {NotificationId} sent via {Provider} (messageId={ProviderMessageId})",
+                    notification.Id, provider.Name, providerMessageId);
+                return;
             }
 
-            // Failure path: distinguish retryable (advance) from
-            // non-retryable (short-circuit — invalid recipient is the
-            // same answer at every provider).
-            RecordAttemptSafe(notification, provider.Name, null, success: false, result.Error);
-            lastError = result.Error;
+            // Failure — record + branch on retryability.
+            notification.RecordAttempt(new DeliveryAttempt(
+                AttemptedAt: DateTime.UtcNow,
+                ProviderName: provider.Name,
+                ProviderMessageId: null,
+                IsSuccess: false,
+                ErrorMessage: result.Error));
 
             if (!result.IsRetryable)
             {
-                _logger.LogInformation(
-                    "Email provider {Provider} returned non-retryable failure for notification {NotificationId}; aborting chain",
-                    provider.Name, notification.Id);
-                return DeliveryOutcome.Failed(provider.Name, result.Error);
+                // Hard failure (e.g., invalid recipient, suppressed) — do not
+                // try secondary providers; the same input would fail there too.
+                logger.LogWarning(
+                    "Provider {Provider} returned non-retryable failure for notification {NotificationId}: {Error}",
+                    provider.Name, notification.Id, result.Error);
+                notification.MarkFailed(result.Error ?? $"non-retryable failure from {provider.Name}");
+                return;
             }
 
-            _logger.LogInformation(
-                "Email provider {Provider} returned retryable failure for notification {NotificationId}; advancing to next provider",
-                provider.Name, notification.Id);
+            // Retryable — fall through to the next provider in the list.
+            logger.LogInformation(
+                "Provider {Provider} retryable failure for notification {NotificationId}: {Error}; trying next",
+                provider.Name, notification.Id, result.Error);
         }
 
-        return DeliveryOutcome.Exhausted(lastError);
+        // All providers attempted, none succeeded and none asked us to stop.
+        logger.LogError(
+            "All {Count} providers exhausted for notification {NotificationId}",
+            _providers.Count, notification.Id);
+        notification.MarkFailed("all-providers-exhausted");
     }
 
-    private IAsyncPolicy<ProviderSendResult> BuildPolicy(string providerName)
+    /// <summary>Per-provider Polly v8 circuit breaker pipeline. Keep simple —
+    /// failure-ratio threshold + fixed break duration. Tunable via a future
+    /// EmailChannelResilienceOptions binding when the surface stabilises.</summary>
+    private static ResiliencePipeline BuildBreakerPipeline(string providerName)
     {
-        // Combined policy keyed per-provider so circuit-breaker state is
-        // isolated. shouldRetryResult also flips the breaker on
-        // ProviderSendResult.IsRetryable=true so a provider returning
-        // Retryable consistently is treated the same as one throwing.
-        var options = ResilienceOptions.ForExternalApi(providerName, includeBulkhead: false);
-        return _policyFactory.CreateCombinedPolicy<ProviderSendResult>(
-            options,
-            shouldRetryResult: r => r is { IsSuccess: false, IsRetryable: true });
+        return new ResiliencePipelineBuilder()
+            .AddCircuitBreaker(new CircuitBreakerStrategyOptions
+            {
+                FailureRatio = 1.0,
+                MinimumThroughput = EmailChannelResilienceConstants.CircuitBreakerFailureThreshold,
+                SamplingDuration = TimeSpan.FromSeconds(EmailChannelResilienceConstants.CircuitBreakerSamplingSeconds),
+                BreakDuration = TimeSpan.FromSeconds(EmailChannelResilienceConstants.CircuitBreakerBreakDurationSeconds),
+                Name = $"email-{providerName}-cb",
+            })
+            .Build();
     }
+}
 
-    private void RecordAttemptSafe(
-        Notification notification,
-        string providerName,
-        string? providerMessageId,
-        bool success,
-        string? errorMessage)
-    {
-        var attempt = new DeliveryAttempt(
-            DateTime.UtcNow,
-            providerName,
-            providerMessageId,
-            success,
-            errorMessage);
+/// <summary>
+/// Centralised tunables for the email-gateway breaker. Lives next to the
+/// gateway because it's gateway-specific (a future Infrastructure/Constants
+/// reorg may relocate alongside the broader ResilienceConstants).
+/// </summary>
+internal static class EmailChannelResilienceConstants
+{
+    /// <summary>Consecutive provider failures before the breaker opens.</summary>
+    public const int CircuitBreakerFailureThreshold = 5;
 
-        try
-        {
-            notification.RecordAttempt(attempt);
-        }
-        catch (NotImplementedException)
-        {
-            // TODO(notif-L3): wait for L1.A — until Notification.RecordAttempt
-            // is implemented, audit-trail rows are only visible via the
-            // gateway log. The dispatch consumer's own logging retains
-            // operator-level visibility.
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to record DeliveryAttempt for notification {NotificationId} via {Provider}",
-                notification.Id, providerName);
-        }
-    }
+    /// <summary>Polly v8 sampling window over which the failure ratio is computed.</summary>
+    public const double CircuitBreakerSamplingSeconds = 30;
+
+    /// <summary>How long the breaker stays open before half-open probing.</summary>
+    public const double CircuitBreakerBreakDurationSeconds = 30;
 }
