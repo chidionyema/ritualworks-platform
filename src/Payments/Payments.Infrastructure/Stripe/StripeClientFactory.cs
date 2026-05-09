@@ -1,6 +1,5 @@
 using Haworks.Payments.Application.Interfaces;
 using Haworks.Payments.Infrastructure.Options;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Stripe;
@@ -13,7 +12,6 @@ namespace Haworks.Payments.Infrastructure.Stripe;
 /// </summary>
 public sealed class StripeClientFactory : IStripeClientFactory
 {
-    private readonly IConfiguration _configuration;
     private readonly IOptions<PaymentProviderOptions> _options;
     private readonly ILogger<StripeClientFactory> _logger;
     private readonly SemaphoreSlim _clientLock = new(1, 1);
@@ -23,11 +21,9 @@ public sealed class StripeClientFactory : IStripeClientFactory
     private static readonly TimeSpan ClientCacheDuration = TimeSpan.FromMinutes(30);
 
     public StripeClientFactory(
-        IConfiguration configuration,
         IOptions<PaymentProviderOptions> options,
         ILogger<StripeClientFactory> logger)
     {
-        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -49,14 +45,19 @@ public sealed class StripeClientFactory : IStripeClientFactory
                 return _cachedClient;
             }
 
-            // Bind Stripe options to get keys. Configuration picks up from Vault (local) or Env (prod).
-            var stripeSecretKey = _configuration["Stripe:SecretKey"] 
-                                  ?? _configuration["Payments:Stripe:SecretKey"]
-                                  ?? _options.Value.Stripe.SecretKey;
-            
+            // PaymentProviderOptions binds from PaymentProviders:Stripe:*,
+            // populated from Vault (secret/payments/stripe) at boot via
+            // VaultConfigBootstrap. The legacy alternate config keys
+            // (Stripe:SecretKey, Payments:Stripe:SecretKey) were removed
+            // — single source of truth via IOptions, no env-var override
+            // smuggling a different account in.
+            var stripeSecretKey = _options.Value.Stripe.SecretKey;
+
             if (string.IsNullOrEmpty(stripeSecretKey))
             {
-                throw new InvalidOperationException("Stripe:SecretKey is not configured.");
+                throw new InvalidOperationException(
+                    "PaymentProviders:Stripe:SecretKey is not configured. "
+                    + "Verify Vault path secret/payments/stripe contains a SecretKey field.");
             }
             
             var baseUrl = _options.Value?.Stripe?.BaseUrl;
