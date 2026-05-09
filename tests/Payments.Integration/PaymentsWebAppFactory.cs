@@ -5,12 +5,12 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Testcontainers.PostgreSql;
 using Xunit;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.BuildingBlocks.Telemetry;
 using Haworks.BuildingBlocks.Resilience;
 using Haworks.BuildingBlocks.Testing.Authentication;
+using Haworks.BuildingBlocks.Testing.Containers;
 using Haworks.Payments.Application.Consumers;
 using Haworks.Payments.Api.Webhooks;
 using Haworks.Payments.Infrastructure;
@@ -20,20 +20,13 @@ namespace Haworks.Payments.Integration;
 
 public class PaymentsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _dbContainer = new PostgreSqlBuilder()
-        .WithImage("postgres:15-alpine")
-        .WithDatabase("payments")
-        .WithUsername("postgres")
-        .WithPassword("postgres")
-        .Build();
-
     public const string TestStripeSecret = "whsec_test";
 
-    private string ConnString => _dbContainer.GetConnectionString();
+    private string ConnString { get; set; } = string.Empty;
 
     public async Task InitializeAsync()
     {
-        await _dbContainer.StartAsync();
+        ConnString = await SharedTestPostgres.CreateDatabaseAsync("payments");
 
         // Top-level Program.cs reads builder.Configuration before WAF's
         // ConfigureAppConfiguration fires, so secrets must already be visible
@@ -51,9 +44,10 @@ public class PaymentsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
         JwtTestDefaults.SetTestEnvironmentVariables();
     }
 
-    public new async Task DisposeAsync()
+    public new Task DisposeAsync()
     {
-        await _dbContainer.StopAsync();
+        // Shared Postgres container outlives the fixture intentionally.
+        return Task.CompletedTask;
     }
 
     public async Task EnsureSchemaAsync()

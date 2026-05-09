@@ -4,12 +4,12 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Testcontainers.PostgreSql;
 using Xunit;
 using Haworks.CheckoutOrchestrator.Application.Sagas;
 using Haworks.CheckoutOrchestrator.Domain;
 using Haworks.CheckoutOrchestrator.Infrastructure;
 using Haworks.BuildingBlocks.Testing.Authentication;
+using Haworks.BuildingBlocks.Testing.Containers;
 
 namespace Haworks.CheckoutOrchestrator.Integration;
 
@@ -23,18 +23,11 @@ namespace Haworks.CheckoutOrchestrator.Integration;
 /// </summary>
 public sealed class CheckoutWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
-        .WithDatabase("checkout")
-        .WithUsername("postgres")
-        .WithPassword("postgres")
-        .Build();
-
-    public string ConnectionString => _postgres.GetConnectionString();
+    public string ConnectionString { get; private set; } = string.Empty;
 
     public async Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        ConnectionString = await SharedTestPostgres.CreateDatabaseAsync("checkout");
         JwtTestDefaults.SetTestEnvironmentVariables();
 
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Test");
@@ -45,7 +38,7 @@ public sealed class CheckoutWebAppFactory : WebApplicationFactory<Program>, IAsy
 
     async Task IAsyncLifetime.DisposeAsync()
     {
-        await _postgres.DisposeAsync();
+        // Shared Postgres container outlives the fixture intentionally.
         await base.DisposeAsync();
     }
 
