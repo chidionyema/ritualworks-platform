@@ -141,11 +141,37 @@ internal sealed class SendNotificationCommandHandler(
         Notification notification;
         try
         {
-            // Preferred path once L1.A lands a real factory.
-            notification = Notification.Create();
-            // TODO(notif-L1.G): once L1.A's Notification.Create accepts the
-            // command parameters, drop the reflection fallback below and
-            // remove this hydration helper entirely.
+            // L1.A's real factory is now in place — call it with the command
+            // parameters. The status passed in is the gate result (Created /
+            // Suppressed / RateLimited / QuietHours); for non-Created we still
+            // create the row so caller can query via GET later, then transition
+            // immediately via Mark<X>(reason) below.
+            notification = Notification.Create(
+                recipient: request.Recipient,
+                channel: request.Channel,
+                templateId: request.TemplateId,
+                idempotencyKey: idempotencyKey,
+                userId: request.UserId,
+                priority: request.Priority);
+
+            // If the gate returned a non-Created status, transition the
+            // freshly-created entity to that terminal state. The current
+            // NotificationStatus enum only has Suppressed + Failed as
+            // pre-send terminals; map non-Created results accordingly.
+            // TODO(notif-L1.G): when enum gains RateLimited/QuietHours,
+            // map them distinctly here.
+            if (status != NotificationStatus.Created)
+            {
+                if (status == NotificationStatus.Suppressed)
+                {
+                    notification.MarkFailed(errorMessage ?? "suppressed");
+                }
+                else
+                {
+                    notification.MarkFailed(errorMessage ?? status.ToString());
+                }
+            }
+            return notification;
         }
         catch (NotImplementedException)
         {
