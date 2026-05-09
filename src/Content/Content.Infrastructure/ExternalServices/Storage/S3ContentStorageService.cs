@@ -27,6 +27,7 @@ internal sealed class S3ContentStorageService : IContentStorageService
     private readonly StorageOptions _opts;
     private readonly ILogger<S3ContentStorageService> _logger;
     private readonly IAsyncPolicy _policy;
+    private readonly Protocol _presignProtocol;
 
     public S3ContentStorageService(
         IAmazonS3 s3,
@@ -37,6 +38,13 @@ internal sealed class S3ContentStorageService : IContentStorageService
         _s3 = s3;
         _opts = opts.Value;
         _logger = logger;
+        // The AWS SDK defaults presigned URL Protocol to HTTPS regardless
+        // of AmazonS3Config.UseHttp. Pin the protocol per-request to the
+        // scheme of ServiceURL so LocalStack (HTTP) and Tigris/AWS (HTTPS)
+        // both work without test-environment-specific code.
+        _presignProtocol = _opts.ServiceUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            ? Protocol.HTTP
+            : Protocol.HTTPS;
         _policy = policyFactory.CreatePolicy(new ResilienceOptions
         {
             ServiceName = PolicyServiceName,
@@ -62,6 +70,7 @@ internal sealed class S3ContentStorageService : IContentStorageService
             Verb = HttpVerb.PUT,
             ContentType = contentType,
             Expires = DateTime.UtcNow.Add(expiry),
+            Protocol = _presignProtocol,
         };
         return Task.FromResult(_s3.GetPreSignedURL(req));
     }
@@ -91,6 +100,7 @@ internal sealed class S3ContentStorageService : IContentStorageService
                 Expires = expiry,
                 UploadId = init.UploadId,
                 PartNumber = partNumber,
+                Protocol = _presignProtocol,
             };
             return new PresignedPartUrl(partNumber, _s3.GetPreSignedURL(partReq));
         }).ToArray();
@@ -163,6 +173,7 @@ internal sealed class S3ContentStorageService : IContentStorageService
             Key = objectKey,
             Verb = HttpVerb.GET,
             Expires = DateTime.UtcNow.Add(expiry),
+            Protocol = _presignProtocol,
         };
         return Task.FromResult(_s3.GetPreSignedURL(req));
     }
