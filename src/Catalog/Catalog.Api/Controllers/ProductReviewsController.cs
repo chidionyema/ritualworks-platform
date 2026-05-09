@@ -4,6 +4,7 @@ using Haworks.Catalog.Api.Models;
 using Haworks.Catalog.Application.Commands;
 using Haworks.Catalog.Application.Queries;
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Extensions;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -53,7 +54,7 @@ public class ProductReviewsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetReview(Guid productId, Guid id, CancellationToken cancellationToken)
     {
-        var userId = _currentUserService.UserId;
+        var userId = HttpContext.GetForwardedUserId();
         bool isAdmin = User.IsInRole("Admin");
 
         var result = await _mediator.Send(new GetProductReviewQuery(productId, id, userId, isAdmin), cancellationToken);
@@ -84,7 +85,7 @@ public class ProductReviewsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateReview(Guid productId, [FromBody] CreateProductReviewRequest request, CancellationToken cancellationToken)
     {
-        var userId = _currentUserService.UserId;
+        var userId = HttpContext.GetForwardedUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -126,7 +127,7 @@ public class ProductReviewsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateReview(Guid productId, Guid id, [FromBody] CreateProductReviewRequest request, CancellationToken cancellationToken)
     {
-        var userId = _currentUserService.UserId;
+        var userId = HttpContext.GetForwardedUserId();
         bool isAdmin = User.IsInRole("Admin");
 
         var result = await _mediator.Send(new UpdateProductReviewCommand(
@@ -164,7 +165,7 @@ public class ProductReviewsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteReview(Guid productId, Guid id, CancellationToken cancellationToken)
     {
-        var userId = _currentUserService.UserId;
+        var userId = HttpContext.GetForwardedUserId();
         bool isAdmin = User.IsInRole("Admin");
 
         var result = await _mediator.Send(new DeleteProductReviewCommand(productId, id, userId, isAdmin), cancellationToken);
