@@ -2,7 +2,10 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Haworks.BuildingBlocks.Messaging;
+using Haworks.BuildingBlocks.Persistence;
+using Haworks.BuildingBlocks.Vault;
 using Haworks.CheckoutOrchestrator.Application.Sagas;
 
 namespace Haworks.CheckoutOrchestrator.Infrastructure;
@@ -18,12 +21,31 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "ConnectionStrings:checkout is missing. Aspire injects it via WithReference(checkoutDb).");
 
-        services.AddDbContext<CheckoutDbContext>(options =>
+        // Vault: dynamic Postgres creds via DynamicCredentialsConnectionInterceptor.
+        // Role haworks-checkout-orchestrator matches infra/vault/database/roles.json.
+        var vaultEnabled = configuration.GetValue("Vault:Enabled", false)
+            && !env.IsEnvironment("Test");
+        if (vaultEnabled)
+        {
+            services.AddVaultIntegration(configuration);
+        }
+
+        services.AddDbContext<CheckoutDbContext>((sp, options) =>
+        {
             options.UseNpgsql(connectionString, npgsql =>
             {
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "checkout");
                 npgsql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromMilliseconds(500), errorCodesToAdd: null);
-            }));
+            });
+
+            if (vaultEnabled)
+            {
+                options.AddInterceptors(new DynamicCredentialsConnectionInterceptor(
+                    sp.GetRequiredService<IVaultService>(),
+                    roleName: "haworks-checkout-orchestrator",
+                    sp.GetRequiredService<ILogger<DynamicCredentialsConnectionInterceptor>>()));
+            }
+        });
 
         if (env.IsEnvironment("Test"))
         {
