@@ -20,7 +20,7 @@ namespace Haworks.Notifications.Application.Templates;
 ///         template authors at the dispatch boundary.</item>
 /// </list>
 /// </summary>
-internal sealed class ScribanTemplateRenderer : ITemplateRenderer
+public sealed class ScribanTemplateRenderer : ITemplateRenderer
 {
     private static readonly IReadOnlyList<string> EmptyRequired = Array.Empty<string>();
 

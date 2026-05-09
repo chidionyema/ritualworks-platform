@@ -11,7 +11,7 @@ namespace Haworks.Notifications.Application.Templates;
 /// Returns <c>null</c> (typed as the non-nullable interface return for
 /// L0 ABI compatibility) when no active template exists for either locale.
 /// </summary>
-internal sealed class TemplateSelector : ITemplateSelector
+public sealed class TemplateSelector : ITemplateSelector
 {
     private const string WildcardLocale = "*";
 
