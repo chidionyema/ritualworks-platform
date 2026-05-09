@@ -61,8 +61,22 @@ internal sealed class OrderRepository(OrderDbContext db) : IOrderRepository
 
     public async Task<bool> MarkStockReleasedAsync(Guid orderId, OrderStatus newStatus, string reason, CancellationToken ct = default)
     {
+        // Defense-in-depth: terminal-status guard at the DB level. The
+        // consumer's pre-check (GetByIdTracked → if-terminal-return) is a
+        // TOCTOU race when CheckoutSessionExpiredEvent arrives concurrently
+        // with PaymentCompletedEvent — the pre-check sees Created, then
+        // PaymentCompletedConsumer commits Created→Paid before this update
+        // runs. Without the WHERE-clause guard we'd transition Paid→Expired
+        // (single rowsAffected check passes since Status != Expired). The
+        // additional NotIn(terminal) ensures the update only fires when the
+        // order is still in a non-terminal state, matching the consumer's
+        // intent.
         var rowsAffected = await db.Orders
-            .Where(o => o.Id == orderId && o.Status != newStatus)
+            .Where(o => o.Id == orderId
+                && o.Status != newStatus
+                && o.Status != OrderStatus.Paid
+                && o.Status != OrderStatus.Expired
+                && o.Status != OrderStatus.Abandoned)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(o => o.Status, newStatus)
                 .SetProperty(o => o.AbandonReason, reason), ct);
