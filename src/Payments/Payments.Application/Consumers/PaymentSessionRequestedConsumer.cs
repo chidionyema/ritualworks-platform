@@ -2,6 +2,7 @@ using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Haworks.Contracts.Payments;
+using Haworks.Payments.Application.Telemetry;
 
 namespace Haworks.Payments.Application.Consumers;
 
@@ -46,6 +47,14 @@ public sealed class PaymentSessionRequestedConsumer(
     {
         var evt = context.Message;
         var isDemoMode = configuration.GetValue<bool>("Payments:DemoMode", true);
+
+        using var activity = PaymentsActivities.Source.StartActivity("payments.session.create");
+        activity?.SetTag("order.id", evt.OrderId);
+        activity?.SetTag("saga.id", evt.SagaId);
+        activity?.SetTag("payment.amount_cents", (long)(evt.Amount * 100m));
+        activity?.SetTag("payment.currency", evt.Currency);
+        activity?.SetTag("payment.provider", isDemoMode ? "demo-mock" : "stripe");
+        activity?.SetTag("payment.demo_mode", isDemoMode);
 
         if (isDemoMode)
         {

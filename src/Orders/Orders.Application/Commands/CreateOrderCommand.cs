@@ -1,6 +1,7 @@
 using FluentValidation;
 using MediatR;
 using Haworks.Contracts.Orders;
+using Haworks.Orders.Application.Telemetry;
 
 namespace Haworks.Orders.Application.Commands;
 
@@ -28,6 +29,13 @@ internal sealed class CreateOrderCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateOrderCommand request, CancellationToken ct)
     {
+        using var activity = OrdersActivities.Source.StartActivity("orders.create");
+        activity?.SetTag("customer.id", request.UserId);
+        activity?.SetTag("order.total_cents", (long)(request.TotalAmount * 100m));
+        activity?.SetTag("order.currency", request.Currency);
+        activity?.SetTag("order.item_count", request.Items.Count);
+        activity?.SetTag("saga.id", request.SagaId);
+
         // Idempotency: if an order already exists for this SagaId, return its
         // Id rather than creating a duplicate. SagaId has a unique index on
         // the Orders table — the alternative is hitting that constraint at
