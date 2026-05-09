@@ -169,7 +169,27 @@ public sealed class RotatingJwtSigningKeyRing : IHostedService, IJwtSigningKeyRi
             pem = rsa.ExportRSAPrivateKeyPem();
         }
 
-        var entry = BuildEntry(pem!, JwtSigningKeyStatus.Active, _time.GetUtcNow(), retiredAt: null);
+        JwtSigningKeyEntry entry;
+        try
+        {
+            entry = BuildEntry(pem!, JwtSigningKeyStatus.Active, _time.GetUtcNow(), retiredAt: null);
+        }
+        catch (Exception ex)
+        {
+            // Vault has SOMETHING at this path but it isn't a parseable PEM
+            // RSA key. Most likely cause: seed.sh writes a placeholder string
+            // ("dev-only-not-for-prod") that hasn't been replaced by a real
+            // operator-supplied key yet. Fall back to an ephemeral key so
+            // identity boots — same behavior as "no key set". Operators see
+            // the warning + can `vault kv put` a real PEM at any time.
+            _logger.LogWarning(ex,
+                "Vault key at {Mount}/{Path}#{Field} is not a parseable PEM RSA private key; generating an ephemeral key. Replace with `vault kv put` of a real RSA PEM to start using a persistent key.",
+                VaultKvMount, VaultKvPath, VaultKvField);
+
+            using var rsa = RSA.Create(2048);
+            pem = rsa.ExportRSAPrivateKeyPem();
+            entry = BuildEntry(pem, JwtSigningKeyStatus.Active, _time.GetUtcNow(), retiredAt: null);
+        }
 
         _lock.EnterWriteLock();
         try
@@ -235,7 +255,21 @@ public sealed class RotatingJwtSigningKeyRing : IHostedService, IJwtSigningKeyRi
             {
                 if (rotated)
                 {
-                    var newEntry = BuildEntry(latestPem!, JwtSigningKeyStatus.Active, now, retiredAt: null);
+                    JwtSigningKeyEntry newEntry;
+                    try
+                    {
+                        newEntry = BuildEntry(latestPem!, JwtSigningKeyStatus.Active, now, retiredAt: null);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Vault has a new value but it's not parseable PEM. Don't
+                        // crash the poller — keep the current ring, log the bad
+                        // input, and try again next tick (operator may fix it).
+                        _logger.LogWarning(ex,
+                            "Vault key at {Mount}/{Path}#{Field} changed but is not a parseable PEM RSA private key; keeping current ring.",
+                            VaultKvMount, VaultKvPath, VaultKvField);
+                        return;
+                    }
 
                     // Demote whatever was Active to Retiring with a 1h grace.
                     for (var i = 0; i < _entries.Count; i++)
