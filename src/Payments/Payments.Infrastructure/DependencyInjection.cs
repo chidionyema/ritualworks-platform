@@ -3,10 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.BuildingBlocks.Caching;
+using Haworks.BuildingBlocks.Persistence;
 using Haworks.BuildingBlocks.Resilience;
 using Haworks.BuildingBlocks.Telemetry;
+using Haworks.BuildingBlocks.Vault;
 using Haworks.Payments.Application.Consumers;
 using Haworks.Payments.Application.Interfaces;
 using Haworks.Payments.Infrastructure.Messaging;
@@ -29,11 +32,39 @@ public static class DependencyInjection
             ?? configuration.GetConnectionString("paymentsdb")
             ?? throw new InvalidOperationException("ConnectionStrings:payments is missing.");
 
-        services.AddDbContext<PaymentDbContext>(options =>
+        // Vault integration (gated). When enabled, IVaultService is registered
+        // so the DynamicCredentialsConnectionInterceptor can swap the static
+        // username/password in the connection string for short-TTL Vault-issued
+        // credentials on every connection open. AppRole creds (Vault:RoleId,
+        // Vault:SecretId, Vault:SecretIdIsWrapped) come from Fly secrets via
+        // ci-stage-vault-creds.sh.
+        var vaultEnabled = configuration.GetValue("Vault:Enabled", false)
+            && !env.IsEnvironment("Test");
+        if (vaultEnabled)
+        {
+            services.AddVaultIntegration(configuration);
+        }
+
+        services.AddDbContext<PaymentDbContext>((sp, options) =>
+        {
             options.UseNpgsql(connectionString, npgsql =>
             {
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "payments");
-            }));
+            });
+
+            // Wire dynamic Postgres credential rotation via Vault. Role name
+            // matches infra/vault/database/roles.json + the per-service
+            // policy granted by deploy/vault/seed.sh. 10-min default TTL —
+            // every restart and every renewal cycle gets a fresh ephemeral
+            // postgres user; old ones expire at the lease boundary.
+            if (vaultEnabled)
+            {
+                options.AddInterceptors(new DynamicCredentialsConnectionInterceptor(
+                    sp.GetRequiredService<IVaultService>(),
+                    roleName: "haworks-payments",
+                    sp.GetRequiredService<ILogger<DynamicCredentialsConnectionInterceptor>>()));
+            }
+        });
 
         services.AddScoped<IPaymentRepository, PaymentRepository>();
 

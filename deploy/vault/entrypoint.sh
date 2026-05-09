@@ -88,6 +88,16 @@ seed_token() {
 }
 if vault status -format=json | jq -e '.sealed == false' >/dev/null 2>&1; then
   if TOKEN="$(seed_token)" && [ -n "$TOKEN" ]; then
+    # Enable audit logging to a file on the persistent volume, idempotent.
+    # Required for compliance + post-incident review: every authenticated
+    # Vault op (login, kv read, dynamic creds issuance, secret-id wrap)
+    # gets a tamper-evident HMAC'd line. Skipping when already enabled
+    # because vault audit enable returns non-zero on duplicate device.
+    if ! VAULT_TOKEN="$TOKEN" vault audit list -format=json 2>/dev/null | jq -e '."file/"' >/dev/null 2>&1; then
+      echo "[entrypoint] enabling audit log at /vault/data/audit.log"
+      VAULT_TOKEN="$TOKEN" vault audit enable file file_path=/vault/data/audit.log >/dev/null
+    fi
+
     echo "[entrypoint] running seed.sh"
     if VAULT_TOKEN="$TOKEN" /usr/local/bin/seed.sh; then
       echo "[entrypoint] seed complete"

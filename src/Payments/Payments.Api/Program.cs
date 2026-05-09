@@ -2,14 +2,48 @@ using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BuildingBlocks.Idempotency;
 using Haworks.BuildingBlocks.Persistence;
+using Haworks.BuildingBlocks.Vault;
 using Haworks.Payments.Api.Webhooks;
 using Haworks.Payments.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+
+// Vault: pull payments-svc's owned secrets (Stripe + PayPal) into
+// IConfiguration BEFORE DI build, so the existing IOptions<PaymentProviderOptions>
+// binding in Payments.Infrastructure picks them up without code changes.
+//
+// Per-service KV namespacing per ADR-0009 — payments-svc's AppRole policy
+// only grants secret/data/payments/* read.
+//
+// Skipped in Test environment where the integration fixture provides config
+// directly without a real Vault.
+if (builder.Configuration.GetValue("Vault:Enabled", false)
+    && !builder.Environment.IsEnvironment("Test"))
+{
+    var bootstrapLogger = LoggerFactory
+        .Create(b => b.AddConsole())
+        .CreateLogger("VaultBootstrap");
+
+    var vaultSecrets = await VaultConfigBootstrap.LoadAsync(
+        builder.Configuration,
+        new[]
+        {
+            // KV keys (SecretKey, WebhookSecret, ...) become config keys
+            // PaymentProviders:Stripe:SecretKey via the ConfigPrefix, lining
+            // up exactly with PaymentProviderOptions binding (Stripe nested
+            // under PaymentProviders).
+            new VaultConfigBootstrap.KvMapping("payments/stripe", "PaymentProviders:Stripe"),
+            new VaultConfigBootstrap.KvMapping("payments/paypal", "PaymentProviders:PayPal"),
+        },
+        bootstrapLogger);
+
+    builder.Configuration.AddInMemoryCollection(vaultSecrets);
+}
 
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddApplication(builder.Configuration);
