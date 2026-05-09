@@ -15,6 +15,12 @@ logs/
 tests/
 docs/
 infra/
+# Un-ignore the vault manifest subtree — fly.vault.toml's Dockerfile
+# COPYs infra/vault/ into /vault/manifests/ (per-service AppRole + policy
+# + DB-role layout, single source of truth shared with deploy/aspire/
+# vault-init.sh). Other services don't need infra/ in their build context.
+!infra/vault/
+!infra/vault/**
 deploy/argocd/
 deploy/helm/
 deploy/aspire/
