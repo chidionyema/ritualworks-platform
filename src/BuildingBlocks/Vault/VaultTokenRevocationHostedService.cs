@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -14,9 +15,18 @@ namespace Haworks.BuildingBlocks.Vault;
 /// Failures during revoke are logged but never propagated — shutdown is
 /// in flight and there's nothing useful to do on failure (the token
 /// expires naturally at its TTL regardless).
+///
+/// **Lazy <see cref="IVaultService"/> resolution.** The service is
+/// resolved via <see cref="IServiceProvider"/> at shutdown, NOT injected
+/// in the constructor. Constructor injection would force eager
+/// <see cref="VaultService"/> construction at host start — which fails
+/// in environments where Vault is configured-but-not-bootable (e.g.
+/// integration tests with <c>Vault:Enabled=true</c> but no
+/// <c>Vault:Address</c>) or where AddVaultIntegration was called but
+/// no other code path actually exercises Vault.
 /// </summary>
 internal sealed class VaultTokenRevocationHostedService(
-    IVaultService vault,
+    IServiceProvider services,
     IHostApplicationLifetime lifetime,
     ILogger<VaultTokenRevocationHostedService> logger
 ) : IHostedService
@@ -37,6 +47,24 @@ internal sealed class VaultTokenRevocationHostedService(
 
     private void OnStopping()
     {
+        // Resolve IVaultService lazily so this hosted service doesn't trigger
+        // VaultService construction (and its config validation) at host start.
+        // If the service couldn't be constructed (e.g. config invalid in tests),
+        // GetService returns null OR throws — either way we cleanly skip the
+        // revoke since there's nothing to revoke.
+        IVaultService? vault;
+        try
+        {
+            vault = services.GetService<IVaultService>();
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex,
+                "[VaultTokenRevocation] IVaultService not resolvable at shutdown; skipping revoke");
+            return;
+        }
+        if (vault is null) return;
+
         // ApplicationStopping fires synchronously during shutdown — block on
         // the async revoke with a tight timeout so we don't hang the
         // shutdown sequence if Vault is unreachable.
