@@ -111,8 +111,23 @@ if [[ -z "${MEILI_MASTER_KEY:-}" ]]; then
   echo "    written to $ENV_FILE (gitignored)"
 fi
 
+# Auto-generate the vault-pg sandbox Postgres password on first run
+# (32-char alphanumeric — kept simple to avoid URL-encoding pain in the
+# connection string staged on the vault app). This DB is exclusively
+# used by the live vault server's database secrets engine for the
+# portfolio rotation demo; vault needs admin rights, hence a sandboxed
+# Postgres rather than the shared Neon prod DB.
+if [[ -z "${VAULT_PG_PASSWORD:-}" ]]; then
+  echo "==> Generating vault-pg Postgres password (first run)"
+  # 32 chars from [A-Za-z0-9]. LC_ALL=C makes tr safe under UTF-8 locales.
+  VAULT_PG_PASSWORD="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+  upsert_env_var VAULT_PG_PASSWORD "$VAULT_PG_PASSWORD"
+  echo "    written to $ENV_FILE (gitignored)"
+fi
+
 PUBLIC_APP="ritualworks-bffweb"
 VAULT_APP="ritualworks-vault"
+VAULT_PG_APP="ritualworks-vault-pg"
 INTERNAL_APPS=(
   ritualworks-identity
   ritualworks-catalog
@@ -125,10 +140,10 @@ INTERNAL_APPS=(
 if [[ "$DEPLOY_CONTENT" == "true" ]]; then
   INTERNAL_APPS+=(ritualworks-content)
 fi
-# Vault is created here but kept out of INTERNAL_APPS because it doesn't take
-# the standard common secrets (no Postgres/RabbitMQ/Redis); secrets staged
-# separately below.
-ALL_APPS=("$PUBLIC_APP" "$VAULT_APP" "${INTERNAL_APPS[@]}")
+# Vault + vault-pg are created here but kept out of INTERNAL_APPS because
+# they don't take the standard common secrets (no RabbitMQ/Redis, and
+# their Postgres wiring is bespoke); secrets staged separately below.
+ALL_APPS=("$PUBLIC_APP" "$VAULT_APP" "$VAULT_PG_APP" "${INTERNAL_APPS[@]}")
 
 echo "==> Creating Fly apps (skip if exists)"
 for app in "${ALL_APPS[@]}"; do
@@ -231,6 +246,34 @@ if [[ ${#bff_extra[@]} -gt 0 ]]; then
 else
   set_secrets "$PUBLIC_APP" "${common[@]}"
 fi
+
+echo "==> Vault Postgres setup (sandboxed DB for vault's database secrets engine)"
+
+# Sandboxed Postgres exclusively for the live vault server's database
+# secrets engine (rotation demo). Vault needs admin rights to create
+# and revoke ephemeral roles, so we cannot point it at the shared Neon
+# prod DB used by the real services.
+if ! flyctl volumes list -a "$VAULT_PG_APP" 2>/dev/null | grep -q "vault_pg_data"; then
+  echo "    creating vault_pg_data volume"
+  flyctl volumes create vault_pg_data --size 1 --region "$REGION" -a "$VAULT_PG_APP" --yes
+else
+  echo "    vault_pg_data volume exists"
+fi
+
+# postgres-flex reads OPERATOR_PASSWORD (and POSTGRES_PASSWORD as a
+# fallback alias used by some upstream tooling) on first boot to set the
+# `postgres` superuser password. Re-staging on subsequent runs is a
+# no-op for the running DB but keeps Fly's secret store in sync with
+# .env.local.
+set_secrets "$VAULT_PG_APP" \
+  "OPERATOR_PASSWORD=$VAULT_PG_PASSWORD" \
+  "POSTGRES_PASSWORD=$VAULT_PG_PASSWORD"
+
+# Stage the connection URL on the vault app so deploy/vault/seed.sh
+# (different agent owns it) can wire up the database secrets engine
+# without re-deriving credentials.
+set_secrets "$VAULT_APP" \
+  "VAULT_PG_CONNECTION_URL=postgres://postgres:$VAULT_PG_PASSWORD@ritualworks-vault-pg.internal:5432/postgres?sslmode=disable"
 
 echo "==> Vault setup"
 

@@ -1,0 +1,46 @@
+# Dedicated Postgres for the live vault server (`ritualworks-vault`) to
+# manage as its database secrets engine — vault needs admin rights on
+# this DB to create/revoke ephemeral roles for the rotation demo, so we
+# cannot reuse the production Neon DB shared by the real services.
+#
+# Internal-only. Reach from other Fly machines (notably the vault app)
+# at:
+#   postgres://postgres:$VAULT_PG_PASSWORD@ritualworks-vault-pg.internal:5432/postgres
+#
+# The OPERATOR_PASSWORD / POSTGRES_PASSWORD secrets are staged by
+# deploy/fly/bootstrap.sh on first run; the same value is also staged on
+# the vault app as VAULT_PG_CONNECTION_URL so deploy/vault/seed.sh can
+# wire up the database secrets engine.
+
+app            = "ritualworks-vault-pg"
+primary_region = "iad"
+
+[build]
+  image = "flyio/postgres-flex:15"
+
+[env]
+  PRIMARY_REGION = "iad"
+
+[mounts]
+  source       = "vault_pg_data"
+  destination  = "/data"
+  initial_size = "1gb"
+
+# No [http_service] / no public IPs — internal-only via 6PN .internal DNS.
+# Postgres listens on TCP 5432 directly; reachable from sibling Fly apps
+# in the same org.
+[[services]]
+  internal_port = 5432
+  protocol      = "tcp"
+  auto_stop_machines   = "off"   # stateful — never autostop the volume's machine
+  auto_start_machines  = true
+  min_machines_running = 1
+  processes            = ["app"]
+
+  [[services.ports]]
+    port = 5432
+
+[[vm]]
+  memory   = "256mb"
+  cpu_kind = "shared"
+  cpus     = 1

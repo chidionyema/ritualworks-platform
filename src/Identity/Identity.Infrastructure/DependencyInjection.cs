@@ -8,6 +8,7 @@ using Haworks.BuildingBlocks.Persistence;
 using Haworks.BuildingBlocks.Caching;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.BuildingBlocks.Vault;
+using Haworks.Identity.Infrastructure.Authentication;
 
 namespace Haworks.Identity.Infrastructure;
 
@@ -168,48 +169,37 @@ public static class DependencyInjection
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 
         // RSA signing keypair for JWT (RS256). Two paths:
-        //  - Vault:Enabled=true  → VaultJwtSigningKeyProvider reads/writes
-        //                          secret/identity/jwt-signing in Vault.
-        //                          Program.cs calls InitializeAsync at startup.
+        //  - Vault:Enabled=true  → RotatingJwtSigningKeyRing polls
+        //                          secret/identity/jwt#signing_key from Vault
+        //                          every 30s and maintains a key ring with a
+        //                          1-hour grace for the previous Active key
+        //                          (zero-downtime rotation). Both the ring
+        //                          (singleton + IHostedService) and the
+        //                          IJwtSigningKeyProvider adapter are
+        //                          registered. /.well-known/jwks.json is
+        //                          served from the ring's full key set.
         //  - Vault:Enabled=false → ConfigJwtSigningKeyProvider reads
         //                          Jwt:SigningKeyPem (raw or base64 PEM) from
         //                          configuration. Used on Fly where there is
-        //                          no Vault container.
-        // Singleton — keypair lives for the process lifetime.
+        //                          no Vault container. No rotation in this
+        //                          path — restart picks up new config.
+        // Singleton — keypair / ring lives for the process lifetime.
         services.AddSingleton<IVaultAppRoleAuthenticator, VaultAppRoleAuthenticator>();
         if (configuration.GetValue("Vault:Enabled", false))
         {
+            // The rotating ring depends on IVaultService (already registered
+            // by AddVaultIntegration above). Register it as both the ring
+            // interface and as an IHostedService so the background poll loop
+            // starts at app boot.
+            services.AddSingleton<RotatingJwtSigningKeyRing>();
+            services.AddSingleton<IJwtSigningKeyRing>(sp => sp.GetRequiredService<RotatingJwtSigningKeyRing>());
+            services.AddHostedService(sp => sp.GetRequiredService<RotatingJwtSigningKeyRing>());
+
+            // Adapter — JwtTokenService and JwtBearer post-config still
+            // consume IJwtSigningKeyProvider; the adapter delegates to the
+            // ring's current Active entry.
             services.AddSingleton<IJwtSigningKeyProvider>(sp =>
-            {
-                var cfg     = sp.GetRequiredService<IConfiguration>();
-                var address = cfg["Vault:Address"] ?? throw new InvalidOperationException("Vault:Address missing");
-
-                // Mirror VaultConfigBootstrap: prefer direct config (Vault:RoleId
-                // + Vault:SecretId, staged as Fly secrets at bootstrap time);
-                // fall back to file paths only when direct creds are absent.
-                // Without this branch the JwtSigningKeyProvider tries to read
-                // /tmp/vault/role_id which doesn't exist in direct-cred mode.
-                var directRoleId   = cfg["Vault:RoleId"];
-                var directSecretId = cfg["Vault:SecretId"];
-
-                string roleId;
-                string secretId;
-                if (!string.IsNullOrWhiteSpace(directRoleId) && !string.IsNullOrWhiteSpace(directSecretId))
-                {
-                    roleId = directRoleId.Trim();
-                    secretId = directSecretId.Trim();
-                }
-                else
-                {
-                    var roleIdPath   = cfg["Vault:RoleIdPath"]   ?? throw new InvalidOperationException("Vault:RoleIdPath missing");
-                    var secretIdPath = cfg["Vault:SecretIdPath"] ?? throw new InvalidOperationException("Vault:SecretIdPath missing");
-                    roleId   = File.ReadAllText(roleIdPath).Trim();
-                    secretId = File.ReadAllText(secretIdPath).Trim();
-                }
-
-                var auth = sp.GetRequiredService<IVaultAppRoleAuthenticator>();
-                return new VaultJwtSigningKeyProvider(address, "identity", auth, roleId, secretId);
-            });
+                new RotatingJwtSigningKeyProvider(sp.GetRequiredService<IJwtSigningKeyRing>()));
         }
         else
         {

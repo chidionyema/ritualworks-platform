@@ -74,3 +74,60 @@ done
 
 ROLE_ID=$(vault read -field=role_id auth/approle/role/haworks-identity-app/role-id)
 echo "[seed] done. role_id=${ROLE_ID:0:8}..."
+
+# ---------------------------------------------------------------------------
+# Database secrets engine: dynamic short-TTL Postgres credentials.
+#
+# Vault issues per-request Postgres users for the haworks-identity role,
+# scoped to a dedicated Fly Postgres app (ritualworks-vault-pg). The
+# operator credentials Vault uses to CREATE ROLE on demand are supplied
+# via env vars staged by deploy/fly/bootstrap.sh:
+#
+#   VAULT_PG_OPERATOR_USERNAME  (default "postgres")
+#   VAULT_PG_OPERATOR_PASSWORD  (REQUIRED — no default; skip block if unset)
+#
+# When VAULT_PG_OPERATOR_PASSWORD is unset (e.g. demo Postgres not yet
+# deployed) we log a warning and skip — the AppRole/KV setup above is
+# still complete, so identity can boot with static secrets only.
+# ---------------------------------------------------------------------------
+VAULT_PG_OPERATOR_USERNAME="${VAULT_PG_OPERATOR_USERNAME:-postgres}"
+
+if [ -z "${VAULT_PG_OPERATOR_PASSWORD:-}" ]; then
+  echo "[seed] WARN: VAULT_PG_OPERATOR_PASSWORD not set — skipping database"
+  echo "[seed]       secrets engine setup. Stage the secret via bootstrap.sh"
+  echo "[seed]       once ritualworks-vault-pg is deployed, then redeploy."
+else
+  echo "[seed] enabling database secrets engine (if missing)..."
+  if ! vault secrets list -format=json | jq -e '."database/"' >/dev/null 2>&1; then
+    vault secrets enable database
+  fi
+
+  # Configure the connection. `vault write database/config/<name>` is an
+  # upsert: re-running with the same values is a no-op, and rotated
+  # operator passwords flow through on next boot. allowed_roles must be
+  # set explicitly — vault refuses to issue creds for a role unless its
+  # name is in the connection's allow-list.
+  echo "[seed] configuring database connection vault-pg..."
+  vault write database/config/vault-pg \
+    plugin_name=postgresql-database-plugin \
+    allowed_roles="haworks-identity" \
+    connection_url="postgresql://{{username}}:{{password}}@ritualworks-vault-pg.internal:5432/postgres?sslmode=disable" \
+    username="$VAULT_PG_OPERATOR_USERNAME" \
+    password="$VAULT_PG_OPERATOR_PASSWORD" >/dev/null
+
+  # Define the dynamic role. {{name}} and {{password}} are vault's
+  # standard template variables — vault substitutes a unique generated
+  # username (prefixed with the role name) and a strong random password
+  # at lease-creation time. default_ttl=10m keeps blast radius small;
+  # max_ttl=1h caps lease renewals so even a stuck client can't hold a
+  # credential indefinitely.
+  echo "[seed] writing database role haworks-identity..."
+  vault write database/roles/haworks-identity \
+    db_name=vault-pg \
+    creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; GRANT CONNECT ON DATABASE postgres TO \"{{name}}\"; GRANT USAGE ON SCHEMA public TO \"{{name}}\";" \
+    default_ttl="10m" \
+    max_ttl="1h" >/dev/null
+
+  echo "[seed] database engine ready. Verify with:"
+  echo "[seed]   vault read database/creds/haworks-identity"
+fi

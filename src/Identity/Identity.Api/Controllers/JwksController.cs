@@ -1,4 +1,7 @@
+using System.Security.Cryptography;
 using Haworks.BuildingBlocks.Vault;
+using Haworks.Identity.Infrastructure.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 
@@ -6,50 +9,79 @@ namespace Haworks.Identity.Api.Controllers;
 
 /// <summary>
 /// JWKS (JSON Web Key Set) endpoint per RFC 7517.
-/// Downstream services fetch the public RSA key from here to validate JWTs
-/// signed by identity-svc — eliminating the need for a shared symmetric
-/// secret to be distributed and rotated across N services.
+///
+/// Downstream services fetch the public RSA key(s) from here to validate
+/// JWTs signed by identity-svc — eliminating the need for a shared
+/// symmetric secret across N services.
+///
+/// During key rotation the response contains both the new Active key AND
+/// any recently-retired keys still inside their grace window, so tokens
+/// signed under the previous key remain validatable until the grace window
+/// elapses.
 ///
 /// Standard discovery path: /.well-known/jwks.json
 /// </summary>
 [ApiController]
-[Route(".well-known")]
+[AllowAnonymous]
+[Route(".well-known/jwks.json")]
 public sealed class JwksController : ControllerBase
 {
+    private readonly IJwtSigningKeyRing? _ring;
     private readonly IJwtSigningKeyProvider _signingKeyProvider;
 
-    public JwksController(IJwtSigningKeyProvider signingKeyProvider)
+    public JwksController(
+        IJwtSigningKeyProvider signingKeyProvider,
+        IJwtSigningKeyRing? ring = null)
     {
         _signingKeyProvider = signingKeyProvider;
+        _ring = ring;
     }
 
     /// <summary>
     /// Returns the active public signing keys in JWK Set format.
-    /// During key rotation this would return both the previous and new
-    /// keys so consumers can validate tokens signed by either; for now
-    /// it's a single-key set.
+    /// When the rotating ring is registered (Vault-backed deployments),
+    /// this includes the Active key plus all Retiring keys still within
+    /// their grace window. In Vault-disabled (config) deployments this
+    /// returns the single configured key.
     /// </summary>
-    [HttpGet("jwks.json")]
+    [HttpGet]
     [ProducesResponseType(typeof(JsonWebKeySetResponse), StatusCodes.Status200OK)]
     public ActionResult<JsonWebKeySetResponse> GetJwks()
     {
-        var publicJwk = _signingKeyProvider.PublicJwk;
-        return Ok(new JsonWebKeySetResponse
-        {
-            Keys = new[]
-            {
-                new JsonWebKeyResponse
-                {
-                    Kty = publicJwk.Kty,
-                    Use = publicJwk.Use,
-                    Alg = publicJwk.Alg,
-                    Kid = publicJwk.Kid,
-                    N = publicJwk.N,
-                    E = publicJwk.E,
-                }
-            }
-        });
+        var keys = _ring is not null
+            ? _ring.AllValidKeys.Select(ToJwk).ToArray()
+            : new[] { ToJwk(_signingKeyProvider.PublicJwk) };
+
+        return Ok(new JsonWebKeySetResponse { Keys = keys });
     }
+
+    private static JsonWebKeyResponse ToJwk(JwtSigningKeyEntry entry)
+    {
+        var rsa = entry.Key.Rsa
+            ?? throw new InvalidOperationException(
+                $"Signing key {entry.Kid} has no underlying RSA instance.");
+        var pub = rsa.ExportParameters(includePrivateParameters: false);
+
+        return new JsonWebKeyResponse
+        {
+            Kty = "RSA",
+            Use = "sig",
+            Alg = SecurityAlgorithms.RsaSha256,
+            Kid = entry.Kid,
+            N = Base64UrlEncoder.Encode(pub.Modulus!),
+            E = Base64UrlEncoder.Encode(pub.Exponent!),
+        };
+    }
+
+    private static JsonWebKeyResponse ToJwk(JsonWebKey jwk) => new()
+    {
+        Kty = jwk.Kty,
+        Use = jwk.Use,
+        Alg = jwk.Alg,
+        Kid = jwk.Kid,
+        N = jwk.N,
+        E = jwk.E,
+    };
 }
 
 /// <summary>JWK Set wire format — array of JWK keys.</summary>
