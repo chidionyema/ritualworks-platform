@@ -391,6 +391,25 @@ public class VaultService : IVaultService
         return Task.FromResult(new VaultTokenInfo(ttlSeconds, $"{_vaultOptions.Address}_token", true));
     }
 
+    public async Task RevokeTokenAsync(CancellationToken ct = default)
+    {
+        // Safe no-op if no client built yet — nothing to revoke.
+        if (_client is null) return;
+
+        try
+        {
+            await _client.V1.Auth.Token.RevokeSelfAsync().ConfigureAwait(false);
+            _logger.LogInformation("[VaultService] Token revoked via auth/token/revoke-self");
+        }
+        catch (Exception ex)
+        {
+            // Shutdown is in flight — nothing useful to do on failure.
+            // Token will expire naturally at its TTL anyway. Log + swallow.
+            _logger.LogWarning(ex,
+                "[VaultService] Failed to revoke token on shutdown; relying on natural TTL expiry");
+        }
+    }
+
     public void Dispose()
     {
         Dispose(true);

@@ -43,6 +43,7 @@ public sealed class NotificationRequestConsumer(
     ITemplateSelector templateSelector,
     ITemplateRenderer templateRenderer,
     IEmailChannelGateway emailGateway,
+    IPushChannelGateway pushGateway,
     ILogger<NotificationRequestConsumer> logger
 ) : IConsumer<NotificationCreatedEvent>
 {
@@ -135,9 +136,12 @@ public sealed class NotificationRequestConsumer(
             case NotificationChannel.Email:
                 await emailGateway.SendAsync(notification, ct);
                 break;
-            case NotificationChannel.Sms:
             case NotificationChannel.Push:
-                // SMS/Push gateways are owned by other tracks. Mark failed
+                // TODO(notif-F3): Handled by PushChannelGateway
+                await pushGateway.SendAsync(notification, ct);
+                break;
+            case NotificationChannel.Sms:
+                // SMS gateways are owned by other tracks. Mark failed
                 // explicitly so we don't leave the aggregate stuck in Queued.
                 notification.RecordAttempt(new DeliveryAttempt(
                     AttemptedAt: DateTime.UtcNow,

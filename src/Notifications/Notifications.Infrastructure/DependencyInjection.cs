@@ -25,10 +25,13 @@ public static partial class DependencyInjection
         services.AddTwilioSmsProvider(configuration);
         services.AddFcmPushProvider(configuration);
         services.AddNotificationChannelGateways();
+        services.AddNotificationPushChannel();
+
         services.AddOptions<Haworks.Notifications.Application.Webhooks.WebhookOptions>()
             .Bind(configuration.GetSection(Haworks.Notifications.Application.Webhooks.WebhookOptions.SectionName))
             .ValidateDataAnnotations()
             .ValidateOnStart();
+
         return services;
     }
 
@@ -37,7 +40,9 @@ public static partial class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString("Notifications");
 
-        services.AddScoped<Haworks.Notifications.Application.Commands.INotificationRepository, Haworks.Notifications.Infrastructure.Persistence.NotificationRepository>();        services.AddDbContext<NotificationsDbContext>(options =>
+        services.AddScoped<Haworks.Notifications.Application.Commands.INotificationRepository, Haworks.Notifications.Infrastructure.Persistence.NotificationRepository>();
+        
+        services.AddDbContext<NotificationsDbContext>(options =>
             options.UseNpgsql(connectionString, npgsqlOptions =>
             {
                 npgsqlOptions.MigrationsAssembly(typeof(NotificationsDbContext).Assembly.FullName);
@@ -54,6 +59,7 @@ public static partial class DependencyInjection
             // owns the consumer type; Infrastructure owns the bus.
             x.AddConsumer<Notifications.Application.Consumers.NotificationRequestConsumer>();
             x.AddConsumer<Haworks.Notifications.Application.Webhooks.NotificationWebhookValidatedConsumer>();
+            
             x.AddEntityFrameworkOutbox<NotificationsDbContext>(o =>
             {
                 o.UsePostgres();

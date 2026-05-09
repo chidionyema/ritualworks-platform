@@ -73,6 +73,13 @@ public static class VaultServiceCollectionExtensions
 
         services.AddSingleton<IVaultService, VaultService>();
 
+        // Token revocation on graceful shutdown — security hardening per
+        // .claude/rules/security.md. Hooks IHostApplicationLifetime.ApplicationStopping
+        // and calls auth/token/revoke-self with a 3s timeout. Reduces blast
+        // radius if the host process state is captured after shutdown but
+        // before the token's natural TTL expires.
+        services.AddHostedService<VaultTokenRevocationHostedService>();
+
         return services;
     }
 }

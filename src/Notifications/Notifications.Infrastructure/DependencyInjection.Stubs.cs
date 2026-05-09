@@ -11,5 +11,4 @@ public static partial class DependencyInjection
     // Replaced by tracks: AddNotificationTemplatesPersistence (L1.B),
     // AddSesEmailProvider (L2.H), AddNotificationChannelGateways (L3).
     internal static IServiceCollection AddTwilioSmsProvider(this IServiceCollection s, IConfiguration c) => s;
-    internal static IServiceCollection AddFcmPushProvider(this IServiceCollection s, IConfiguration c) => s;
 }
