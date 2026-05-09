@@ -181,13 +181,33 @@ public static class DependencyInjection
         {
             services.AddSingleton<IJwtSigningKeyProvider>(sp =>
             {
-                var cfg          = sp.GetRequiredService<IConfiguration>();
-                var address      = cfg["Vault:Address"]      ?? throw new InvalidOperationException("Vault:Address missing");
-                var roleIdPath   = cfg["Vault:RoleIdPath"]   ?? throw new InvalidOperationException("Vault:RoleIdPath missing");
-                var secretIdPath = cfg["Vault:SecretIdPath"] ?? throw new InvalidOperationException("Vault:SecretIdPath missing");
-                var roleId       = File.ReadAllText(roleIdPath).Trim();
-                var secretId     = File.ReadAllText(secretIdPath).Trim();
-                var auth         = sp.GetRequiredService<IVaultAppRoleAuthenticator>();
+                var cfg     = sp.GetRequiredService<IConfiguration>();
+                var address = cfg["Vault:Address"] ?? throw new InvalidOperationException("Vault:Address missing");
+
+                // Mirror VaultConfigBootstrap: prefer direct config (Vault:RoleId
+                // + Vault:SecretId, staged as Fly secrets at bootstrap time);
+                // fall back to file paths only when direct creds are absent.
+                // Without this branch the JwtSigningKeyProvider tries to read
+                // /tmp/vault/role_id which doesn't exist in direct-cred mode.
+                var directRoleId   = cfg["Vault:RoleId"];
+                var directSecretId = cfg["Vault:SecretId"];
+
+                string roleId;
+                string secretId;
+                if (!string.IsNullOrWhiteSpace(directRoleId) && !string.IsNullOrWhiteSpace(directSecretId))
+                {
+                    roleId = directRoleId.Trim();
+                    secretId = directSecretId.Trim();
+                }
+                else
+                {
+                    var roleIdPath   = cfg["Vault:RoleIdPath"]   ?? throw new InvalidOperationException("Vault:RoleIdPath missing");
+                    var secretIdPath = cfg["Vault:SecretIdPath"] ?? throw new InvalidOperationException("Vault:SecretIdPath missing");
+                    roleId   = File.ReadAllText(roleIdPath).Trim();
+                    secretId = File.ReadAllText(secretIdPath).Trim();
+                }
+
+                var auth = sp.GetRequiredService<IVaultAppRoleAuthenticator>();
                 return new VaultJwtSigningKeyProvider(address, "identity", auth, roleId, secretId);
             });
         }

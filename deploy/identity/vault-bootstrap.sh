@@ -25,9 +25,22 @@ fail_open() {
 }
 
 # Mode 1: direct creds present → no fetch needed. Most common path now
-# that bootstrap.sh stages role_id/secret_id at deploy time.
+# that bootstrap.sh stages role_id/secret_id at deploy time. We still
+# write them to disk because several downstream consumers
+# (VaultClientFactory, VaultJwtSigningKeyProvider, etc) read from the
+# path-based VaultOptions.RoleIdPath/SecretIdPath fields. The .NET app
+# also reads them directly from Vault:RoleId/SecretId where it can
+# (VaultConfigBootstrap, JWT signing key DI in Identity.Infrastructure),
+# so this disk write is purely defensive belt-and-braces for the legacy
+# path-based code paths.
 if [ -n "${Vault__RoleId:-}" ] && [ -n "${Vault__SecretId:-}" ]; then
-  echo "[bootstrap] Direct AppRole creds present — skipping vault round-trip"
+  echo "[bootstrap] Direct AppRole creds present — writing to disk for legacy path consumers"
+  ROLE_ID_PATH="${Vault__RoleIdPath:-/tmp/vault/role_id}"
+  SECRET_ID_PATH="${Vault__SecretIdPath:-/tmp/vault/secret_id}"
+  mkdir -p "$(dirname "$ROLE_ID_PATH")" "$(dirname "$SECRET_ID_PATH")"
+  printf '%s' "$Vault__RoleId"   > "$ROLE_ID_PATH"
+  printf '%s' "$Vault__SecretId" > "$SECRET_ID_PATH"
+  chmod 600 "$ROLE_ID_PATH" "$SECRET_ID_PATH"
   exec dotnet Identity.Api.dll
 fi
 
