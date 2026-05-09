@@ -75,7 +75,23 @@ role gates export.
 Per docs/agent-briefs/audit-service-spec.md § 3.1, § 4."
 ```
 
-## Hard stops
+## Hard stops — parallel-scope
+
+L1.D runs in PARALLEL with L1.A / L1.B / L1.C. You touch ONLY these paths:
+
+- `src/Audit/Audit.Application/Export/**`
+- `src/Audit/Audit.Infrastructure/Export/**`
+- `src/Audit/Audit.Infrastructure/Partitions/**`
+- `src/Audit/Audit.Infrastructure/Migrations/<timestamp>_AddAuditExportJobs.*` (separate timestamp from L1.B's events migration — don't touch theirs)
+- `src/Audit/Audit.Api/Controllers/AuditExportController.cs` (this file only — L1.C owns `AuditController.cs`)
+- `src/Audit/Audit.Application/DependencyInjection.Export.cs` (fill in the body)
+- `tests/Audit.Integration/ExportJobTests.cs`, `tests/Audit.Integration/PartitionRolloverTests.cs`
+
+The `AuditExportJob` DbSet was already declared in L0's `AuditDbContext`; you do NOT modify the DbContext. You add the migration that creates the table.
+
+If you need a change anywhere else, file a blocker.
+
+Plus the standard hard stops:
 
 - Do NOT introduce Hangfire / Quartz / any other job framework. `Channel<T>` + `BackgroundService` is the pattern.
 - Do NOT use Parquet — CSV only at this phase. (Parquet was a stretch goal in the spec; defer.)

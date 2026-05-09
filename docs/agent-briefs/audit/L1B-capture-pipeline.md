@@ -74,7 +74,22 @@ unique index inside the active partition (per spec § 5.3).
 Per docs/agent-briefs/audit-service-spec.md § 4, § 5.3, § 5.4."
 ```
 
-## Hard stops
+## Hard stops — parallel-scope
+
+L1.B runs in PARALLEL with L1.A / L1.C / L1.D. You touch ONLY these paths:
+
+- `src/Audit/Audit.Application/Capture/**`
+- `src/Audit/Audit.Infrastructure/Persistence/AuditWriter.cs` (only this one file in Persistence — DbContext is L0's)
+- `src/Audit/Audit.Infrastructure/Migrations/<timestamp>_AddAuditEventsPartitioned.*` (your migration only — L1.D will add a separate one for `audit_export_jobs`)
+- `src/Audit/Audit.Application/DependencyInjection.Capture.cs` (fill in the body)
+- `tests/Audit.Integration/EndToEndCaptureTests.cs`, `tests/Audit.Integration/IdempotencyTests.cs`
+- `tests/Audit.Integration/AuditWebAppFactory.cs` — you may REFINE the L0 skeleton (e.g., add Testcontainers RabbitMQ); you may NOT remove anything other phases depend on.
+
+You also implement `IAuditConsumerRegistry` (declared in L0); the type's location is `src/Audit/Audit.Application/Capture/AuditConsumerRegistry.cs`.
+
+If you need a change anywhere else, file a blocker.
+
+Plus the standard hard stops:
 
 - Do NOT change L1.A's extractors or redactor.
 - Do NOT touch the AppHost / compose wiring — L0 finalized that.

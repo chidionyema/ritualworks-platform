@@ -59,7 +59,18 @@ target <100ms validated against the seeded fixture.
 Per docs/agent-briefs/audit-service-spec.md § 3.1, § 7."
 ```
 
-## Hard stops
+## Hard stops — parallel-scope
+
+L1.C runs in PARALLEL with L1.A / L1.B / L1.D. You touch ONLY these paths:
+
+- `src/Audit/Audit.Application/Queries/**`
+- `src/Audit/Audit.Api/Controllers/AuditController.cs` (this file only — L1.D adds a SEPARATE `AuditExportController.cs`)
+- `src/Audit/Audit.Application/DependencyInjection.Queries.cs` (fill in the body)
+- `tests/Audit.Integration/QueryApiTests.cs`
+
+If you need a change anywhere else, file a blocker.
+
+Plus the standard hard stops:
 
 - Do NOT add the export endpoint or the partition cron — that's L1.D.
 - Do NOT change the EF context schema — L1.B owns it.

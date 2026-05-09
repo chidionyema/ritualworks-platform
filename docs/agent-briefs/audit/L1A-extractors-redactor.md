@@ -64,12 +64,23 @@ allow-list when contracts settle.
 Per docs/agent-briefs/audit-service-spec.md § 5.1, § 5.2."
 ```
 
-## Hard stops
+## Hard stops — parallel-scope
+
+L1.A runs in PARALLEL with L1.B / L1.C / L1.D. You touch ONLY these paths:
+
+- `src/Audit/Audit.Application/Extraction/**` (write whatever you need here)
+- `src/Audit/Audit.Application/Redaction/**`
+- `src/Audit/Audit.Application/DependencyInjection.Extractors.cs` (fill in the body — do NOT modify the surrounding `DependencyInjection.cs` or any sibling `DependencyInjection.*.cs`)
+- `tests/Audit.Unit/Extraction/**`, `tests/Audit.Unit/Redaction/**` (only your test files; do NOT modify `tests/Audit.Unit/Audit.Unit.csproj` — L0 set it up)
+
+If you need a change anywhere else, file a blocker.
+
+Plus the standard hard stops:
 
 - Do NOT touch L0's project structure (csproj refs, DbContext, Aspire wiring).
 - Do NOT add MassTransit consumer logic — that's L1.B.
 - Do NOT add controllers — that's L1.C.
-- Do NOT add EF migrations — that's L1.B.
+- Do NOT add EF migrations — that's L1.B (events) or L1.D (export jobs).
 - Do NOT introduce a JSON library other than `System.Text.Json` (already in BCL).
 - The redactor's deny-list is exactly what the spec lists. Don't add extra patterns "just in case".
 - Use `JsonElement` not `JsonNode` for performance — payloads stay immutable through the redactor.
