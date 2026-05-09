@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
 using Haworks.Content.Application.Interfaces;
@@ -9,6 +10,7 @@ using Haworks.Content.Infrastructure.ExternalServices.Validation;
 using Haworks.Content.Infrastructure.Options;
 using Haworks.Content.Infrastructure.Persistence;
 using Haworks.BuildingBlocks.Persistence;
+using Haworks.BuildingBlocks.Vault;
 using Haworks.Content.Domain.Interfaces;
 using Minio;
 
@@ -29,6 +31,23 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "No content database connection string. Expected 'ConnectionStrings:content' " +
                 "(Aspire-injected) or 'ConnectionStrings:DefaultConnection'.");
+
+        // Vault: dynamic Postgres creds. The interceptor was already wired
+        // via sp.GetService<DynamicCredentialsConnectionInterceptor>() in
+        // the AddDbContext below; we just need to register IVaultService +
+        // a factory for the interceptor itself when Vault is enabled.
+        // Role haworks-content matches infra/vault/database/roles.json.
+        var vaultEnabled = configuration.GetValue("Vault:Enabled", false)
+            && !env.IsEnvironment("Test");
+        if (vaultEnabled)
+        {
+            services.AddVaultIntegration(configuration);
+            services.AddSingleton<DynamicCredentialsConnectionInterceptor>(sp =>
+                new DynamicCredentialsConnectionInterceptor(
+                    sp.GetRequiredService<IVaultService>(),
+                    roleName: "haworks-content",
+                    sp.GetRequiredService<ILogger<DynamicCredentialsConnectionInterceptor>>()));
+        }
 
         services.AddDbContext<ContentDbContext>((sp, options) => {
             options.UseNpgsql(connectionString);

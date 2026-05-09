@@ -175,7 +175,16 @@ set_secrets() {
   echo "    staged $# secrets for $app"
 }
 
-# Common: every service talks to RabbitMQ + Redis, has Vault disabled on Fly.
+# Common: every service talks to RabbitMQ + Redis, has Vault enabled +
+# pointing at the internal vault address. Per-service AppRole creds
+# (Vault__RoleId / wrapped Vault__SecretId / Vault__SecretIdIsWrapped)
+# are staged separately by deploy/fly/ci-stage-vault-creds.sh on every
+# deploy — bootstrap.sh just wires the static config so every service
+# knows where vault lives and is opted in. Until the first
+# ci-stage-vault-creds.sh run lands, services without RoleId/SecretId
+# staged will fall through to the Vault:Enabled=false code path locally
+# (the config provider treats missing creds as not-enabled).
+#
 # Plus JWKS config — every backend service validates JWTs against identity-svc's
 # /.well-known/jwks.json. Internal-only addressing because backends never see
 # external traffic; the JwksUri resolves over Fly's 6PN. Issuer/Audience can be
@@ -184,7 +193,9 @@ set_secrets() {
 common=(
   "ConnectionStrings__rabbitmq=$RABBITMQ_URL"
   "ConnectionStrings__redis=$REDIS_URL"
-  "Vault__Enabled=false"
+  "Vault__Enabled=true"
+  "Vault__Address=http://ritualworks-vault.internal:8200"
+  "Vault__RequireHmacValidation=false"
   "Authentication__Jwks__JwksUri=http://ritualworks-identity.internal:8080/.well-known/jwks.json"
   "Authentication__Jwks__Issuer=${JWT_ISSUER:-https://ritualworks-identity.fly.dev}"
   "Authentication__Jwks__Audience=${JWT_AUDIENCE:-ritualworks-bffweb}"

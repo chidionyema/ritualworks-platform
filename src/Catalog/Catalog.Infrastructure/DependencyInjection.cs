@@ -3,7 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Haworks.BuildingBlocks.Messaging;
+using Haworks.BuildingBlocks.Persistence;
+using Haworks.BuildingBlocks.Vault;
 using Haworks.Catalog.Application.Consumers;
 using Haworks.Catalog.Application.Interfaces;
 using Haworks.Catalog.Application.Options;
@@ -29,9 +32,32 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "ConnectionStrings:catalog is missing. Aspire injects it via WithReference(catalogDb).");
 
-        services.AddDbContext<CatalogDbContext>(options =>
+        // Vault integration — when enabled, the DbContext below uses the
+        // DynamicCredentialsConnectionInterceptor to swap the static
+        // username/password in the connection string for short-TTL Vault-
+        // issued credentials on every connection open. Role haworks-catalog
+        // matches infra/vault/database/roles.json + the per-service policy
+        // granted by deploy/vault/seed.sh.
+        var vaultEnabled = configuration.GetValue("Vault:Enabled", false)
+            && !env.IsEnvironment("Test");
+        if (vaultEnabled)
+        {
+            services.AddVaultIntegration(configuration);
+        }
+
+        services.AddDbContext<CatalogDbContext>((sp, options) =>
+        {
             options.UseNpgsql(connectionString, npgsql =>
-                npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "catalog")));
+                npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "catalog"));
+
+            if (vaultEnabled)
+            {
+                options.AddInterceptors(new DynamicCredentialsConnectionInterceptor(
+                    sp.GetRequiredService<IVaultService>(),
+                    roleName: "haworks-catalog",
+                    sp.GetRequiredService<ILogger<DynamicCredentialsConnectionInterceptor>>()));
+            }
+        });
 
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<ICategoryRepository, CategoryRepository>();

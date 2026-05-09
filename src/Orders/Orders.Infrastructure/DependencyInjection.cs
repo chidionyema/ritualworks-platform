@@ -2,7 +2,10 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Haworks.BuildingBlocks.Messaging;
+using Haworks.BuildingBlocks.Persistence;
+using Haworks.BuildingBlocks.Vault;
 using Haworks.Orders.Application.Consumers;
 using Haworks.Orders.Infrastructure.Messaging;
 using Haworks.Orders.Infrastructure.Repositories;
@@ -20,7 +23,17 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "ConnectionStrings:orders is missing. Aspire injects it via WithReference(ordersDb).");
 
-        services.AddDbContext<OrderDbContext>(options =>
+        // Vault: dynamic Postgres creds via DynamicCredentialsConnectionInterceptor.
+        // Role haworks-orders matches infra/vault/database/roles.json.
+        var vaultEnabled = configuration.GetValue("Vault:Enabled", false)
+            && !env.IsEnvironment("Test");
+        if (vaultEnabled)
+        {
+            services.AddVaultIntegration(configuration);
+        }
+
+        services.AddDbContext<OrderDbContext>((sp, options) =>
+        {
             options.UseNpgsql(connectionString, npgsql =>
             {
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "orders");
@@ -28,7 +41,16 @@ public static class DependencyInjection
                 // EOF stream flake first observed in payments-svc Phase 3 — see
                 // docs/runbooks/payments-integration-docker-flake.md.
                 npgsql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromMilliseconds(500), errorCodesToAdd: null);
-            }));
+            });
+
+            if (vaultEnabled)
+            {
+                options.AddInterceptors(new DynamicCredentialsConnectionInterceptor(
+                    sp.GetRequiredService<IVaultService>(),
+                    roleName: "haworks-orders",
+                    sp.GetRequiredService<ILogger<DynamicCredentialsConnectionInterceptor>>()));
+            }
+        });
 
         services.AddScoped<IOrderRepository, OrderRepository>();
 

@@ -1,5 +1,6 @@
 using VaultSharp;
 using VaultSharp.V1.AuthMethods.Token;
+using VaultSharp.V1.Commons;
 
 namespace Haworks.BuildingBlocks.Vault;
 
@@ -86,6 +87,34 @@ public static class VaultConfigBootstrap
             logger?.LogInformation("[VaultBootstrap] Using AppRole creds from disk paths (legacy)");
         }
 
+        // Response-unwrap support. ci-stage-vault-creds.sh issues secret_ids
+        // with X-Vault-Wrap-TTL: 300s and stages the WRAPPING TOKEN as
+        // Vault:SecretId, plus Vault:SecretIdIsWrapped=true to opt in to
+        // unwrap. A leaked CI log only exposes the wrapper, useless after
+        // 5 minutes or one unwrap (whichever comes first).
+        //
+        // Unwrap is gated on the explicit flag rather than auto-detected by
+        // shape (e.g. "starts with hvs.") because both raw secret_ids and
+        // wrapping tokens can share that prefix in newer Vault versions, so
+        // shape-detection would be brittle.
+        if (configuration.GetValue<bool>("Vault:SecretIdIsWrapped"))
+        {
+            try
+            {
+                secretId = await UnwrapSecretIdAsync(address, secretId, ct);
+                logger?.LogInformation(
+                    "[VaultBootstrap] Unwrapped wrapped secret_id (response-wrapped at issue time)");
+            }
+            catch (Exception ex)
+            {
+                // NEVER log the wrapper token value or any unwrap response body
+                // — both are credential material. Status + exception type only.
+                logger?.LogError(ex,
+                    "[VaultBootstrap] Failed to unwrap Vault:SecretId. The wrapper token may have expired (5min default TTL) or already been used. Re-run ci-stage-vault-creds.sh to issue a fresh wrapper.");
+                throw;
+            }
+        }
+
         // Bootstrap runs before DI; if the caller didn't pass an authenticator,
         // construct one directly. Logger is intentionally null here because we
         // already have a bootstrap logger threaded through, and emitting two
@@ -147,5 +176,43 @@ public static class VaultConfigBootstrap
             throw new InvalidOperationException(
                 $"Vault AppRole credential file did not appear within {timeout}: {path}");
         }
+    }
+
+    /// <summary>
+    /// Unwrap a response-wrapped secret_id. The wrapping_token is itself the
+    /// auth — POST it to /v1/sys/wrapping/unwrap and Vault returns the
+    /// originally-wrapped data. Single-use: a successful unwrap invalidates
+    /// the token, and a second attempt fails.
+    /// </summary>
+    private static async Task<string> UnwrapSecretIdAsync(
+        string vaultAddress, string wrappingToken, CancellationToken ct)
+    {
+        // Use a TokenAuthMethodInfo where the "token" IS the wrapping_token —
+        // that's how Vault's wrapping API authenticates the unwrap call.
+        var client = new VaultClient(new VaultClientSettings(
+            vaultAddress, new TokenAuthMethodInfo(wrappingToken)));
+
+        // Pass null to UnwrapWrappedResponseDataAsync — the wrapping token is
+        // already on the auth method, and Vault uses it as both the auth and
+        // the target of the unwrap when no token is passed in the body.
+        Secret<Dictionary<string, object>> resp =
+            await client.V1.System.UnwrapWrappedResponseDataAsync<Dictionary<string, object>>(
+                tokenId: null);
+
+        if (resp?.Data == null || !resp.Data.TryGetValue("secret_id", out var rawSecretId))
+        {
+            throw new InvalidOperationException(
+                "Vault unwrap succeeded but response had no 'secret_id' key. " +
+                "Was the wrapper token issued against an /auth/approle/.../secret-id endpoint?");
+        }
+
+        var secretId = rawSecretId?.ToString();
+        if (string.IsNullOrWhiteSpace(secretId))
+        {
+            throw new InvalidOperationException(
+                "Vault unwrap returned empty 'secret_id'.");
+        }
+
+        return secretId;
     }
 }
