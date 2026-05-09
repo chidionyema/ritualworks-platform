@@ -12,6 +12,13 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
+// Phase A: JWT validation + user-id propagation. Every backend service
+// validates the bearer token (AddPlatformAuthentication), and the BFF
+// forwards the user identity as X-User-Id (UserIdentityForwardingHandler).
+builder.Services.AddPlatformAuthentication(builder.Configuration);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddTransient<Haworks.BuildingBlocks.Authentication.UserIdentityForwardingHandler>();
+
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddApplication(builder.Configuration);
 
@@ -151,6 +158,7 @@ foreach (var name in new[]
     .AddHttpMessageHandler(sp => new ChaosFaultInjectionHandler(
         sp.GetService<ChaosManager>(),
         serviceName))
+    .AddHttpMessageHandler<Haworks.BuildingBlocks.Authentication.UserIdentityForwardingHandler>()
     // Record the upstream replica's X-Instance-Id into the live-console
     // hop list. Service name is closed over so the handler knows which
     // backend the call is targeting (the resolved URI host loses that
@@ -180,6 +188,7 @@ builder.Services.AddHttpClient(BackendClients.CatalogDemo, client =>
 .AddHttpMessageHandler(sp => new ChaosFaultInjectionHandler(
     sp.GetService<ChaosManager>(),
     BackendClients.Catalog))
+.AddHttpMessageHandler<Haworks.BuildingBlocks.Authentication.UserIdentityForwardingHandler>()
 .AddHttpMessageHandler(sp => new UpstreamInstanceCaptureHandler(
     sp.GetRequiredService<IHttpContextAccessor>(),
     BackendClients.Catalog))

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Headers;
 
@@ -6,6 +7,7 @@ namespace Haworks.BffWeb.Api.Controllers;
 /// <summary>
 /// BFF passthrough to <c>payments-svc</c> for subscription operations.
 /// </summary>
+[Authorize]
 [ApiController]
 [Route("api/subscriptions")]
 public sealed class SubscriptionsController : ControllerBase
