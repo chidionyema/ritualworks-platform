@@ -95,6 +95,7 @@ jobs:
           - BffWeb
           - CheckoutOrchestrator
           - Content
+          - Search
 
     steps:
       - uses: actions/checkout@v4
@@ -118,6 +119,34 @@ jobs:
       # buried in a Testcontainers stack trace 5 minutes in.
       - name: Verify Docker
         run: docker info
+
+      # Cache the Docker images Testcontainers pulls on every run so we
+      # don't burn 10-30s pulling them from Docker Hub each invocation.
+      # Key is pinned to the exact image tags — bumping a tag invalidates
+      # the cache automatically. Both images are saved together because
+      # actions/cache requires a single path tree; the meili tarball is
+      # ~150MB compressed which is well within the 10GB cache budget.
+      - name: Cache Docker test images
+        id: docker-image-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-images
+          key: docker-images-${{ runner.os }}-postgres16alpine-meili1.10
+
+      - name: Load cached Docker images
+        if: steps.docker-image-cache.outputs.cache-hit == 'true'
+        run: |
+          docker load -i /tmp/docker-images/postgres-16-alpine.tar
+          docker load -i /tmp/docker-images/meilisearch-v1.10.tar
+
+      - name: Pull and save images for cache
+        if: steps.docker-image-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p /tmp/docker-images
+          docker pull postgres:16-alpine
+          docker pull getmeili/meilisearch:v1.10
+          docker save postgres:16-alpine -o /tmp/docker-images/postgres-16-alpine.tar
+          docker save getmeili/meilisearch:v1.10 -o /tmp/docker-images/meilisearch-v1.10.tar
 
       - name: Restore + build ${{ matrix.suite }}.Integration
         run: |
