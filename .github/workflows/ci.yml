@@ -95,6 +95,7 @@ jobs:
           - BffWeb
           - CheckoutOrchestrator
           - Content
+          - Search
 
     steps:
       - uses: actions/checkout@v4
