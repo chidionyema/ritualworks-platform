@@ -13,6 +13,5 @@ public static partial class DependencyInjection
     internal static IServiceCollection AddNotificationTemplates(this IServiceCollection s) => s;
     internal static IServiceCollection AddNotificationPreferences(this IServiceCollection s) => s;
     internal static IServiceCollection AddNotificationSuppressionService(this IServiceCollection s) => s;
-    internal static IServiceCollection AddNotificationIdempotency(this IServiceCollection s) => s;
     internal static IServiceCollection AddNotificationConsumers(this IServiceCollection s) => s;
 }
