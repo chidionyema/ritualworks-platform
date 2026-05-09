@@ -18,12 +18,11 @@ RUN dotnet publish src/Identity/Identity.Api/Identity.Api.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
 
-# curl + jq for the Vault bootstrap shim. Identity is the only service that
-# needs to fetch AppRole creds at startup; other services don't have this.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends curl jq \
- && rm -rf /var/lib/apt/lists/*
-
+# Tiny shim that writes Vault__RoleId/SecretId to disk so legacy
+# VaultClientFactory + IVaultService consumers find them at the
+# RoleIdPath/SecretIdPath VaultOptions specify, then exec dotnet.
+# No more curl/jq round-trip — vault is persistent now and creds are
+# staged directly as Fly secrets at bootstrap time.
 COPY --from=build /app/publish ./
 COPY deploy/identity/vault-bootstrap.sh /usr/local/bin/vault-bootstrap.sh
 RUN chmod +x /usr/local/bin/vault-bootstrap.sh
