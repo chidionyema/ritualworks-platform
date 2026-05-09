@@ -9,7 +9,6 @@ public static partial class DependencyInjection
     // <Track>ServiceCollectionExtensions.cs files in their owned subdirs.
     internal static IServiceCollection AddNotificationTemplatesPersistence(this IServiceCollection s) => s;
     internal static IServiceCollection AddNotificationPreferencesPersistence(this IServiceCollection s) => s;
-    internal static IServiceCollection AddNotificationSuppressionPersistence(this IServiceCollection s) => s;
     internal static IServiceCollection AddSesEmailProvider(this IServiceCollection s, IConfiguration c) => s;
     internal static IServiceCollection AddSendGridEmailProvider(this IServiceCollection s, IConfiguration c) => s;
     internal static IServiceCollection AddTwilioSmsProvider(this IServiceCollection s, IConfiguration c) => s;
