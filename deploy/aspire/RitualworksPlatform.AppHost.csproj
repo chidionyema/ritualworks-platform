@@ -31,6 +31,7 @@
     <ProjectReference Include="../../src/CheckoutOrchestrator/CheckoutOrchestrator.Api/CheckoutOrchestrator.Api.csproj" />
     <ProjectReference Include="../../src/Content/Content.Api/Content.Api.csproj" />
     <ProjectReference Include="../../src/Search/Search.Api/Search.Api.csproj" />
+    <ProjectReference Include="../../src/Notifications/Notifications.Api/Notifications.Api.csproj" />
     <ProjectReference Include="../../src/BffWeb/BffWeb.Api/BffWeb.Api.csproj" />
   </ItemGroup>
 

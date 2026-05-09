@@ -10,6 +10,7 @@
     { "role_name": "haworks-orders",                "owner_group": "orders_owner",   "db_name": "orders"   },
     { "role_name": "haworks-payments",              "owner_group": "payments_owner", "db_name": "payments" },
     { "role_name": "haworks-content",               "owner_group": "content_owner",  "db_name": "content"  },
-    { "role_name": "haworks-checkout-orchestrator", "owner_group": "checkout_owner", "db_name": "checkout" }
+    { "role_name": "haworks-checkout-orchestrator", "owner_group": "checkout_owner", "db_name": "checkout" },
+    { "role_name": "haworks-notifications",         "owner_group": "notifications_owner", "db_name": "notifications" }
   ]
 }
