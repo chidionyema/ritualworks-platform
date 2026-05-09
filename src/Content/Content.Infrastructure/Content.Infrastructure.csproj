@@ -18,4 +18,10 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
+  <!-- Expose internal SweepOnceAsync to integration tests so the sweeper
+       can be invoked directly rather than waiting on its periodic timer. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Content.Integration" />
+  </ItemGroup>
+
 </Project>

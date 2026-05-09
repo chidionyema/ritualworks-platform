@@ -7,9 +7,15 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Testcontainers.PostgreSql;
 using Haworks.BuildingBlocks.Testing.Authentication;
+using Haworks.Content.Application.Interfaces;
+using Haworks.Content.Application.Options;
+using Haworks.Content.Domain.ValueObjects;
+using Haworks.Content.Infrastructure.BackgroundServices;
 using Haworks.Content.Infrastructure.Persistence;
 using Xunit;
 
@@ -45,6 +51,25 @@ public sealed class ContentWebAppFactory : WebApplicationFactory<Program>, IAsyn
         .Build();
 
     private string _localstackUrl = string.Empty;
+
+    /// <summary>
+    /// Test-controllable knob for the fake virus scanner. Default <c>false</c>
+    /// means scans return clean; flip to <c>true</c> to make a Complete go
+    /// through the quarantine path. Production DI is unchanged — the real
+    /// <c>ClamAVScanner</c> is only swapped out in this fixture's
+    /// <see cref="ConfigureWebHost"/>.
+    /// </summary>
+    public bool VirusScanShouldFail { get; set; }
+
+    /// <summary>
+    /// LocalStack service URL — exposed so tests can build a side-channel
+    /// <see cref="AmazonS3Client"/> for assertions like
+    /// <c>ListMultipartUploadsAsync</c>.
+    /// </summary>
+    public string LocalstackUrl => _localstackUrl;
+
+    /// <summary>Bucket name used by the fixture; matches Storage:BucketName.</summary>
+    public string Bucket => BucketName;
 
     public async Task InitializeAsync()
     {
@@ -113,7 +138,40 @@ public sealed class ContentWebAppFactory : WebApplicationFactory<Program>, IAsyn
             // Stamp the shared no-op test scheme as default so the controller's
             // ContentUploader policy passes (handler grants the role).
             services.AddAuthentication(TestAuthenticationHandler.SchemeName).AddTestAuth();
+
+            // Replace the real ClamAVScanner with a fake driven by the
+            // fixture's VirusScanShouldFail flag. ClamAV isn't part of the
+            // test fixture (a containerised clamd takes minutes to warm up
+            // its signature db on first run), and any test that exercises
+            // Complete would otherwise crash inside the validation pipeline.
+            services.RemoveAll<IVirusScanner>();
+            services.AddSingleton<IVirusScanner>(_ => new FakeVirusScanner(this));
+
+            // Production DI skips the sweeper under env=Test so the loop
+            // doesn't fight the fixture. Re-add it as a plain singleton
+            // (NOT a hosted service) so sweeper tests can resolve it and
+            // invoke SweepOnceAsync directly without racing a timer.
+            services.AddSingleton<UploadSweeperService>(sp => new UploadSweeperService(
+                sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetRequiredService<IOptions<StorageOptions>>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<UploadSweeperService>>(),
+                sp.GetRequiredService<TimeProvider>()));
         });
+    }
+
+    /// <summary>
+    /// Pluggable virus scanner that reads <see cref="ContentWebAppFactory.VirusScanShouldFail"/>
+    /// at scan time. Avoids the chicken-and-egg of binding the flag at DI
+    /// build time when individual tests need to flip it per-fixture.
+    /// </summary>
+    private sealed class FakeVirusScanner(ContentWebAppFactory owner) : IVirusScanner
+    {
+        public Task<VirusScanResult> ScanAsync(Stream fileStream)
+        {
+            return Task.FromResult(owner.VirusScanShouldFail
+                ? new VirusScanResult(true, "EICAR-Test-Signature")
+                : new VirusScanResult(false, null));
+        }
     }
 
     public async Task EnsureSchemaAsync()
