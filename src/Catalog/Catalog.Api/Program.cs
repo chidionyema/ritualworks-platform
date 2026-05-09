@@ -1,3 +1,4 @@
+using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BuildingBlocks.Idempotency;
 using Haworks.BuildingBlocks.Middleware;
@@ -14,7 +15,7 @@ builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddApplication(builder.Configuration);
 builder.Services.AddPostgresIdempotency<CatalogDbContext>();
 
-builder.Services.AddPlatformAuthentication(builder.Configuration);
+builder.Services.AddJwksAuthentication(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddControllers();

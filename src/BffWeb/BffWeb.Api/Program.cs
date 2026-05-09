@@ -1,3 +1,4 @@
+using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BuildingBlocks.Middleware;
 using Haworks.BffWeb.Api;
@@ -15,7 +16,7 @@ builder.AddServiceDefaults();
 // Phase A: JWT validation + user-id propagation. Every backend service
 // validates the bearer token (AddPlatformAuthentication), and the BFF
 // forwards the user identity as X-User-Id (UserIdentityForwardingHandler).
-builder.Services.AddPlatformAuthentication(builder.Configuration);
+builder.Services.AddJwksAuthentication(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddTransient<Haworks.BuildingBlocks.Authentication.UserIdentityForwardingHandler>();
 
