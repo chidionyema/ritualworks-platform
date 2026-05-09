@@ -20,7 +20,7 @@ internal sealed class StockService(
         logger.LogInformation("Reserving stock for {Count} products for Order {OrderId}", itemsList.Count, orderId);
 
         // Check if reservation already exists
-        var existing = await db.OrderStockReservations.FirstOrDefaultAsync(r => r.OrderId == orderId, ct);
+        var existing = await db.StockReservations.FirstOrDefaultAsync(r => r.OrderId == orderId, ct);
         if (existing != null)
         {
             logger.LogWarning("Reservation for Order {OrderId} already exists", orderId);
@@ -29,11 +29,11 @@ internal sealed class StockService(
 
         var aggregatedItems = itemsList
             .GroupBy(i => i.ProductId)
-            .Select(g => new StockReservationItem 
-            { 
-                ProductId = g.Key, 
+            .Select(g => new StockReservationItem
+            {
+                ProductId = g.Key,
                 ProductName = string.Empty,
-                Quantity = g.Sum(i => i.Quantity) 
+                Quantity = g.Sum(i => i.Quantity)
             })
             .ToList();
 
@@ -54,7 +54,7 @@ internal sealed class StockService(
                 if (rowsAffected == 0)
                 {
                     await transaction.RollbackAsync(ct);
-                    
+
                     var product = await db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == item.ProductId, ct);
                     if (product == null)
                         return Result.Failure(new Error("Stock.ProductNotFound", $"Product {item.ProductId} not found"));
@@ -64,9 +64,17 @@ internal sealed class StockService(
             }
 
             var itemsJson = JsonSerializer.Serialize(aggregatedItems);
-            var reservation = OrderStockReservation.Create(orderId, itemsJson);
-            await db.OrderStockReservations.AddAsync(reservation, ct);
-            
+            // Saga path: jump straight to Confirmed so observable behaviour
+            // matches the legacy OrderStockReservation row (a row per order,
+            // already-bound). The Pending lifecycle is reserved for B2's
+            // sync flow, which uses IProductRepository.CreateReservationAsync.
+            var reservation = StockReservation.CreateConfirmed(
+                orderId,
+                sagaId: Guid.Empty,
+                userId: string.Empty,
+                itemsJson);
+            await db.StockReservations.AddAsync(reservation, ct);
+
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
 
@@ -82,7 +90,7 @@ internal sealed class StockService(
 
     public async Task ReleaseStockAsync(Guid orderId, string reason, CancellationToken ct = default)
     {
-        var reservation = await db.OrderStockReservations.FirstOrDefaultAsync(r => r.OrderId == orderId, ct);
+        var reservation = await db.StockReservations.FirstOrDefaultAsync(r => r.OrderId == orderId, ct);
         if (reservation == null || reservation.ReleasedAt.HasValue) return;
 
         var items = JsonSerializer.Deserialize<List<StockReservationItem>>(reservation.ItemsJson) ?? new();
@@ -102,13 +110,43 @@ internal sealed class StockService(
             }
 
             reservation.MarkReleased(reason);
-            db.OrderStockReservations.Update(reservation);
+            db.StockReservations.Update(reservation);
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Stock release failed for Order {OrderId}", orderId);
+            await transaction.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task ReleaseStockAsync(IEnumerable<StockReservationItem> items, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        var list = items.ToList();
+        if (list.Count == 0) return;
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            foreach (var item in list)
+            {
+                if (item.Quantity <= 0) continue;
+
+                await db.Products
+                    .Where(p => p.Id == item.ProductId)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(p => p.StockQuantity, p => p.StockQuantity + item.Quantity)
+                        .SetProperty(p => p.IsInStock, true), ct);
+            }
+
+            await transaction.CommitAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Stock release (item-list overload) failed; rolling back");
             await transaction.RollbackAsync(ct);
             throw;
         }

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Haworks.Contracts.Catalog;
 using Microsoft.EntityFrameworkCore;
 
 namespace Haworks.Catalog.Infrastructure.Repositories;
@@ -67,13 +69,97 @@ internal sealed class ProductRepository(CatalogDbContext db) : IProductRepositor
         if (existing is not null) db.Products.Remove(existing);
     }
 
-    public async Task AddOrderStockReservationAsync(OrderStockReservation reservation, CancellationToken ct = default)
+    public async Task AddStockReservationAsync(StockReservation reservation, CancellationToken ct = default)
     {
-        await db.OrderStockReservations.AddAsync(reservation, ct);
+        await db.StockReservations.AddAsync(reservation, ct);
     }
 
-    public Task<OrderStockReservation?> GetOrderStockReservationAsync(Guid orderId, CancellationToken ct = default) =>
-        db.OrderStockReservations.FirstOrDefaultAsync(r => r.OrderId == orderId, ct);
+    public Task<StockReservation?> GetStockReservationByOrderIdAsync(Guid orderId, CancellationToken ct = default) =>
+        db.StockReservations.FirstOrDefaultAsync(r => r.OrderId == orderId, ct);
+
+    public async Task<StockReservation> CreateReservationAsync(
+        string userId,
+        IReadOnlyList<StockReservationItem> items,
+        TimeSpan ttl,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        if (items.Count == 0) throw new ArgumentException("At least one reservation item is required.", nameof(items));
+
+        // Aggregate by ProductId so the same product appearing twice in the
+        // request collapses to a single decrement.
+        var aggregated = items
+            .GroupBy(i => i.ProductId)
+            .Select(g => new StockReservationItem
+            {
+                ProductId = g.Key,
+                ProductName = g.First().ProductName,
+                Quantity = g.Sum(i => i.Quantity),
+            })
+            .Where(i => i.Quantity > 0)
+            .ToList();
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            foreach (var item in aggregated)
+            {
+                // Atomic per-product decrement guarded by a stock-check in the
+                // WHERE clause. rowsAffected == 0 means either the product
+                // doesn't exist or stock would go negative — both surface as
+                // InsufficientStockException to the caller.
+                var rows = await db.Products
+                    .Where(p => p.Id == item.ProductId && p.StockQuantity >= item.Quantity)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(p => p.StockQuantity, p => p.StockQuantity - item.Quantity)
+                        .SetProperty(p => p.IsInStock, p => p.StockQuantity > item.Quantity), ct);
+
+                if (rows == 0)
+                {
+                    var available = await db.Products
+                        .AsNoTracking()
+                        .Where(p => p.Id == item.ProductId)
+                        .Select(p => (int?)p.StockQuantity)
+                        .FirstOrDefaultAsync(ct) ?? 0;
+
+                    await tx.RollbackAsync(ct);
+                    throw new InsufficientStockException(item.ProductId, item.Quantity, available);
+                }
+            }
+
+            var itemsJson = JsonSerializer.Serialize(aggregated);
+            var reservation = StockReservation.Create(userId, itemsJson, ttl);
+            await db.StockReservations.AddAsync(reservation, ct);
+
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return reservation;
+        }
+        catch
+        {
+            // EF disposes the txn on dispose; explicit rollback above for
+            // the InsufficientStockException path means double-rollback is
+            // safe (BeginTransactionAsync no-ops after commit/rollback).
+            throw;
+        }
+    }
+
+    public Task<StockReservation?> GetReservationByIdTrackedAsync(Guid id, CancellationToken ct = default) =>
+        db.StockReservations.FirstOrDefaultAsync(r => r.Id == id, ct);
+
+    public async Task<IReadOnlyList<StockReservation>> ListExpiredReservationsAsync(
+        DateTime now,
+        int batchSize,
+        CancellationToken ct = default)
+    {
+        if (batchSize <= 0) return Array.Empty<StockReservation>();
+
+        return await db.StockReservations
+            .Where(r => r.Status == ReservationStatus.Pending && r.ExpiresAt <= now)
+            .OrderBy(r => r.ExpiresAt)
+            .Take(batchSize)
+            .ToListAsync(ct);
+    }
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default) =>
         db.SaveChangesAsync(ct);

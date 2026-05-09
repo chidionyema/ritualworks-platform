@@ -34,7 +34,7 @@ public class CatalogDbContext : DbContext
     public DbSet<ProductReview> ProductReviews => Set<ProductReview>();
     public DbSet<ProductMetadata> ProductMetadata => Set<ProductMetadata>();
     public DbSet<ProductSpecification> ProductSpecifications => Set<ProductSpecification>();
-    public DbSet<OrderStockReservation> OrderStockReservations => Set<OrderStockReservation>();
+    public DbSet<StockReservation> StockReservations => Set<StockReservation>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -160,15 +160,28 @@ public class CatalogDbContext : DbContext
             entity.HasIndex(s => s.ProductId).HasDatabaseName("IX_ProductSpecifications_ProductId");
         });
 
-        modelBuilder.Entity<OrderStockReservation>(entity =>
+        modelBuilder.Entity<StockReservation>(entity =>
         {
-            entity.ToTable("OrderStockReservations");
+            entity.ToTable("StockReservations");
             entity.HasKey(r => r.Id);
-            entity.Property(r => r.OrderId).IsRequired();
+            // OrderId/SagaId are now nullable — Pending reservations have no
+            // owning order yet (sync flow assigns them at Confirm). Saga path
+            // populates both up-front via CreateConfirmed.
+            entity.Property(r => r.OrderId);
+            entity.Property(r => r.SagaId);
+            entity.Property(r => r.UserId).HasMaxLength(450).IsRequired();
+            entity.Property(r => r.Status).IsRequired();
+            entity.Property(r => r.ExpiresAt).IsRequired();
+            entity.Property(r => r.ConfirmedAt);
+            entity.Property(r => r.ExpiredAt);
             entity.Property(r => r.ItemsJson).HasColumnType("jsonb").IsRequired();
             entity.Property(r => r.RowVersion).HasDefaultValueSql("'\\x0000000000000000'::bytea");
 
-            entity.HasIndex(r => r.OrderId).IsUnique().HasDatabaseName("IX_OrderStockReservations_OrderId");
+            // Sweeper hot path: WHERE Status = Pending AND ExpiresAt <= now
+            // ORDER BY ExpiresAt LIMIT N. Composite index keeps the scan
+            // bounded as the table grows.
+            entity.HasIndex(r => new { r.Status, r.ExpiresAt })
+                .HasDatabaseName("IX_StockReservations_Status_ExpiresAt");
         });
 
         // MassTransit transactional outbox tables. Lives in the catalog DB so
