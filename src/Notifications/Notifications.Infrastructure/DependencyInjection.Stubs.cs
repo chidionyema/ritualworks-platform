@@ -12,5 +12,4 @@ public static partial class DependencyInjection
     // AddSesEmailProvider (L2.H), AddNotificationChannelGateways (L3).
     internal static IServiceCollection AddSendGridEmailProvider(this IServiceCollection s, IConfiguration c) => s;
     internal static IServiceCollection AddTwilioSmsProvider(this IServiceCollection s, IConfiguration c) => s;
-    internal static IServiceCollection AddFcmPushProvider(this IServiceCollection s, IConfiguration c) => s;
 }
