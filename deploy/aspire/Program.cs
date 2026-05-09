@@ -67,6 +67,13 @@ var minio = builder.AddContainer("minio", "minio/minio", "latest")
 var clamav = builder.AddContainer("clamav", "clamav/clamav", "latest")
     .WithEndpoint(port: 3310, targetPort: 3310, name: "clamd");
 
+var meilisearch = builder.AddContainer("meilisearch", "getmeili/meilisearch", "v1.10")
+    .WithEnvironment("MEILI_MASTER_KEY", "dev_master_key_at_least_16_chars")
+    .WithEnvironment("MEILI_NO_ANALYTICS", "true")
+    .WithEnvironment("MEILI_ENV", "development")
+    .WithVolume("ritualworks-platform-meilisearch-data", "/meili_data")
+    .WithHttpEndpoint(targetPort: 7700, name: "http");
+
 var tempo = builder.AddContainer("tempo", "grafana/tempo", "latest")
     .WithEndpoint(targetPort: 4317, name: "grpc", scheme: "http")
     .WithEndpoint(targetPort: 3200, name: "http", scheme: "http");
@@ -112,6 +119,22 @@ var identity = builder.AddProject<Projects.Identity_Api>("identity-svc")
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("identity"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
 
+// JWKS validator config — every backend that uses AddJwksAuthentication
+// needs JwksUri/Issuer/Audience or its host refuses to boot
+// (JwksOptions has [Required] + ValidateOnStart). The URI is interpolated
+// from identity-svc's runtime endpoint via a callback so it picks up
+// whatever port Aspire's reverse-proxy assigns.
+static IResourceBuilder<T> AddJwksConfig<T>(
+    IResourceBuilder<T> svc,
+    IResourceBuilder<ProjectResource> identitySvc) where T : IResourceWithEnvironment
+    => svc.WithEnvironment(ctx =>
+    {
+        var url = identitySvc.GetEndpoint("http").Url;
+        ctx.EnvironmentVariables["Authentication__Jwks__JwksUri"] = $"{url}/.well-known/jwks.json";
+        ctx.EnvironmentVariables["Authentication__Jwks__Issuer"]   = "http://localhost";
+        ctx.EnvironmentVariables["Authentication__Jwks__Audience"] = "ritualworks-dev";
+    });
+
 // --- catalog-svc -----------------------------------------------------------
 // Replicated x2 so the BFF's HttpClient (which load-balances via Aspire's
 // reverse proxy) round-robins requests across both. Each replica stamps
@@ -120,64 +143,101 @@ var identity = builder.AddProject<Projects.Identity_Api>("identity-svc")
 // the upstream replica that served the call. This is the visible proof
 // that the platform actually distributes — visitor presses Run a few
 // times and watches the catalog-svc-XXXX suffix rotate.
-var catalog = builder.AddProject<Projects.Catalog_Api>("catalog-svc")
+var catalog = AddJwksConfig(builder.AddProject<Projects.Catalog_Api>("catalog-svc")
     .WithReplicas(2)
     .WaitFor(vault)
     .WaitFor(catalogDb)
     .WithReference(catalogDb)
     .WaitFor(rabbitmq)
     .WithReference(rabbitmq)
+    .WaitFor(identity)
     .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
     .WithEnvironment("Vault__Enabled",      "false")
     .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
     .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("catalog"))
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("catalog"))
-    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
 // --- checkout-orchestrator-svc --------------------------------------------
-var checkout = builder.AddProject<Projects.CheckoutOrchestrator_Api>("checkout-svc")
+var checkout = AddJwksConfig(builder.AddProject<Projects.CheckoutOrchestrator_Api>("checkout-svc")
     .WaitFor(vault)
     .WaitFor(checkoutDb)
     .WithReference(checkoutDb)
     .WaitFor(rabbitmq)
     .WithReference(rabbitmq)
+    .WaitFor(identity)
     .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
     .WithEnvironment("Vault__Enabled",      "false")
     .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
     .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("checkout-orchestrator"))
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("checkout-orchestrator"))
-    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
 // --- orders-svc ------------------------------------------------------------
-var orders = builder.AddProject<Projects.Orders_Api>("orders-svc")
+var orders = AddJwksConfig(builder.AddProject<Projects.Orders_Api>("orders-svc")
     .WaitFor(vault)
     .WaitFor(ordersDb)
     .WithReference(ordersDb)
     .WaitFor(rabbitmq)
     .WithReference(rabbitmq)
+    .WaitFor(identity)
     .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
     .WithEnvironment("Vault__Enabled",      "false")
     .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
     .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("orders"))
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("orders"))
-    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
 // --- payments-svc ----------------------------------------------------------
-var payments = builder.AddProject<Projects.Payments_Api>("payments-svc")
+var payments = AddJwksConfig(builder.AddProject<Projects.Payments_Api>("payments-svc")
     .WaitFor(vault)
     .WaitFor(paymentsDb)
     .WithReference(paymentsDb)
     .WaitFor(rabbitmq)
     .WithReference(rabbitmq)
+    .WaitFor(identity)
     .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
     .WithEnvironment("Vault__Enabled",      "false")
     .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
     .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("payments"))
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("payments"))
-    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
+
+// --- content-svc -----------------------------------------------------------
+var content = AddJwksConfig(builder.AddProject<Projects.Content_Api>("content-svc")
+    .WaitFor(vault)
+    .WaitFor(contentDb)
+    .WithReference(contentDb)
+    .WaitFor(rabbitmq)
+    .WithReference(rabbitmq)
+    .WaitFor(identity)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("content"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("content"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
+
+// --- search-svc ------------------------------------------------------------
+// Read-side projection of catalog. No DB, no Vault — just Meilisearch and
+// HTTP back to catalog-svc for category lookups.
+var search = AddJwksConfig(builder.AddProject<Projects.Search_Api>("search-svc")
+    .WaitFor(meilisearch)
+    .WaitFor(catalog)
+    .WaitFor(identity)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
+    .WithEnvironment("Vault__Enabled",        "false")
+    .WithEnvironment("Meilisearch__Url",      meilisearch.GetEndpoint("http"))
+    .WithEnvironment("Meilisearch__MasterKey", "dev_master_key_at_least_16_chars")
+    .WithEnvironment("Meilisearch__IndexName", "products")
+    .WithEnvironment(ctx =>
+    {
+        ctx.EnvironmentVariables["Catalog__BaseAddress"] = catalog.GetEndpoint("http").Url;
+    })
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
 // --- bff-web ---------------------------------------------------------------
-var bffWeb = builder.AddProject<Projects.BffWeb_Api>("bff-web")
+var bffWeb = AddJwksConfig(builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WaitFor(vault)
     .WaitFor(rabbitmq)
     .WithReference(rabbitmq)
@@ -192,6 +252,10 @@ var bffWeb = builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WithReference(payments)
     .WaitFor(checkout)
     .WithReference(checkout)
+    .WaitFor(content)
+    .WithReference(content)
+    .WaitFor(search)
+    .WithReference(search)
     .WithEndpoint("http",  e => e.Port = 5050)
     .WithEndpoint("https", e => e.Port = 5051)
     .WithExternalHttpEndpoints()
@@ -199,7 +263,7 @@ var bffWeb = builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
     .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("bff-web"))
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("bff-web"))
-    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
 builder.Services.AddHostedService<ResourceFileLogger>();
 

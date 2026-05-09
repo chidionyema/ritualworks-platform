@@ -81,6 +81,23 @@ services:
     ports:
       - "3310:3310"
 
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    container_name: rw-meilisearch
+    environment:
+      - MEILI_MASTER_KEY=dev_master_key_at_least_16_chars
+      - MEILI_NO_ANALYTICS=true
+      - MEILI_ENV=development
+    ports:
+      - "7700:7700"
+    volumes:
+      - meilisearch-data:/meili_data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   tempo:
     image: grafana/tempo:latest
     container_name: rw-tempo
@@ -218,10 +235,13 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__catalog=Host=postgres;Port=5432;Database=catalog;Username=postgres;Password=postgres
       - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=false
+      - Vault__Enabled=true
       - Vault__Address=http://vault:8200
       - Vault__RoleIdPath=/creds/catalog/role_id
       - Vault__SecretIdPath=/creds/catalog/secret_id
+      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
+      - Authentication__Jwks__Issuer=http://localhost
+      - Authentication__Jwks__Audience=ritualworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -241,10 +261,13 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__catalog=Host=postgres;Port=5432;Database=catalog;Username=postgres;Password=postgres
       - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=false
+      - Vault__Enabled=true
       - Vault__Address=http://vault:8200
       - Vault__RoleIdPath=/creds/catalog/role_id
       - Vault__SecretIdPath=/creds/catalog/secret_id
+      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
+      - Authentication__Jwks__Issuer=http://localhost
+      - Authentication__Jwks__Audience=ritualworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -264,10 +287,13 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__orders=Host=postgres;Port=5432;Database=orders;Username=postgres;Password=postgres
       - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=false
+      - Vault__Enabled=true
       - Vault__Address=http://vault:8200
       - Vault__RoleIdPath=/creds/orders/role_id
       - Vault__SecretIdPath=/creds/orders/secret_id
+      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
+      - Authentication__Jwks__Issuer=http://localhost
+      - Authentication__Jwks__Audience=ritualworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -287,10 +313,13 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__payments=Host=postgres;Port=5432;Database=payments;Username=postgres;Password=postgres
       - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=false
+      - Vault__Enabled=true
       - Vault__Address=http://vault:8200
       - Vault__RoleIdPath=/creds/payments/role_id
       - Vault__SecretIdPath=/creds/payments/secret_id
+      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
+      - Authentication__Jwks__Issuer=http://localhost
+      - Authentication__Jwks__Audience=ritualworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -310,10 +339,17 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__checkout=Host=postgres;Port=5432;Database=checkout;Username=postgres;Password=postgres
       - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=false
+      - Vault__Enabled=true
       - Vault__Address=http://vault:8200
       - Vault__RoleIdPath=/creds/checkout-orchestrator/role_id
       - Vault__SecretIdPath=/creds/checkout-orchestrator/secret_id
+      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
+      - Authentication__Jwks__Issuer=http://localhost
+      - Authentication__Jwks__Audience=ritualworks-dev
+      # CheckoutOptions has [Required] DataAnnotations on these; ValidateOnStart
+      # blocks host boot without them. Dev-only placeholders pointing at the BFF.
+      - Checkout__SuccessUrl=http://localhost:5050/checkout/success
+      - Checkout__CancelUrl=http://localhost:5050/checkout/cancel
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -333,10 +369,13 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__content=Host=postgres;Port=5432;Database=content;Username=postgres;Password=postgres
       - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=false
+      - Vault__Enabled=true
       - Vault__Address=http://vault:8200
       - Vault__RoleIdPath=/creds/content/role_id
       - Vault__SecretIdPath=/creds/content/secret_id
+      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
+      - Authentication__Jwks__Issuer=http://localhost
+      - Authentication__Jwks__Audience=ritualworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -346,21 +385,26 @@ services:
       dockerfile: src/Search/Search.Api/Dockerfile
     container_name: rw-search-svc
     depends_on:
-      vault-seed:
-        condition: service_completed_successfully
-      postgres:
+      meilisearch:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+      catalog-svc-1:
+        condition: service_started
+      identity-svc:
+        condition: service_started
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
+      # search-svc has no Vault-backed secrets; AppRole + KV not needed.
       - Vault__Enabled=false
-      - Vault__Address=http://vault:8200
-      - Vault__RoleIdPath=/creds/search/role_id
-      - Vault__SecretIdPath=/creds/search/secret_id
-    volumes:
-      - ./vault-creds:/creds:ro
+      - Meilisearch__Url=http://meilisearch:7700
+      - Meilisearch__MasterKey=dev_master_key_at_least_16_chars
+      - Meilisearch__IndexName=products
+      # search-svc is a read-side projection of catalog; calls catalog-svc
+      # for category lookups via Refit.
+      - Catalog__BaseAddress=http://catalog-svc-1:8080
+      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
+      - Authentication__Jwks__Issuer=http://localhost
+      - Authentication__Jwks__Audience=ritualworks-dev
 
   bff-web:
     build:
@@ -389,10 +433,13 @@ services:
       - Services__checkout-svc__http__0=http://checkout-svc:8080
       - Services__content-svc__http__0=http://content-svc:8080
       - Services__search-svc__http__0=http://search-svc:8080
-      - Vault__Enabled=false
+      - Vault__Enabled=true
       - Vault__Address=http://vault:8200
       - Vault__RoleIdPath=/creds/bff-web/role_id
       - Vault__SecretIdPath=/creds/bff-web/secret_id
+      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
+      - Authentication__Jwks__Issuer=http://localhost
+      - Authentication__Jwks__Audience=ritualworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -402,3 +449,4 @@ volumes:
   rabbitmq-data:
   minio-data:
   pact-db-data:
+  meilisearch-data:
