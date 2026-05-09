@@ -6,16 +6,36 @@ it keeps working for local dev. This directory only covers Fly.
 
 ## TL;DR
 
+> **Before running the wizard, you must already have accounts and resources
+> at three managed-service providers.** The wizard prompts for their URLs;
+> if you don't have them ready it'll exit with no progress.
+
+**Pre-flight checklist (do these first, ~10 min):**
+
+| Provider | Sign up at | What you create | What you grab |
+|---|---|---|---|
+| **Neon** (Postgres) | [neon.tech](https://neon.tech) | One project, six databases inside it (`identity`, `catalog`, `orders`, `payments`, `checkout`, `content`) | Connection string base (one for the project — DB-name segment differs per service) |
+| **CloudAMQP** (RabbitMQ) | [cloudamqp.com](https://cloudamqp.com) | One instance (Little Lemur free tier is fine) | AMQPS URL |
+| **Upstash** (Redis) | [upstash.com](https://upstash.com) | One database | `rediss://` URL |
+
+Pick regions close to Fly `iad` (US East): Neon + Upstash `us-east-1`,
+CloudAMQP US East. EU regions add ~70ms per round-trip.
+
+You also need a Fly.io account and the GitHub repo cloned locally. The
+wizard handles both Fly + GitHub browser logins for you.
+
+**Then deploy:**
+
 ```bash
 deploy/fly/up.sh
 ```
 
-That's the whole deploy. The wizard installs missing tools, walks you
-through Fly + GitHub auth, prompts (silently) for four runtime URLs,
-creates the seven apps, deploys, and wires `FLY_API_TOKEN` into GitHub
-Actions so every subsequent push to `main` auto-deploys. Idempotent —
-re-run any time. Read the rest if you want to understand what it's doing
-or override pieces.
+That's the whole deploy. The wizard installs missing tools (`flyctl`,
+`gh`) on demand, walks you through Fly + GitHub auth, prompts for the
+four URLs from the table above, creates the seven apps, deploys, and
+wires `FLY_API_TOKEN` into GitHub Actions so every subsequent push to
+`main` auto-deploys. Idempotent — re-run any time. Read the rest if you
+want to understand what it's doing or override pieces.
 
 ## What runs where
 

@@ -36,6 +36,27 @@ REGION="${REGION:-iad}"
 # Setting only one creates a mismatch (app missing on deploy, or secrets unset).
 DEPLOY_CONTENT="${DEPLOY_CONTENT:-false}"
 
+# Cross-check the GitHub repo variable when DEPLOY_CONTENT is on locally,
+# so silent mismatches don't surface as "content service never deploys".
+# Soft-fails when gh CLI is missing/unauthenticated (the dev may not have
+# it set up yet) — only prints a warning then.
+if [[ "$DEPLOY_CONTENT" == "true" ]]; then
+  if command -v gh >/dev/null 2>&1; then
+    gh_value=$(gh variable list 2>/dev/null | awk '$1=="DEPLOY_CONTENT"{print $2}' || true)
+    if [[ "$gh_value" != "true" ]]; then
+      echo "ERROR: .env.local has DEPLOY_CONTENT=true but the GitHub repo variable is '${gh_value:-unset}'." >&2
+      echo "       Set it to match so deploy.yml includes content in the matrix:" >&2
+      echo "         gh variable set DEPLOY_CONTENT --body true" >&2
+      echo "       Or set DEPLOY_CONTENT=false in .env.local to disable content entirely." >&2
+      exit 1
+    fi
+  else
+    echo "WARN: gh CLI not installed — cannot verify GitHub repo variable DEPLOY_CONTENT" >&2
+    echo "      matches .env.local. Set it manually in repo Settings → Secrets and" >&2
+    echo "      variables → Actions → Variables: DEPLOY_CONTENT=true" >&2
+  fi
+fi
+
 # Auto-generate JWT signing keypair on first run, persist back to .env.local.
 # Identity reads Jwt:SigningKeyPem (raw PEM or base64) when Vault is disabled.
 # Persisting means tokens stay valid across redeploys.
