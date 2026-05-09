@@ -20,7 +20,13 @@ var vaultManifestsHostDir = Path.GetFullPath(Path.Combine(builder.AppHostDirecto
 // =============================================================================
 // INFRASTRUCTURE RESOURCES
 // =============================================================================
+// ContainerLifetime.Persistent on every long-lived infra container —
+// without this, every `dotnet run` tears down + recreates Postgres,
+// RabbitMQ, Vault etc. and pays their full warmup cost (~30s of
+// healthcheck waiting). Persistent keeps them alive across runs;
+// Aspire reattaches on the next boot and skips startup entirely.
 var postgres = builder.AddPostgres("postgres")
+    .WithLifetime(ContainerLifetime.Persistent)
     .WithDataVolume("ritualworks-platform-postgres-data")
     .WithBindMount("./init-postgres.sql", "/docker-entrypoint-initdb.d/init.sql")
     .WithPgAdmin();
@@ -33,15 +39,19 @@ var contentDb  = postgres.AddDatabase("content");
 var checkoutDb = postgres.AddDatabase("checkout");
 
 var redis = builder.AddRedis("redis")
+    .WithLifetime(ContainerLifetime.Persistent)
     .WithDataVolume("ritualworks-platform-redis-data")
     .WithRedisCommander();
 
 var rabbitmq = builder.AddRabbitMQ("rabbitmq", port: 5672)
+    .WithLifetime(ContainerLifetime.Persistent)
     .WithManagementPlugin();
 
 var pactDb = builder.AddPostgres("pact-db", port: null, password: null)
+    .WithLifetime(ContainerLifetime.Persistent)
     .WithDataVolume("ritualworks-platform-pact-db-data");
 var pactBroker = builder.AddContainer("pact-broker", "pactfoundation/pact-broker", "latest")
+    .WithLifetime(ContainerLifetime.Persistent)
     .WaitFor(pactDb)
     .WithEnvironment(ctx =>
     {
@@ -60,15 +70,18 @@ var pactBroker = builder.AddContainer("pact-broker", "pactfoundation/pact-broker
 // the AWS-SDK-based StorageOptions (feat/content/s3-presigned-storage) targets
 // both transparently — only ServiceUrl + ForcePathStyle differ.
 var localstack = builder.AddContainer("localstack", "localstack/localstack", "3")
+    .WithLifetime(ContainerLifetime.Persistent)
     .WithEnvironment("SERVICES", "s3")
     .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1")
     .WithVolume("ritualworks-platform-localstack-data", "/var/lib/localstack")
     .WithHttpEndpoint(targetPort: 4566, name: "edge");
 
 var clamav = builder.AddContainer("clamav", "clamav/clamav", "latest")
+    .WithLifetime(ContainerLifetime.Persistent)
     .WithEndpoint(port: 3310, targetPort: 3310, name: "clamd");
 
 var meilisearch = builder.AddContainer("meilisearch", "getmeili/meilisearch", "v1.10")
+    .WithLifetime(ContainerLifetime.Persistent)
     .WithEnvironment("MEILI_MASTER_KEY", "dev_master_key_at_least_16_chars")
     .WithEnvironment("MEILI_NO_ANALYTICS", "true")
     .WithEnvironment("MEILI_ENV", "development")
@@ -76,11 +89,13 @@ var meilisearch = builder.AddContainer("meilisearch", "getmeili/meilisearch", "v
     .WithHttpEndpoint(targetPort: 7700, name: "http");
 
 var tempo = builder.AddContainer("tempo", "grafana/tempo", "latest")
+    .WithLifetime(ContainerLifetime.Persistent)
     .WithEndpoint(targetPort: 4317, name: "grpc", scheme: "http")
     .WithEndpoint(targetPort: 3200, name: "http", scheme: "http");
 
 var vaultBootstrapToken = "dev-root-token";
 var vault = builder.AddContainer("vault", "hashicorp/vault", "1.15")
+    .WithLifetime(ContainerLifetime.Persistent)
     .WithEnvironment("VAULT_DEV_ROOT_TOKEN_ID", vaultBootstrapToken)
     .WithEnvironment("VAULT_DEV_LISTEN_ADDRESS", "0.0.0.0:8200")
     .WithEnvironment("VAULT_LOG_LEVEL", "info")
