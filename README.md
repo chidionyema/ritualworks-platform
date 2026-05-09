@@ -136,6 +136,8 @@ dotnet run --project deploy/aspire
 ./scripts/seed-vault-dev.sh
 ```
 
+Use the helper script `./scripts/aspire-up.sh` only when a previous run left orphan service processes around, ports are stuck, or you're running in CI — it pre-cleans orphan `dotnet`/AppHost/dcpctrl processes, does a Docker preflight, builds the AppHost, and runs a watchdog that gates on `http://localhost:5050/health` and tails per-service logs into `./logs/`. For everyday work, the plain `dotnet run` above is what you want.
+
 Aspire dashboard URL appears in console — gives aggregated logs, OTel traces, and per-service health.
 
 ---
