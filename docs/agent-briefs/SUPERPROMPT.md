@@ -1,12 +1,22 @@
 # SUPERPROMPT — universal parallel-agent launcher
 
-A single prompt template that any agent (Gemini CLI, Claude, etc.) can run, against any "brief" file in this repo, to do a scoped piece of work in an isolated git worktree without colliding with sibling agents.
+A single prompt template any LLM CLI (Gemini, Claude, etc.) can run, with any brief in this repo, to do a scoped piece of work in an isolated git worktree without colliding with sibling agents.
 
-The operator fills in the **Parameters** block, hands the whole document to the agent, and the agent executes it top-to-bottom. The contract is: as long as the agent obeys the file-scope rules, two or more agents pointing at sibling briefs can run in true parallel.
+## Two modes
+
+**Mode A — Operator-assigned.** Operator hand-picks one brief per agent and fills in the Parameters block. Each agent does exactly one track and reports back.
+
+**Mode B — Autonomous wave.** Operator launches N identical agents with the same prompt against a track list. Each agent atomically claims an unclaimed track, implements it, pushes, queues an auto-merge PR, then loops to claim the next. No coordinator. Race-safe via remote ref push. Walk away.
+
+Pick Mode A when scope is small and operator wants explicit control. Pick Mode B for "5 mutually-independent tracks, fire and forget."
+
+The **HARD RULES** at the bottom apply to both modes.
 
 ---
 
-## Parameters (operator fills these in before handing to the agent)
+## Mode A — Operator-assigned (per-agent prompt)
+
+### Parameters (operator fills these in before handing to the agent)
 
 ```
 REPO_ROOT=/Users/chidionyema/Documents/code/ritualworks-platform
@@ -248,28 +258,187 @@ Emit one of the two templates below, filled in.
 
 ---
 
-## Anti-spiral rules (non-negotiable)
+## Mode B — Autonomous wave (one prompt, N agents, self-claim)
 
-These exist because LLM coding agents fail in predictable ways. Internalize them.
+You are ONE OF N parallel coding agents. The track list and the brief that describes each track are in the operator-supplied **Parameters** block below. Each agent claims, implements, pushes, queues auto-merge, and loops until no claimable tracks remain.
 
-- **Read inputs first.** Most failures come from skimming Inputs and grepping the wrong things.
-- **45-minute default time budget.** The operator may override via `TIME_BUDGET_MINUTES`. If you hit it and aren't green, STOP and emit a Blocker. Do not keep retrying the same approach.
-- **No cross-track edits.** If your track's work needs a sibling track to do something it currently doesn't, you do **not** patch the sibling's code. You file a Blocker.
-- **No silent scope expansion.** If you spot a refactor that "would only take a minute," log it under "out-of-scope observations." Do not change it.
-- **Trust but verify the spec.** If the spec says X but the code says Y, the spec is the source of truth — pause and call it out in the done-report. Don't silently rewrite the spec; don't silently break from it.
-- **Don't fabricate paths.** If a file the Inputs list claims exists doesn't, file a Blocker. Don't invent.
-- **Don't drop stashes without inspecting.** If you need to clear a stash, run `git stash show -p stash@{N}` first; if it shows changes, treat it as live. Recovery from a mistakenly-dropped stash is via `git fsck --lost-found`.
-- **Never push without explicit operator instruction.** Your job is to commit on the dedicated branch and report. Pushing is the operator's call.
-- **Never merge to main.** Same reason.
-- **Never `git clean -fdx` or `git reset --hard`.** They destroy untracked files and unstaged work. If the working tree is in a state you don't understand, file a Blocker.
+### Parameters (operator fills these in once; the same filled-in prompt goes to every agent)
+
+```
+REPO=/Users/chidionyema/Documents/code/ritualworks-platform
+GH_REPO=chidionyema/ritualworks-platform
+BASE_BRANCH=main                                       # the branch every track forks from + merges into
+BRIEF_FILE=docs/agent-briefs/<area>/follow-up-tracks.md  # one file with section "### Track <id>" per track
+TRACK_PREFIX=feat/<area>-                              # branch name prefix; full branch = ${TRACK_PREFIX}<id>
+TRACKS=(F1 F2 F3 F4 F5)                                # the unclaimed track ids
+WORKTREE_PARENT=/tmp                                   # ephemeral worktrees go here
+```
+
+The brief MUST contain one `### Track <id>` section per id in `TRACKS`, plus a "universal rules" / "anti-stuck" section every track inherits. Tracks are mutually independent (no ordering required between them).
+
+### Step 1 — Claim a track (atomic, no coordinator)
+
+```bash
+set -euo pipefail
+git -C "$REPO" fetch origin --prune
+
+CLAIMED=""
+for t in "${TRACKS[@]}"; do
+    BRANCH="${TRACK_PREFIX}${t}"
+    # In-flight on origin? skip
+    if git -C "$REPO" ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then continue; fi
+    # Already merged? skip
+    if gh pr list -R "$GH_REPO" --state merged --head "$BRANCH" --json number --jq '.[].number' | grep -q .; then continue; fi
+    # Atomic claim: race-safe push of a branch ref pointing at origin/$BASE_BRANCH
+    if git -C "$REPO" push origin "refs/remotes/origin/${BASE_BRANCH}:refs/heads/${BRANCH}" 2>/dev/null; then
+        CLAIMED=$t
+        break
+    fi
+done
+
+if [ -z "$CLAIMED" ]; then
+    echo "[exit] all tracks claimed or merged"
+    exit 0
+fi
+
+# Dedicated worktree to avoid the shared-checkout race
+WT="${WORKTREE_PARENT}/$(basename "$TRACK_PREFIX")${CLAIMED}"
+git -C "$REPO" worktree remove --force "$WT" 2>/dev/null || true
+rm -rf "$WT"
+git -C "$REPO" worktree add "$WT" "${TRACK_PREFIX}${CLAIMED}"
+echo "[ready] TRACK=$CLAIMED BRANCH=${TRACK_PREFIX}${CLAIMED} WORKTREE=$WT"
+```
+
+If two agents try the same `git push` simultaneously, exactly one wins — the other's push fails with `non-fast-forward` and falls through to the next iteration of the loop. The atomic claim is the remote ref push itself.
+
+### Step 2 — Read ONLY your track's section
+
+In `$REPO/$BRIEF_FILE`, jump to `### Track $CLAIMED`. Read it + the brief's "universal rules" / "anti-stuck" sections. Do **NOT** read other tracks' sections — you don't need them and reading them invites scope creep.
+
+### Step 3 — Implement, commit, push (per file group)
+
+For each logical file group in your track section (e.g., entities → options → provider → extensions → tests):
+
+1. Create / edit the files in that group.
+2. Build verify within scope:
+   ```bash
+   dotnet build "$WT/src/<your-area>" --nologo --verbosity quiet
+   ```
+   Must return exit 0 before committing. If it fails, fix forward; do not commit broken builds.
+3. Commit + push immediately:
+   ```bash
+   git -C "$WT" add <explicit list of files in this group>
+   git -C "$WT" commit -m "<type>(<area>-${CLAIMED}): <one-line summary>"
+   git -C "$WT" push origin "${TRACK_PREFIX}${CLAIMED}"
+   ```
+
+**Per-group commits + per-group push.** Not "one big commit at the end." This gives the operator visibility into progress and a recovery point per group.
+
+### Step 4 — Run the track's "Done" check
+
+Every track section ends with a `Done:` shell command. Run it verbatim. It must exit 0.
+
+### Step 5 — Open + auto-merge PR
+
+```bash
+git -C "$WT" push origin "${TRACK_PREFIX}${CLAIMED}"
+
+gh pr create -R "$GH_REPO" \
+    --base "$BASE_BRANCH" \
+    --head "${TRACK_PREFIX}${CLAIMED}" \
+    --title "$(git -C "$WT" log -1 --pretty=%s)" \
+    --body "Implements track ${CLAIMED} per ${BRIEF_FILE}"
+
+PR=$(gh pr view "${TRACK_PREFIX}${CLAIMED}" -R "$GH_REPO" --json number --jq .number)
+gh pr merge "$PR" -R "$GH_REPO" --auto --squash --delete-branch
+```
+
+`--auto` queues the merge; GitHub merges as soon as required checks go green. Do **NOT** merge by hand.
+
+### Step 6 — Cleanup + loop
+
+```bash
+git -C "$REPO" worktree remove --force "$WT" 2>/dev/null
+```
+
+Then go back to **Step 1** and try to claim another track. Loop until claim returns `[exit] all tracks claimed or merged`.
+
+When the loop exits, output exactly one line and STOP:
+
+```
+[agent done] tracks: <comma-separated list of tracks this agent claimed>
+```
+
+### Operator wave-launch
+
+```bash
+# In N (1..N) terminals, paste the SAME filled-in superprompt into each gemini session.
+# Each self-claims, implements, auto-merges, loops.
+```
+
+### Stuck-agent recovery
+
+If an agent gets stuck mid-track (claims but never finishes), the branch sits on origin uncompleted. Recovery:
+
+```bash
+# Drop the orphan claim so a fresh agent can pick it up
+git push origin --delete "${TRACK_PREFIX}<id>"
+# Optionally: also close the agent's stuck PR if one was opened
+gh pr close <pr#> -R "$GH_REPO"
+# Then start a fresh agent with the same prompt
+```
+
+The atomic-claim protocol prevents two agents from grabbing the same id; deleting the remote branch effectively "releases" the claim for the next agent.
 
 ---
 
-## Operator usage — running 1..N agents in parallel
+## HARD RULES — apply to BOTH modes (violate any and you have failed)
+
+### Process discipline
+
+- **Read your scope first.** Mode A: the brief's Inputs in order. Mode B: only your track's section + universal/anti-stuck. Do NOT read other tracks' sections.
+- **Time budget.** Default 45 minutes per track (Mode A) / per claim iteration (Mode B). Hit it and not green? STOP. Mode A → Blocker. Mode B → release the claim (`git push origin --delete <branch>`) and exit; another agent picks it up.
+- **60-second decision time-box.** Naming, file location, dependency choice over budget? **Mirror the reference file** named in the brief. Move on. Don't deliberate.
+- **If thinking instead of doing, you are stuck.** Mirror the reference file. Move on. Re-reading the brief for the third time is a symptom.
+
+### Scope discipline
+
+- **No cross-track edits.** Need a sibling's code to change? Mode A → Blocker. Mode B → write a `// TODO(<area>-<TRACK>)` comment in YOUR file describing the cross-track change and continue without making it.
+- **No silent scope expansion.** Drive-by refactors get logged in out-of-scope observations, never executed.
+- **No `csproj` edits except adding the SINGLE NuGet package your track needs**, named in your section. Don't restructure references, don't reorder ItemGroups, don't bump versions.
+- **No new public types in shared namespaces.** New types live in your owned subdirectory only.
+- **No touching files outside your owned paths.** Mode A: outside Deliverable. Mode B: outside the track section's Files-You-Own list.
+
+### Git discipline
+
+- **Never `cd`.** Working directory does NOT persist across bash tool calls. Every git op uses `git -C $REPO` or `git -C $WT`. Every file path is absolute.
+- **`git add <explicit-list>`, never `git add -A` or `git add .`.** The latter pulls in another track's untracked work and breaks the parallel contract.
+- **Per-file-group commit + push (Mode B).** Not "one big commit at the end." Entities → commit + push. Validators → commit + push. Handlers → commit + push. Tests → commit + push. The push is the progress signal.
+- **Don't drop stashes without inspecting.** `git stash show -p stash@{N}` before `git stash drop`. Recovery from accidental drops: `git fsck --lost-found` finds dangling commits, `git stash apply <hash>` restores.
+- **Never `git clean -fdx`, `git reset --hard`, `git push --force` (without `--force-with-lease`), `git checkout --` over uncommitted edits.** They destroy unstaged or untracked work. If state is confusing, STOP and report.
+- **Never merge to `main` by hand.** Use `gh pr merge --auto --squash --delete-branch` (Mode B) or hand back to the operator (Mode A).
+
+### Communication discipline (especially for Mode B)
+
+- **No questions to user.** The operator is not in the session. Decision unclear? Mirror the reference file. Still unclear? Pick the simpler option, add `// TODO(<area>-<TRACK>): <reason>`, proceed.
+- **No narrating.** After each commit/push, do the next file. After `[agent done]`, stop. No status updates, no "now I will…", no progress prose.
+- **Don't fabricate paths.** If a file the Inputs / track section claims exists doesn't, file a Blocker (Mode A) or write the missing file from the brief's spec if specified, otherwise stop (Mode B).
+- **Trust but verify the spec.** If the spec says X but the code says Y, the spec is the source of truth — but pause and note it. Don't silently rewrite the spec; don't silently break from it.
+
+### Reporting
+
+- **Mode A:** Done-report or Blocker template (below).
+- **Mode B:** Per-track, no per-track report — the audit trail is the per-group commits + the auto-merge PR. At the end of the agent's lifetime, output exactly one line: `[agent done] tracks: <comma-separated list>` and stop.
+
+---
+
+## Operator usage
+
+### Mode A — explicit assignment (one agent, one track)
 
 For each parallel track:
 
-1. Fill in the Parameters block (different `TRACK_ID` per agent, different `BRIEF_FILE`).
+1. Fill in the Mode A Parameters block (different `TRACK_ID` per agent, different `BRIEF_FILE`).
 2. Hand the filled-in superprompt to the agent.
 3. Wait for the done-report or blocker.
 4. Review the done-report's "Files modified" against the brief's Deliverable list — they must match.
@@ -285,11 +454,33 @@ done
 
 Conflicts at merge-back time mean a track violated its scope. Reject and re-run with the violation called out.
 
+### Mode B — wave launch (N agents, same prompt, autonomous)
+
+1. Author one brief at `docs/agent-briefs/<area>/<file>.md` with one `### Track <id>` section per id, plus a "universal rules" / "anti-stuck" section every track inherits. Tracks must be mutually independent (no ordering required between them).
+2. Fill in the Mode B Parameters block ONCE: `REPO`, `GH_REPO`, `BASE_BRANCH`, `BRIEF_FILE`, `TRACK_PREFIX`, `TRACKS=(F1 F2 …)`, `WORKTREE_PARENT`.
+3. Open N CLI sessions (1 ≤ N ≤ |TRACKS|). Paste the same filled-in prompt into each.
+4. Walk away. Each agent self-claims, implements, pushes, queues `--auto` merge, loops until claims are exhausted, exits.
+5. Required CI checks gate the merges; merges happen as checks go green.
+
+Stuck-agent recovery: `git push origin --delete <branch>` releases the claim; `gh pr close <pr#>` closes any half-baked PR. Then start a fresh agent — it'll re-claim the released id automatically.
+
+### When to pick which mode
+
+| Situation                                                | Mode |
+| -------------------------------------------------------- | ---- |
+| Tracks have ordering deps (L0 → L1.* → L2)               | A — operator gates each phase |
+| One-off scoped task you want to verify before merging    | A — done-report is the gate |
+| 5+ mutually independent tracks                           | B — autonomous saves operator time |
+| You want auto-merge + per-group push as the audit trail  | B |
+| You're debugging the track design itself                 | A — easier to inspect mid-flight |
+
 ---
 
 ## How to write a brief that's superprompt-compatible
 
-If you're authoring a new brief for an agent to consume via this superprompt, the brief MUST have these sections (matching `docs/agent-briefs/audit/L0-skeleton.md` as a template):
+### Mode A brief (one file per track)
+
+Match `docs/agent-briefs/audit/L0-skeleton.md` as a template. Required sections:
 
 1. **Goal** — one sentence.
 2. **Phase / blocks-on** — for ordering.
@@ -299,6 +490,43 @@ If you're authoring a new brief for an agent to consume via this superprompt, th
 6. **Hard stops** — including a "parallel-scope" subsection that lists the files this track exclusively owns (when running in a parallel family).
 7. **Done-report format** — the standard template (or a brief-specific extension).
 8. **Commit block** — exact `git commit` invocation, with a HEREDOC commit message.
+
+### Mode B brief (one file with N track sections)
+
+Single file with this shape:
+
+```markdown
+# <Area> follow-up tracks
+
+## Universal rules
+(applies to every track in this file — file-scope discipline, build verify, push cadence, …)
+
+## Anti-stuck
+(decision rules: mirror reference file X; if Y unclear, pick the simpler; …)
+
+## Reference file
+(the canonical existing file the agent should mirror when in doubt)
+
+### Track F1: <name>
+**Files you own:** <explicit paths>
+**Files you may NOT touch:** <forbidden paths if not obvious>
+**Reference to mirror:** <path>
+**NuGet (if any):** <single allowed package>
+
+<numbered work plan, one logical group per number>
+
+**Done:** `<shell command that returns 0 when this track is done>`
+
+### Track F2: <name>
+…
+
+### Track F3: <name>
+…
+```
+
+The track section must be self-contained — an agent reads ONLY its own track section + the universal/anti-stuck/reference sections, and that's everything it needs.
+
+The "Done" command at the bottom of each track is the gate: build / test / smoke command that exits 0 only when the track's work is correct.
 
 The superprompt enforces the contract; the brief carries the substance.
 
