@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Haworks.Notifications.Domain</RootNamespace>
+    <AssemblyName>Haworks.Notifications.Domain</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../BuildingBlocks/Haworks.BuildingBlocks.csproj" />
+  </ItemGroup>
+</Project>
