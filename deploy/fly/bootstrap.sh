@@ -160,6 +160,7 @@ INTERNAL_APPS=(
   ritualworks-checkout
   ritualworks-search
   ritualworks-meilisearch
+  ritualworks-notifications
 )
 if [[ "$DEPLOY_CONTENT" == "true" ]]; then
   INTERNAL_APPS+=(ritualworks-content)

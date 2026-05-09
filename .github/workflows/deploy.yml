@@ -58,6 +58,7 @@ jobs:
       search: ${{ steps.filter.outputs.search }}
       meilisearch: ${{ steps.filter.outputs.meilisearch }}
       content: ${{ steps.filter.outputs.content }}
+      notifications: ${{ steps.filter.outputs.notifications }}
       bff: ${{ steps.filter.outputs.bff }}
       shared: ${{ steps.filter.outputs.shared }}
     steps:
@@ -104,6 +105,9 @@ jobs:
             content:
               - 'src/Content/**'
               - 'fly.content.toml'
+            notifications:
+              - 'src/Notifications/**'
+              - 'fly.notifications.toml'
             bff:
               - 'src/BffWeb/**'
               - 'fly.bffweb.toml'
@@ -130,6 +134,7 @@ jobs:
       C_SEARCH: ${{ needs.changes.outputs.search }}
       C_MEILISEARCH: ${{ needs.changes.outputs.meilisearch }}
       C_CONTENT: ${{ needs.changes.outputs.content }}
+      C_NOTIFICATIONS: ${{ needs.changes.outputs.notifications }}
       C_BFF: ${{ needs.changes.outputs.bff }}
     steps:
       - id: set
@@ -139,13 +144,14 @@ jobs:
           services=()
           add_if() { [[ "$2" == "true" || "$3" == "true" || "$FORCE_ALL" == "true" ]] && services+=("$1"); return 0; }
 
-          add_if identity    "$C_IDENTITY"    "$C_SHARED"
-          add_if catalog     "$C_CATALOG"     "$C_SHARED"
-          add_if orders      "$C_ORDERS"      "$C_SHARED"
-          add_if payments    "$C_PAYMENTS"    "$C_SHARED"
-          add_if checkout    "$C_CHECKOUT"    "$C_SHARED"
-          add_if search      "$C_SEARCH"      "$C_SHARED"
-          add_if meilisearch "$C_MEILISEARCH" "false"  # no shared triggers meili
+          add_if identity      "$C_IDENTITY"      "$C_SHARED"
+          add_if catalog       "$C_CATALOG"       "$C_SHARED"
+          add_if orders        "$C_ORDERS"        "$C_SHARED"
+          add_if payments      "$C_PAYMENTS"      "$C_SHARED"
+          add_if checkout      "$C_CHECKOUT"      "$C_SHARED"
+          add_if search        "$C_SEARCH"        "$C_SHARED"
+          add_if notifications "$C_NOTIFICATIONS" "$C_SHARED"
+          add_if meilisearch   "$C_MEILISEARCH"   "false"  # no shared triggers meili
           if [[ "${{ vars.DEPLOY_CONTENT }}" == "true" ]]; then
             add_if content "$C_CONTENT" "$C_SHARED"
           fi
