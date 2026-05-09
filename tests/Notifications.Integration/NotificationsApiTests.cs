@@ -35,28 +35,19 @@ namespace Haworks.Notifications.Integration;
 ///     same Notification.Id (handler-level dedup, not the global HTTP
 ///     middleware which 409s on header replay).
 /// </summary>
-public sealed class NotificationsApiTests : IClassFixture<NotificationsWebAppFactory>, IAsyncLifetime
+[Collection("Notifications Integration")]
+public sealed class NotificationsApiTests : IAsyncLifetime
 {
-    private const string ServiceBootBugSkipReason =
-        "TODO(notif-L4): Notifications.Api host fails to boot because Application.AddNotificationsApplication " +
-        "calls services.AddMassTransit a second time after Infrastructure already did. MT v8.3.4 forbids " +
-        "this. Skipping until the service-side bug is addressed (out of L4's scope per fixed constraints).";
-
     private readonly NotificationsWebAppFactory _factory;
 
     public NotificationsApiTests(NotificationsWebAppFactory factory)
     {
+        // Shared factory via [Collection] — no per-test mock needed. API tests
+        // assert HTTP surface + DB state; the dispatch pipeline runs through
+        // the no-IEmailProvider path (gateway logs + marks Failed), which is
+        // fine because these tests don't assert dispatch outcomes — Pipeline
+        // tests cover that with per-test mock injection.
         _factory = factory;
-        _factory.ConfigureEmailProviders = services =>
-        {
-            // Deterministic single-provider mock that always succeeds.
-            // API tests don't need to assert dispatch — Pipeline tests cover that.
-            var mock = new Mock<IEmailProvider>();
-            mock.SetupGet(p => p.Name).Returns("api-test-provider");
-            mock.Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(ProviderSendResult.Success("msg-test"));
-            services.AddSingleton<IEmailProvider>(mock.Object);
-        };
         // NOTE: don't eagerly build the client in the ctor — CreateClient()
         // forces a host build which throws on the duplicate AddMassTransit
         // (see file-level TODO). Each [Fact] lazily creates the client.
@@ -66,7 +57,7 @@ public sealed class NotificationsApiTests : IClassFixture<NotificationsWebAppFac
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    [Fact(Skip = ServiceBootBugSkipReason)]
+    [Fact]
     public async Task Send_creates_notification_with_status_Created()
     {
         await EnsureBootedAsync();
@@ -103,7 +94,7 @@ public sealed class NotificationsApiTests : IClassFixture<NotificationsWebAppFac
             NotificationStatus.Failed);
     }
 
-    [Fact(Skip = ServiceBootBugSkipReason)]
+    [Fact]
     public async Task Send_with_suppressed_recipient_returns_Suppressed()
     {
         await EnsureBootedAsync();
@@ -142,7 +133,7 @@ public sealed class NotificationsApiTests : IClassFixture<NotificationsWebAppFac
             "pre-seeded suppression row must short-circuit the handler before the Created state");
     }
 
-    [Fact(Skip = ServiceBootBugSkipReason)]
+    [Fact]
     public async Task Send_idempotency_returns_existing_id_on_replay()
     {
         await EnsureBootedAsync();
