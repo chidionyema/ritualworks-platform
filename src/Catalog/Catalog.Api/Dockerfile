@@ -7,9 +7,9 @@ WORKDIR /src
 COPY Directory.Build.props ./
 COPY src/ ./src/
 
-RUN --mount=type=cache,target=/root/.nuget/packages dotnet restore src/Catalog/Catalog.Api/Catalog.Api.csproj
+RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked dotnet restore src/Catalog/Catalog.Api/Catalog.Api.csproj
 
-RUN --mount=type=cache,target=/root/.nuget/packages dotnet publish src/Catalog/Catalog.Api/Catalog.Api.csproj \
+RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked dotnet publish src/Catalog/Catalog.Api/Catalog.Api.csproj \
         -c Release \
         -o /app/publish \
         --no-restore \

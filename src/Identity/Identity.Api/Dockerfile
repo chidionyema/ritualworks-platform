@@ -7,9 +7,9 @@ WORKDIR /src
 COPY Directory.Build.props ./
 COPY src/ ./src/
 
-RUN --mount=type=cache,target=/root/.nuget/packages dotnet restore src/Identity/Identity.Api/Identity.Api.csproj
+RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked dotnet restore src/Identity/Identity.Api/Identity.Api.csproj
 
-RUN --mount=type=cache,target=/root/.nuget/packages dotnet publish src/Identity/Identity.Api/Identity.Api.csproj \
+RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked dotnet publish src/Identity/Identity.Api/Identity.Api.csproj \
         -c Release \
         -o /app/publish \
         --no-restore \
