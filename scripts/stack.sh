@@ -75,25 +75,18 @@ cmd_up() {
 
 cmd_aspire() {
     stop_compose
-    log "Pre-building solution + pulling images so Aspire boots fast"
-    (cd "$REPO_ROOT" && dotnet build RitualworksPlatform.sln -c Release --nologo --verbosity quiet) &
-    local build_pid=$!
-    # compose tags (postgres:16-alpine etc.) AND Aspire-default tags
-    # (postgres:17.6 etc.) — warm both so neither mode pays the pull cost.
-    docker pull -q postgres:16-alpine               &
-    docker pull -q postgres:17.6                    &
-    docker pull -q rabbitmq:3.13-management-alpine  &
-    docker pull -q rabbitmq:4.1-management          &
-    docker pull -q redis:7-alpine                   &
-    docker pull -q redis:8.2                        &
-    docker pull -q hashicorp/vault:1.15             &
-    docker pull -q localstack/localstack:3          &
-    docker pull -q getmeili/meilisearch:v1.10       &
-    docker pull -q grafana/tempo:latest             &
-    docker pull -q dpage/pgadmin4:9.7.0             &
-    docker pull -q pactfoundation/pact-broker:latest &
-    wait $build_pid
-    wait
+
+    # Use existing build artifacts. The full-solution prebuild used to
+    # live here but burned 6+ min on every invocation even when nothing
+    # had changed. If the AppHost binary is missing or stale, the user
+    # runs `./scripts/stack.sh prebuild` once — that's an explicit step,
+    # not a hidden cost on every boot.
+    local apphost_dll="$REPO_ROOT/deploy/aspire/bin/Release/net9.0/RitualworksPlatform.AppHost.dll"
+    if [ ! -f "$apphost_dll" ]; then
+        warn "AppHost not built. Run './scripts/stack.sh prebuild' first (warms .NET + Docker images)."
+        return 1
+    fi
+
     log "Booting Aspire AppHost (dashboard URL printed below)"
     cd "$REPO_ROOT"
     nohup dotnet run --project "$ASPIRE_PROJECT" -c Release --no-build \

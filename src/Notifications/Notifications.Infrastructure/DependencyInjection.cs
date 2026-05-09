@@ -43,6 +43,14 @@ public static partial class DependencyInjection
 
         services.AddMassTransit(x =>
         {
+            // Register the dispatch consumer here, inside the SINGLE
+            // AddMassTransit call. MT v8 throws ConfigurationException on a
+            // second AddMassTransit call per container — so the L3 extension
+            // method (NotificationConsumersServiceCollectionExtensions) is
+            // a no-op now; we wire the consumer directly here. Application
+            // owns the consumer type; Infrastructure owns the bus.
+            x.AddConsumer<Notifications.Application.Consumers.NotificationRequestConsumer>();
+
             x.AddEntityFrameworkOutbox<NotificationsDbContext>(o =>
             {
                 o.UsePostgres();
