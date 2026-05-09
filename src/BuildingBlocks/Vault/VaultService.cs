@@ -136,17 +136,30 @@ public class VaultService : IVaultService
         ThrowIfDisposed();
         if (_initialized) return;
 
-        _logger.LogInformation("Initializing VaultService...");
-        var start = DateTime.UtcNow;
-
-        await BuildClientAsync(ct);
-
-        _initialized = true;
-        _logger.LogInformation("Initialized in {ElapsedMs}ms", (DateTime.UtcNow - start).TotalMilliseconds);
-        _telemetry.TrackEvent("VaultServiceInitialized", new Dictionary<string, string>
+        // Serialize first-time init under _clientGate to prevent concurrent
+        // GetDatabaseCredentialsAsync/GetKvSecretAsync calls (which now
+        // self-initialize) from racing two AppRole logins.
+        await _clientGate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            ["ElapsedMs"] = (DateTime.UtcNow - start).TotalMilliseconds.ToString()
-        });
+            if (_initialized) return;
+
+            _logger.LogInformation("Initializing VaultService...");
+            var start = DateTime.UtcNow;
+
+            await BuildClientAsync(ct);
+
+            _initialized = true;
+            _logger.LogInformation("Initialized in {ElapsedMs}ms", (DateTime.UtcNow - start).TotalMilliseconds);
+            _telemetry.TrackEvent("VaultServiceInitialized", new Dictionary<string, string>
+            {
+                ["ElapsedMs"] = (DateTime.UtcNow - start).TotalMilliseconds.ToString()
+            });
+        }
+        finally
+        {
+            _clientGate.Release();
+        }
     }
 
     /// <summary>
@@ -200,7 +213,7 @@ public class VaultService : IVaultService
     public async Task<(string Username, SecureString Password)> GetDatabaseCredentialsAsync(string roleName, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-        EnsureInitialized();
+        await InitializeAsync(ct);
         ValidateRoleName(roleName);
 
         var store = _stores.GetOrAdd(roleName, _ => _credentialStoreFactory());
@@ -216,7 +229,7 @@ public class VaultService : IVaultService
     public async Task RefreshCredentials(string roleName, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-        EnsureInitialized();
+        await InitializeAsync(ct);
         ValidateRoleName(roleName);
 
         var store = _stores.GetOrAdd(roleName, _ => _credentialStoreFactory());
@@ -268,7 +281,7 @@ public class VaultService : IVaultService
     public async Task<string?> GetKvSecretAsync(string path, string key, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-        EnsureInitialized();
+        await InitializeAsync(ct);
 
         try
         {
@@ -306,7 +319,7 @@ public class VaultService : IVaultService
 
     public async Task StartCredentialRenewalAsync(CancellationToken stoppingToken)
     {
-        EnsureInitialized();
+        await InitializeAsync(stoppingToken);
         _logger.LogInformation("Starting renewal loop.");
 
         var jitterRng = new Random();
@@ -359,11 +372,6 @@ public class VaultService : IVaultService
                 await Task.Delay(TimeSpan.FromMinutes(1).Add(TimeSpan.FromMilliseconds(errorJitterMs)), stoppingToken);
             }
         }
-    }
-
-    private void EnsureInitialized()
-    {
-        if (!_initialized) throw new InvalidOperationException("Call InitializeAsync first.");
     }
 
     private static void ValidateRoleName(string roleName)
