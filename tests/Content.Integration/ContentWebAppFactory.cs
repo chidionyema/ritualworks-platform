@@ -53,6 +53,11 @@ public sealed class ContentWebAppFactory : WebApplicationFactory<Program>, IAsyn
 
         _localstackUrl = $"http://{_localstack.Hostname}:{_localstack.GetMappedPublicPort(4566)}";
 
+        // Jwks:* required by AddJwksAuthentication's ValidateOnStart;
+        // tests bypass JWT validation via TestAuthenticationHandler but
+        // the config keys must still be present.
+        JwtTestDefaults.SetTestEnvironmentVariables();
+
         // Env vars must be set BEFORE WebApplicationFactory builds the host —
         // top-level Program.cs runs to construct the WebApplicationBuilder
         // before WAF's ConfigureAppConfiguration hook fires.

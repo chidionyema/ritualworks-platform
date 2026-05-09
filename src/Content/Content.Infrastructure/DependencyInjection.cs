@@ -68,6 +68,12 @@ public static class DependencyInjection
                 ServiceURL = opts.ServiceUrl,
                 ForcePathStyle = opts.ForcePathStyle,
                 AuthenticationRegion = opts.Region,
+                // AWS SDK defaults presigned URLs to HTTPS regardless of what
+                // ServiceURL declares. UseHttp = true (when ServiceURL is HTTP,
+                // i.e. LocalStack in dev/test) forces presigned URLs to the
+                // same scheme; without this clients PUT to https://… and
+                // hit a TLS handshake against an HTTP-only emulator.
+                UseHttp = opts.ServiceUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase),
             };
             return new AmazonS3Client(opts.AccessKey, opts.SecretKey, cfg);
         });
