@@ -1,10 +1,14 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
+using Haworks.BuildingBlocks.Middleware;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
 namespace Haworks.BuildingBlocks.Extensions;
@@ -15,6 +19,8 @@ namespace Haworks.BuildingBlocks.Extensions;
 /// </summary>
 public static class ServiceDefaults
 {
+    private static readonly string[] ReadyTag = new[] { "ready" };
+
     /// <summary>
     /// Adds service defaults to the host application builder.
     /// </summary>
@@ -35,6 +41,12 @@ public static class ServiceDefaults
 
         builder.Services.AddServiceDiscovery();
 
+        // Correlation-id propagation: registers IHttpContextAccessor + the
+        // outbound DelegatingHandler. Must be called before
+        // ConfigureHttpClientDefaults so the handler type is registered
+        // when AddHttpMessageHandler<T>() resolves it.
+        builder.Services.AddCorrelationId();
+
         builder.Services.ConfigureHttpClientDefaults(http =>
         {
             // Turn on resilience by default
@@ -42,6 +54,12 @@ public static class ServiceDefaults
 
             // Turn on service discovery by default
             http.AddServiceDiscovery();
+
+            // Stamp X-Correlation-ID on every outbound request so downstream
+            // services see the same id the BFF logged. Cheap, idempotent,
+            // skipped automatically when there is no ambient HttpContext
+            // (e.g. background workers).
+            http.AddHttpMessageHandler<CorrelationIdHttpClientHandler>();
         });
 
         // Uncomment the following to restrict the allowed schemes for service discovery.
@@ -65,6 +83,10 @@ public static class ServiceDefaults
         });
 
         builder.Services.AddOpenTelemetry()
+            .ConfigureResource(r => r.AddService(
+                serviceName: builder.Environment.ApplicationName,
+                serviceVersion: typeof(ServiceDefaults).Assembly.GetName().Version?.ToString() ?? "unknown",
+                serviceInstanceId: Environment.MachineName))
             .WithMetrics(metrics =>
             {
                 metrics.AddAspNetCoreInstrumentation()
@@ -78,6 +100,7 @@ public static class ServiceDefaults
                     // (requires the OpenTelemetry.Instrumentation.GrpcNetClient package)
                     // .AddGrpcClientInstrumentation()
                     .AddHttpClientInstrumentation()
+                    .AddEntityFrameworkCoreInstrumentation()
                     .AddSource("MassTransit");
             });
 
@@ -118,6 +141,52 @@ public static class ServiceDefaults
     }
 
     /// <summary>
+    /// Opt-in: registers a readiness probe (tag <c>"ready"</c>) for the given EF Core
+    /// <typeparamref name="TContext"/> using <c>DbContext.Database.CanConnectAsync</c>.
+    /// Surfaces under <c>/health/ready</c> when <see cref="MapDefaultEndpoints"/> is mapped.
+    /// </summary>
+    public static IHealthChecksBuilder AddDbHealthCheck<TContext>(
+        this IHealthChecksBuilder hcBuilder,
+        string? name = null)
+        where TContext : DbContext
+        => hcBuilder.AddDbContextCheck<TContext>(
+            name: name ?? typeof(TContext).Name,
+            tags: ReadyTag,
+            customTestQuery: (ctx, ct) => ctx.Database.CanConnectAsync(ct));
+
+    /// <summary>
+    /// Opt-in: registers a readiness probe (tag <c>"ready"</c>) for RabbitMQ.
+    /// Uses the Xabaril <c>AspNetCore.HealthChecks.Rabbitmq</c> probe.
+    /// </summary>
+    public static IHealthChecksBuilder AddRabbitMqHealthCheck(
+        this IHealthChecksBuilder hcBuilder,
+        string connectionString)
+        => hcBuilder.AddRabbitMQ(
+            options =>
+            {
+                options.ConnectionUri = new Uri(connectionString);
+            },
+            name: "rabbitmq",
+            tags: ReadyTag);
+
+    /// <summary>
+    /// Registers the dependencies needed by the correlation-id middleware
+    /// and outbound HttpClient handler. Idempotent — relies on TryAdd-style
+    /// semantics provided by <c>AddHttpContextAccessor</c> and the explicit
+    /// transient registration for the handler.
+    /// </summary>
+    public static IServiceCollection AddCorrelationId(this IServiceCollection services)
+    {
+        services.AddHttpContextAccessor();
+        // DelegatingHandlers added via AddHttpMessageHandler<T>() must be
+        // registered as transient so each named HttpClient gets its own
+        // instance per request — singletons cause the handler chain to
+        // alias.
+        services.AddTransient<CorrelationIdHttpClientHandler>();
+        return services;
+    }
+
+    /// <summary>
     /// Maps default health check endpoints.
     /// </summary>
     /// <remarks>
@@ -127,9 +196,17 @@ public static class ServiceDefaults
     ///   <item>/health/ready - Readiness checks (databases must be connected)</item>
     ///   <item>/health/live - Liveness checks only (app is responsive)</item>
     /// </list>
+    /// Also registers the correlation-id middleware early in the pipeline so
+    /// every service that calls this picks up X-Correlation-ID handling
+    /// without an extra wire-up step.
     /// </remarks>
     public static WebApplication MapDefaultEndpoints(this WebApplication app)
     {
+        // Correlation-id must be the first middleware to run so every log
+        // line emitted from this point on (including health checks, auth,
+        // routing) is enriched with CorrelationId in Serilog LogContext.
+        app.UseCorrelationId();
+
         // All health checks must pass for detailed health info
         app.MapHealthChecks("/health");
 

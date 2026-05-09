@@ -10,6 +10,12 @@ primary_region = "iad"
   ASPNETCORE_URLS        = "http://+:8080"
   ASPNETCORE_ENVIRONMENT = "Production"
 
+  # OpenTelemetry resource identity. Fly's [env] is static (no ${VAR}
+  # interpolation), so the OTLP endpoint must be set out-of-band via:
+  #   fly secrets set OTEL_EXPORTER_OTLP_ENDPOINT=... -a ritualworks-catalog
+  OTEL_SERVICE_NAME         = "catalog-svc"
+  OTEL_RESOURCE_ATTRIBUTES  = "deployment.environment=production,service.namespace=ritualworks"
+
 [http_service]
   internal_port        = 8080
   force_https          = false

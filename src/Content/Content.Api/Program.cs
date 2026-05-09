@@ -34,7 +34,7 @@ builder.Services.AddAuthorization(options =>
 
 builder.Host.UseSerilog((context, loggerConfiguration) =>
 {
-    loggerConfiguration.ReadFrom.Configuration(context.Configuration);
+    loggerConfiguration.ReadFrom.Configuration(context.Configuration).WriteTo.Console();
 });
 
 var app = builder.Build();

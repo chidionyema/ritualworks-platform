@@ -30,6 +30,12 @@ primary_region = "iad"
   "Services__checkout-svc__http__0"  = "http://ritualworks-checkout.internal:8080"
   "Services__search-svc__http__0"    = "http://ritualworks-search.internal:8080"
 
+  # OpenTelemetry resource identity. Fly's [env] is static (no ${VAR}
+  # interpolation), so the OTLP endpoint must be set out-of-band via:
+  #   fly secrets set OTEL_EXPORTER_OTLP_ENDPOINT=... -a ritualworks-bffweb
+  OTEL_SERVICE_NAME         = "bff-web"
+  OTEL_RESOURCE_ATTRIBUTES  = "deployment.environment=production,service.namespace=ritualworks"
+
 [http_service]
   internal_port       = 8080
   force_https         = true

@@ -2,8 +2,14 @@ using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.Search.Application.Interfaces;
 using Haworks.Search.Infrastructure;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((context, services, loggerConfiguration) =>
+{
+    loggerConfiguration.ReadFrom.Configuration(context.Configuration).WriteTo.Console().Enrich.FromLogContext();
+});
 
 builder.AddServiceDefaults();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
@@ -20,7 +26,6 @@ app.MapDefaultEndpoints();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/health", () => Results.Ok());
 app.MapControllers();
 
 // One-shot bootstrap of the Meilisearch index settings. Wrapped in
