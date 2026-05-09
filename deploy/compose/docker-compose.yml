@@ -226,6 +226,10 @@ services:
       context: ../..
       dockerfile: src/Identity/Identity.Api/Dockerfile
     container_name: rw-identity-svc
+    # Published port lets cross-service E2E tests on the host call
+    # /api/Authentication/register and /login directly to mint a real JWT.
+    ports:
+      - "5070:8080"
     depends_on:
       vault-seed:
         condition: service_completed_successfully
@@ -383,6 +387,12 @@ services:
       context: ../..
       dockerfile: src/Content/Content.Api/Dockerfile
     container_name: rw-content-svc
+    # Published port lets cross-service E2E tests on the host hit content-svc
+    # directly with a real JWT minted by identity-svc — proves JWKS validation,
+    # presigned URLs and the validation pipeline work end-to-end without
+    # going through the BFF (which has no content passthrough yet).
+    ports:
+      - "5060:8080"
     depends_on:
       vault-seed:
         condition: service_completed_successfully
