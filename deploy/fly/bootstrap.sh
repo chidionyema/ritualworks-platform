@@ -119,8 +119,11 @@ fi
 # Postgres rather than the shared Neon prod DB.
 if [[ -z "${VAULT_PG_PASSWORD:-}" ]]; then
   echo "==> Generating vault-pg Postgres password (first run)"
-  # 32 chars from [A-Za-z0-9]. LC_ALL=C makes tr safe under UTF-8 locales.
-  VAULT_PG_PASSWORD="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+  # openssl rand avoids the SIGPIPE-with-pipefail issue that bites
+  # `tr -dc … </dev/urandom | head -c 32` (tr gets SIGPIPE, pipefail
+  # treats the whole script as failed). 16 bytes = 32 hex chars,
+  # plenty of entropy for a sandboxed demo Postgres.
+  VAULT_PG_PASSWORD="$(openssl rand -hex 16)"
   upsert_env_var VAULT_PG_PASSWORD "$VAULT_PG_PASSWORD"
   echo "    written to $ENV_FILE (gitignored)"
 fi
