@@ -43,18 +43,22 @@ fly_ssh() {
     | sed '/^Connecting to/d'
 }
 
-# Wait for vault to be alive (sealed-but-listening counts).
-log "waiting for vault listener on $VAULT_APP..."
+# Wait for vault to be FULLY READY: initialized + unsealed + active.
+# A sealed-but-listening vault would let the listener check pass but
+# return 503 from auth/approle endpoints, racing the script ahead of
+# the entrypoint's unseal step. /v1/sys/health returns 200 only when
+# the node is initialized, unsealed, and active (default behavior).
+log "waiting for vault to be unsealed + active on $VAULT_APP..."
 ready=0
-for i in $(seq 1 30); do
-  if fly_ssh 'sh -c "curl -fsS -o /dev/null http://[::1]:8200/v1/sys/health?standbyok=true&sealedcode=200&uninitcode=200"' >/dev/null 2>&1; then
+for i in $(seq 1 60); do
+  if fly_ssh 'sh -c "curl -fsS -o /dev/null http://[::1]:8200/v1/sys/health"' >/dev/null 2>&1; then
     ready=1
     break
   fi
   sleep 2
 done
 if [[ "$ready" != "1" ]]; then
-  log "ERROR: vault listener never came up — is the vault deploy healthy?"
+  log "ERROR: vault never reached active+unsealed within 120s — check the vault entrypoint log."
   exit 1
 fi
 
