@@ -122,7 +122,7 @@ OAUTH_GOOGLE_CLIENT_ID=
 OAUTH_GOOGLE_CLIENT_SECRET=
 # (microsoft, facebook similar)
 STRIPE_WEBHOOK_SECRET=
-# MinIO/Tigris block — only if DEPLOY_CONTENT=true (see "Adding Content")
+# Tigris block — only if DEPLOY_CONTENT=true (see "Adding Content")
 DEPLOY_CONTENT=false
 ```
 
@@ -196,12 +196,12 @@ flyctl apps create ritualworks-content
 # 2. Provision Tigris. flyctl prints the credentials to stdout.
 flyctl storage create -a ritualworks-content
 
-# 3. Copy the printed AWS_* values into .env.local's MINIO_* slots:
-#    AWS_ENDPOINT_URL_S3       → MINIO_ENDPOINT (without https://)
-#    AWS_ACCESS_KEY_ID         → MINIO_ACCESS_KEY
-#    AWS_SECRET_ACCESS_KEY     → MINIO_SECRET_KEY
-#    BUCKET_NAME               → MINIO_BUCKET
-#    MINIO_SECURE=true
+# 3. Copy the printed AWS_* values into .env.local's TIGRIS_* slots:
+#    AWS_ACCESS_KEY_ID         → TIGRIS_ACCESS_KEY
+#    AWS_SECRET_ACCESS_KEY     → TIGRIS_SECRET_KEY
+#    AWS_ENDPOINT_URL_S3       → TIGRIS_SERVICE_URL  (keep https://)
+#    AWS_REGION                → TIGRIS_REGION       (typically "auto")
+#    BUCKET_NAME               → TIGRIS_BUCKET
 # 4. Set DEPLOY_CONTENT=true in .env.local.
 
 deploy/fly/up.sh             # re-runs end to end with content

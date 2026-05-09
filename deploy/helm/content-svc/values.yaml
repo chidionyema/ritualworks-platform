@@ -14,7 +14,12 @@ config:
   ASPNETCORE_ENVIRONMENT: Production
   ConnectionStrings__content: "Host=postgres;Port=5432;Database=content;Username=content;Password=changeme"
   ConnectionStrings__rabbitmq: "amqp://guest:guest@rabbitmq:5672/"
-  Minio__Endpoint: "http://minio:9000"
+  # S3-compatible storage (Tigris in Fly, S3 in AWS, LocalStack in dev/test).
+  # Credentials (AccessKey/SecretKey) come from Vault — see secretPath below.
+  Storage__ServiceUrl: "https://fly.storage.tigris.dev"
+  Storage__BucketName: "content-prod"
+  Storage__Region: "auto"
+  Storage__ForcePathStyle: "false"
   Vault__Enabled: "true"
   Vault__Address: "http://vault:8200"
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
@@ -22,7 +27,7 @@ config:
 vault:
   enabled: true
   role: content-svc
-  # MinIO access keys + ClamAV creds under secret/content
+  # Storage access keys + ClamAV creds under secret/content
   secretPath: secret/data/content
 
 # Content needs more memory headroom for image-resize / virus-scan buffering.

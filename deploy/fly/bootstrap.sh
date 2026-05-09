@@ -420,15 +420,20 @@ set_secrets ritualworks-identity "${id_extra[@]}"
 [[ -n "${STRIPE_WEBHOOK_SECRET:-}" ]] && \
   set_secrets ritualworks-payments "Webhooks__Stripe__WebhookSecret=$STRIPE_WEBHOOK_SECRET"
 
-# Content-specific (only when DEPLOY_CONTENT=true)
+# Content-specific (only when DEPLOY_CONTENT=true).
+# Storage backend on Fly is Tigris (S3-compatible). Same Storage__* env shape
+# as local-dev/test (LocalStack) — only ServiceUrl/Region/ForcePathStyle vary.
+# Tigris credentials come from `flyctl storage create -a ritualworks-content`
+# (printed once as AWS_*); stash them in .env.local under TIGRIS_* slots.
 if [[ "$DEPLOY_CONTENT" == "true" ]]; then
   content_extra=()
-  [[ -n "${MINIO_ENDPOINT:-}" ]] && content_extra+=(
-    "MinIO__Endpoint=$MINIO_ENDPOINT"
-    "MinIO__AccessKey=$MINIO_ACCESS_KEY"
-    "MinIO__SecretKey=$MINIO_SECRET_KEY"
-    "MinIO__BucketName=$MINIO_BUCKET"
-    "MinIO__Secure=${MINIO_SECURE:-true}"
+  [[ -n "${TIGRIS_ACCESS_KEY:-}" ]] && content_extra+=("Storage__AccessKey=$TIGRIS_ACCESS_KEY")
+  [[ -n "${TIGRIS_SECRET_KEY:-}" ]] && content_extra+=("Storage__SecretKey=$TIGRIS_SECRET_KEY")
+  [[ -n "${TIGRIS_BUCKET:-}"     ]] && content_extra+=("Storage__BucketName=$TIGRIS_BUCKET")
+  content_extra+=(
+    "Storage__ServiceUrl=${TIGRIS_SERVICE_URL:-https://fly.storage.tigris.dev}"
+    "Storage__Region=${TIGRIS_REGION:-auto}"
+    "Storage__ForcePathStyle=false"
   )
   [[ -n "${CLAMAV_REST_URL:-}" ]] && content_extra+=("ClamAV__RestApiUrl=$CLAMAV_REST_URL")
   [[ ${#content_extra[@]} -gt 0 ]] && set_secrets ritualworks-content "${content_extra[@]}"

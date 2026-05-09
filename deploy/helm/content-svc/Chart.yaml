@@ -1,6 +1,6 @@
 apiVersion: v2
 name: content-svc
-description: Content bounded context — file upload, MinIO storage
+description: Content bounded context — file upload, S3-compatible storage (Tigris/LocalStack)
 type: application
 version: 1.0.0
 appVersion: "1.0.0"

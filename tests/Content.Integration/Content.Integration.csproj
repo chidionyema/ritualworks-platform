@@ -8,6 +8,11 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageReference Include="FluentAssertions" Version="6.12.2" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.0.0" />
+    <!-- LocalStack via the generic Testcontainers builder; AWSSDK.S3 to
+         pre-create the bucket once the host is built. -->
+    <PackageReference Include="Testcontainers" Version="4.0.0" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.0.0" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.405" />
     <ProjectReference Include="../../src/Content/Content.Api/Content.Api.csproj" />
     <ProjectReference Include="../../src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj" />
   </ItemGroup>

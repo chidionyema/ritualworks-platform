@@ -62,18 +62,43 @@ services:
       timeout: 5s
       retries: 5
 
-  minio:
-    image: minio/minio:latest
-    container_name: rw-minio
+  localstack:
+    image: localstack/localstack:3
+    container_name: rw-localstack
     environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
+      - SERVICES=s3
+      - DEBUG=0
+      - PERSISTENCE=1
+      - AWS_DEFAULT_REGION=us-east-1
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "4566:4566"
     volumes:
-      - minio-data:/data
-    command: server /data --console-address ":9001"
+      - localstack-data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: create the content-dev bucket so content-svc has somewhere to
+  # write on cold boot. Uses the official aws-cli image; LocalStack accepts
+  # any non-empty AWS credentials.
+  localstack-init:
+    image: amazon/aws-cli:latest
+    container_name: rw-localstack-init
+    depends_on:
+      localstack:
+        condition: service_healthy
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        aws --endpoint-url=http://localstack:4566 s3api create-bucket \
+          --bucket content-dev --region us-east-1 2>/dev/null || true
+        echo "localstack bucket content-dev ready"
 
   clamav:
     image: clamav/clamav:latest
@@ -365,6 +390,10 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      localstack:
+        condition: service_healthy
+      localstack-init:
+        condition: service_completed_successfully
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__content=Host=postgres;Port=5432;Database=content;Username=postgres;Password=postgres
@@ -376,6 +405,14 @@ services:
       - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
       - Authentication__Jwks__Issuer=http://localhost
       - Authentication__Jwks__Audience=ritualworks-dev
+      # S3-compatible storage. LocalStack here in compose; Tigris in Fly.
+      # Shape matches StorageOptions in feat/content/s3-presigned-storage.
+      - Storage__ServiceUrl=http://localstack:4566
+      - Storage__AccessKey=test
+      - Storage__SecretKey=test
+      - Storage__BucketName=content-dev
+      - Storage__Region=us-east-1
+      - Storage__ForcePathStyle=true
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -447,6 +484,6 @@ volumes:
   postgres-data:
   redis-data:
   rabbitmq-data:
-  minio-data:
+  localstack-data:
   pact-db-data:
   meilisearch-data:

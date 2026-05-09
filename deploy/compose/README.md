@@ -1,6 +1,6 @@
 # RitualWorks Platform — Docker Compose Environment
 
-This directory provides a Docker Compose environment that mirrors the official Aspire local development setup. It spins up the complete microservices topology along with all necessary infrastructure (Postgres, RabbitMQ, Redis, Vault, Minio, Tempo, Pact Broker).
+This directory provides a Docker Compose environment that mirrors the official Aspire local development setup. It spins up the complete microservices topology along with all necessary infrastructure (Postgres, RabbitMQ, Redis, Vault, LocalStack S3, Tempo, Pact Broker).
 
 ## Prerequisites
 
@@ -42,7 +42,7 @@ docker-compose down
 - **Developer Tools:**
   - **pgAdmin:** `http://localhost:5055` (admin@ritualworks.com / admin)
   - **Redis Commander:** `http://localhost:8081`
-  - **Minio Console:** `http://localhost:9001` (minioadmin / minioadmin)
+  - **LocalStack S3:** `http://localhost:4566` (access/secret: `test` / `test`; bucket `content-dev` auto-created on boot)
   - **Pact Broker:** `http://localhost:9292`
   - **Vault:** `http://localhost:8200`
   - **BFF Web:** `http://localhost:5050`

@@ -56,13 +56,14 @@ var pactBroker = builder.AddContainer("pact-broker", "pactfoundation/pact-broker
     })
     .WithHttpEndpoint(targetPort: 9292, name: "ui");
 
-var minio = builder.AddContainer("minio", "minio/minio", "latest")
-    .WithVolume("ritualworks-platform-minio-data", "/data")
-    .WithEnvironment("MINIO_ROOT_USER", "minioadmin")
-    .WithEnvironment("MINIO_ROOT_PASSWORD", "minioadmin")
-    .WithArgs("server", "/data", "--console-address", ":9001")
-    .WithHttpEndpoint(targetPort: 9000, name: "s3")
-    .WithHttpEndpoint(targetPort: 9001, name: "console");
+// LocalStack S3 emulator for hermetic local-dev. Production uses Fly Tigris;
+// the AWS-SDK-based StorageOptions (feat/content/s3-presigned-storage) targets
+// both transparently — only ServiceUrl + ForcePathStyle differ.
+var localstack = builder.AddContainer("localstack", "localstack/localstack", "3")
+    .WithEnvironment("SERVICES", "s3")
+    .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1")
+    .WithVolume("ritualworks-platform-localstack-data", "/var/lib/localstack")
+    .WithHttpEndpoint(targetPort: 4566, name: "edge");
 
 var clamav = builder.AddContainer("clamav", "clamav/clamav", "latest")
     .WithEndpoint(port: 3310, targetPort: 3310, name: "clamd");
@@ -204,6 +205,8 @@ var payments = AddJwksConfig(builder.AddProject<Projects.Payments_Api>("payments
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
 // --- content-svc -----------------------------------------------------------
+// content-svc reads/writes via the AWS S3 SDK against LocalStack here.
+// Storage__* shape is set by StorageOptions on feat/content/s3-presigned-storage.
 var content = AddJwksConfig(builder.AddProject<Projects.Content_Api>("content-svc")
     .WaitFor(vault)
     .WaitFor(contentDb)
@@ -211,11 +214,18 @@ var content = AddJwksConfig(builder.AddProject<Projects.Content_Api>("content-sv
     .WaitFor(rabbitmq)
     .WithReference(rabbitmq)
     .WaitFor(identity)
+    .WaitFor(localstack)
     .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
     .WithEnvironment("Vault__Enabled",      "false")
     .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
     .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("content"))
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("content"))
+    .WithEnvironment("Storage__ServiceUrl",     localstack.GetEndpoint("edge"))
+    .WithEnvironment("Storage__AccessKey",      "test")
+    .WithEnvironment("Storage__SecretKey",      "test")
+    .WithEnvironment("Storage__BucketName",     "content-dev")
+    .WithEnvironment("Storage__Region",         "us-east-1")
+    .WithEnvironment("Storage__ForcePathStyle", "true")
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
 // --- search-svc ------------------------------------------------------------
