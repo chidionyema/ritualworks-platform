@@ -60,10 +60,25 @@ public class VaultServiceTests
     }
 
     [Fact]
-    public void Constructor_WithMissingRoleIdPath_ThrowsArgumentNullException()
+    public void Constructor_WithNoCredsAtAll_ThrowsInvalidOperation()
     {
         _vaultOptions.RoleIdPath = "";
-        Assert.Throws<ArgumentNullException>(() => CreateService());
+        _vaultOptions.SecretIdPath = "";
+        _vaultOptions.RoleId = "";
+        _vaultOptions.SecretId = "";
+        Assert.Throws<InvalidOperationException>(() => CreateService());
+    }
+
+    [Fact]
+    public void Constructor_WithDirectCreds_DoesNotThrow()
+    {
+        _vaultOptions.RoleIdPath = "";
+        _vaultOptions.SecretIdPath = "";
+        _vaultOptions.RoleId = "00000000-0000-0000-0000-000000000001";
+        _vaultOptions.SecretId = "00000000-0000-0000-0000-000000000002";
+
+        var service = CreateService();
+        service.Should().NotBeNull();
     }
 
     [Fact]

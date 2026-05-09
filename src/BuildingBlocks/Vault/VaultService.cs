@@ -73,10 +73,23 @@ public class VaultService : IVaultService
     {
         if (string.IsNullOrWhiteSpace(_vaultOptions.Address))
             throw new ArgumentNullException(nameof(_vaultOptions.Address));
-        if (string.IsNullOrWhiteSpace(_vaultOptions.RoleIdPath))
-            throw new ArgumentNullException(nameof(_vaultOptions.RoleIdPath));
-        if (string.IsNullOrWhiteSpace(_vaultOptions.SecretIdPath))
-            throw new ArgumentNullException(nameof(_vaultOptions.SecretIdPath));
+
+        // Accept either auth shape — VaultClientFactory branches on the
+        // same condition. Direct creds are preferred (staged as Fly
+        // secrets by ci-stage-vault-creds.sh); the *Path fields exist
+        // only for the legacy file-on-disk shim.
+        bool hasDirectCreds =
+            !string.IsNullOrWhiteSpace(_vaultOptions.RoleId) &&
+            !string.IsNullOrWhiteSpace(_vaultOptions.SecretId);
+        bool hasPathCreds =
+            !string.IsNullOrWhiteSpace(_vaultOptions.RoleIdPath) &&
+            !string.IsNullOrWhiteSpace(_vaultOptions.SecretIdPath);
+        if (!hasDirectCreds && !hasPathCreds)
+            throw new InvalidOperationException(
+                "Vault configuration requires either direct credentials " +
+                "(Vault:RoleId + Vault:SecretId) or file paths " +
+                "(Vault:RoleIdPath + Vault:SecretIdPath).");
+
         if (string.IsNullOrWhiteSpace(_dbOptions.Host))
             throw new ArgumentNullException(nameof(_dbOptions.Host));
     }
