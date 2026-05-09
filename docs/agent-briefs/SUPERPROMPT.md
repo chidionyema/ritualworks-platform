@@ -120,16 +120,19 @@ git status --porcelain > /tmp/superprompt-pre-work-status-$TRACK_ID.txt
 
 ## Phase 2 — Read (≤ 15 min, hard cap)
 
+The brief is exactly one file: `$REPO_ROOT/$BRIEF_FILE`. You do NOT read other briefs in `docs/agent-briefs/`, even sibling ones in the same subdirectory.
+
 Read these files in this order, **in full**, **before writing or editing anything**:
 
-1. The brief's directory's `README.md`, if it exists (e.g., `docs/agent-briefs/audit/README.md`). It carries the protocol + done-report templates for that brief family.
-2. The brief itself: `$BRIEF_FILE`.
-3. Every file the brief lists under "Inputs", in the order listed.
+1. **`$REPO_ROOT/$BRIEF_FILE`** — the brief itself. This is the authoritative scope statement for your track.
+2. **The README.md in the brief's directory if it exists** (e.g., if `$BRIEF_FILE` is `docs/agent-briefs/audit/L1A-extractors-redactor.md`, also read `docs/agent-briefs/audit/README.md`). The README carries the protocol + done-report templates for that brief family. If no README exists in that directory, skip — your brief is self-contained.
+3. **Every file the brief lists under its "Inputs" section**, in the order listed.
 
 Do NOT:
+- Read other brief files in `docs/agent-briefs/` (even ones that look related). Your brief plus its Inputs is the deliberate context window. Trust it.
 - Grep blindly for things the brief doesn't ask for.
 - Skim. If you can't recall what an Input file said, re-read it.
-- Read files outside the Inputs list "to get more context". The Inputs list is the deliberate context window. Trust it.
+- Read files outside the Inputs list "to get more context".
 
 If an Input file the brief claims exists doesn't, **STOP** and emit a Blocker.
 
@@ -313,7 +316,38 @@ If two agents try the same `git push` simultaneously, exactly one wins — the o
 
 ### Step 2 — Read ONLY your track's section
 
-In `$REPO/$BRIEF_FILE`, jump to `### Track $CLAIMED`. Read it + the brief's "universal rules" / "anti-stuck" sections. Do **NOT** read other tracks' sections — you don't need them and reading them invites scope creep.
+The brief is one file: `$REPO/$BRIEF_FILE`. Inside it, you read **exactly four** sections, no more, no less:
+
+1. The H2 section titled `## Universal rules` — applies to every track.
+2. The H2 section titled `## Anti-stuck` — decision rules for when you're stuck.
+3. The H2 section titled `## Reference file` — the canonical existing file you mirror when in doubt.
+4. The H3 section whose heading **starts with** `### Track $CLAIMED` (typically `### Track $CLAIMED:` followed by a human-readable name).
+
+If any of those four sections is missing from the brief, **STOP** — the brief is malformed and not safe to execute. Release the claim (`git push origin --delete "${TRACK_PREFIX}${CLAIMED}"`) and exit.
+
+To extract just your scope cleanly:
+
+```bash
+# Universal + Anti-stuck + Reference file (everything between `## Universal rules` and the first `### Track`)
+awk '/^## Universal rules/,/^### Track /' "$REPO/$BRIEF_FILE" | sed '/^### Track /d' > /tmp/scope-shared-$CLAIMED.md
+
+# Your track section (from `### Track $CLAIMED` to the next `### Track ` or EOF)
+awk -v t="### Track $CLAIMED" '
+    $0 ~ "^"t"($|[: ])" { p=1 }
+    p && /^### Track / && !($0 ~ "^"t"($|[: ])") { exit }
+    p { print }
+' "$REPO/$BRIEF_FILE" > /tmp/scope-track-$CLAIMED.md
+```
+
+Read both files in full. Do **NOT** read other tracks' sections — you don't need them and reading them invites scope creep.
+
+Inside your track section, the brief MUST use these labelled lines (the brief author's contract — refuse to proceed if missing):
+
+- `**Files you own (exclusive):**` — paths you create / edit. Anything else is out of scope.
+- `**Files you may NOT touch:**` — explicit forbidden paths (when not obvious).
+- `**Reference to mirror:**` — the file to copy patterns from when you're stuck.
+- `**NuGet (if any):**` — at most one allowed package addition; `none` if none.
+- `**Done:**` — the shell command that returns 0 only when your work is correct.
 
 ### Step 3 — Implement, commit, push (per file group)
 

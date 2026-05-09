@@ -20,7 +20,7 @@ The authoritative design is `docs/agent-briefs/audit-service-spec.md`. Each trac
 
 ---
 
-## Universal rules (every track inherits these)
+## Universal rules
 
 ### File-scope discipline (THE contract)
 
@@ -85,7 +85,7 @@ Specific mirrors per track:
 
 ---
 
-## ### Track L1A: Extractors + redactor
+### Track L1A: Extractors + redactor
 
 **Files you own (exclusive):**
 - `src/Audit/Audit.Application/Extraction/**`
@@ -102,7 +102,7 @@ Specific mirrors per track:
 
 **Reference to mirror:** `src/Notifications/Notifications.Application/Suppression/` — single-purpose subfolder with interfaces + impl + DI extension.
 
-**NuGet:** none.
+**NuGet (if any):** none.
 
 **Spec sections:** § 5.1 (extraction), § 5.2 (redaction).
 
@@ -120,7 +120,7 @@ Specific mirrors per track:
 
 ---
 
-## ### Track L1B: Capture pipeline
+### Track L1B: Capture pipeline
 
 **Files you own (exclusive):**
 - `src/Audit/Audit.Application/Capture/**`
@@ -137,7 +137,7 @@ Specific mirrors per track:
 
 **Reference to mirror:** `src/Notifications/Notifications.Application/Consumers/NotificationDispatchConsumer.cs` (consumer shape), `tests/Notifications.Integration/PipelineTests.cs` (integration shape).
 
-**NuGet:** none — Npgsql + EF Core are already in Infrastructure.csproj.
+**NuGet (if any):** none — Npgsql + EF Core are already in Infrastructure.csproj.
 
 **Spec sections:** § 4 (data model), § 5.3 (idempotency), § 5.4 (throughput).
 
@@ -157,7 +157,7 @@ Specific mirrors per track:
 
 ---
 
-## ### Track L1C: Query API
+### Track L1C: Query API
 
 **Files you own (exclusive):**
 - `src/Audit/Audit.Application/Queries/**`
@@ -173,7 +173,7 @@ Specific mirrors per track:
 
 **Reference to mirror:** `src/Notifications/Notifications.Api/Controllers/NotificationsController.cs` (controller + role gate); `src/Notifications/Notifications.Application/Commands/SendNotificationCommand.cs` (MediatR shape).
 
-**NuGet:** none — FluentValidation is already in L0's Application.csproj.
+**NuGet (if any):** none — FluentValidation is already in L0's Application.csproj.
 
 **Spec sections:** § 3.1 (HTTP shapes), § 7 (SLA targets).
 
@@ -191,7 +191,7 @@ Specific mirrors per track:
 
 ---
 
-## ### Track L1D: Export + partition cron
+### Track L1D: Export + partition cron
 
 **Files you own (exclusive):**
 - `src/Audit/Audit.Application/Export/**`
@@ -211,7 +211,7 @@ Specific mirrors per track:
 
 **Reference to mirror:** `src/Content/Content.Infrastructure/` for the Storage abstraction usage; the platform's existing `BackgroundService` examples for the cron shape.
 
-**NuGet:** at most one — if CSV writing isn't already available via existing references, you may add `CsvHelper`. Verify first; don't add what's already there.
+**NuGet (if any):** at most one — if CSV writing isn't already available via existing references, you may add `CsvHelper`. Verify first; don't add what's already there.
 
 **Spec sections:** § 3.1 (export endpoints), § 4 (partition retention rules).
 
