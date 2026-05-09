@@ -3,6 +3,7 @@ using Haworks.Content.Application.DTOs;
 using Haworks.Content.Application.Interfaces;
 using Haworks.Content.Application.Models;
 using Haworks.Content.Application.Options;
+using Haworks.Content.Application.Telemetry;
 using Haworks.Content.Domain.Entities;
 using Haworks.Content.Domain.Interfaces;
 using MediatR;
@@ -32,6 +33,11 @@ internal sealed class CompleteUploadCommandHandler(
 {
     public async Task<Result<UploadStatusDto>> Handle(CompleteUploadCommand request, CancellationToken ct)
     {
+        using var activity = ContentActivities.Source.StartActivity("content.upload.complete");
+        activity?.SetTag("upload.id", request.ContentId);
+        activity?.SetTag("upload.owner_id", request.OwnerUserId);
+        activity?.SetTag("upload.part_count", request.Parts?.Count ?? 0);
+
         var content = await repository.GetContentByIdTrackedAsync(request.ContentId, ct);
         if (content is null)
         {

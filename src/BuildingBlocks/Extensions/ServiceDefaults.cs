@@ -87,7 +87,19 @@ public static class ServiceDefaults
                     // .AddGrpcClientInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddEntityFrameworkCoreInstrumentation()
-                    .AddSource("MassTransit");
+                    .AddSource("MassTransit")
+                    // Custom business ActivitySources — one per service. OTel
+                    // requires exact source names (no glob), so each service's
+                    // <Service>Activities.SourceName is hard-coded here. New
+                    // services should add their source name to this chain.
+                    .AddSource("Haworks.Catalog")
+                    .AddSource("Haworks.Orders")
+                    .AddSource("Haworks.Payments")
+                    .AddSource("Haworks.CheckoutOrchestrator")
+                    .AddSource("Haworks.BffWeb")
+                    .AddSource("Haworks.Content")
+                    .AddSource("Haworks.Search")
+                    .AddSource("Haworks.Identity");
             });
 
         builder.AddOpenTelemetryExporters();

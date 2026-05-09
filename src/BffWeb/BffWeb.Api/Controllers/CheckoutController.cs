@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net.Http.Json;
+using Haworks.BffWeb.Application.Telemetry;
 using Haworks.BuildingBlocks.Idempotency;
 using Microsoft.AspNetCore.Mvc;
 
@@ -31,6 +32,13 @@ public sealed class CheckoutController(
     {
         var sagaId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
+
+        using var activity = BffWebActivities.Source.StartActivity("bff.checkout.start");
+        activity?.SetTag("saga.id", sagaId);
+        activity?.SetTag("order.id", orderId);
+        activity?.SetTag("customer.id", body.UserId);
+        activity?.SetTag("checkout.total_amount_cents", (long)(body.TotalAmount * 100m));
+        activity?.SetTag("checkout.item_count", body.Items.Count);
 
         // User-scoped idempotency key. Every retry of the *same* checkout from the
         // *same* user collapses to the same key; a different user's replay with

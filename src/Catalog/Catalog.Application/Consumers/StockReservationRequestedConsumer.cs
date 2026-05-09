@@ -1,4 +1,5 @@
 using MassTransit;
+using Haworks.Catalog.Application.Telemetry;
 using Haworks.Contracts.Catalog;
 using Haworks.Contracts.Checkout;
 
@@ -46,6 +47,13 @@ public sealed class StockReservationRequestedConsumer(
     public async Task Consume(ConsumeContext<StockReservationRequestedEvent> context)
     {
         var evt = context.Message;
+
+        using var activity = CatalogActivities.Source.StartActivity("catalog.reservation.create");
+        activity?.SetTag("order.id", evt.OrderId);
+        activity?.SetTag("saga.id", evt.SagaId);
+        activity?.SetTag("reservation.item_count", evt.Items.Count);
+        activity?.SetTag("reservation.total_quantity", evt.Items.Sum(i => i.Quantity));
+
         logger.LogInformation(
             "Reserving stock for orderId={OrderId}, sagaId={SagaId}, items={ItemCount}",
             evt.OrderId, evt.SagaId, evt.Items.Count);
