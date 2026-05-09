@@ -10,6 +10,7 @@ public static partial class DependencyInjection
     // partials with non-void return require both defining + implementing
     // halves; switching to plain extensions lets each track ship in its
     // own commit without needing a coordinator pre-merge.)
-    internal static IServiceCollection AddNotificationTemplates(this IServiceCollection s) => s;
+    //
+    // L1.B replaced AddNotificationTemplates — see Templates/TemplatesServiceCollectionExtensions.cs.
     internal static IServiceCollection AddNotificationConsumers(this IServiceCollection s) => s;
 }
