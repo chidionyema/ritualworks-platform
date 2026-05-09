@@ -15,8 +15,10 @@
 #   ./scripts/stack.sh logs <svc>      # follow logs for a compose service
 #   ./scripts/stack.sh verify          # health-probe every running service
 #   ./scripts/stack.sh prebuild        # warm caches: dotnet build + image pulls
-#   ./scripts/stack.sh cleanup         # janitor: stopped containers, dangling images, builder cache
-#   ./scripts/stack.sh cleanup --deep  # … plus project volumes (drops DB state)
+#   ./scripts/stack.sh cleanup         # DAILY. Stopped containers + dangling images + old builder cache.
+#                                      # Project-built images preserved so the next `up` is fast.
+#   ./scripts/stack.sh cleanup --deep  # MONTHLY. + project images + volumes. Confirms first.
+#                                      # NEXT `up` REBUILDS .NET services from scratch (~5-10 min).
 #
 # When in doubt, `./scripts/stack.sh down && ./scripts/stack.sh up` returns
 # to a known-good state in ~10s warm.
@@ -205,14 +207,38 @@ cmd_verify() {
 }
 
 cmd_cleanup() {
-    # Janitor. Reclaims disk and removes the bits that accumulate after
-    # weeks of branch-switching, rebuilds, and aborted runs. Always-safe:
-    # we only touch resources owned by THIS project (compose- prefix or
-    # rw- prefix or the Aspire-named persistent containers) plus generic
-    # Docker dangling waste. Volumes with persistent data are kept by
-    # default — pass --deep to nuke those too.
+    # Janitor. Reclaims disk from THIS project's resources only — never
+    # touches base images (postgres:16-alpine, …) or other Docker projects.
+    #
+    # USAGE GUIDANCE:
+    #   `cleanup`         — DAILY. Removes stopped containers, dangling images,
+    #                       and old builder cache. Project-built images
+    #                       (compose-content-svc etc.) ARE PRESERVED so the
+    #                       next `up` is fast.
+    #   `cleanup --deep`  — MONTHLY. Also drops project images + volumes.
+    #                       *** The next `up` will REBUILD all 8 .NET services
+    #                       from scratch (~5-10 min). Don't run this right
+    #                       before you need to bring the stack up. ***
     local mode="${1:-shallow}"
-    log "Cleanup mode: $mode (use 'cleanup --deep' to also drop project volumes)"
+
+    if [ "$mode" = "--deep" ] || [ "$mode" = "deep" ]; then
+        warn "============================================================"
+        warn " --deep will REMOVE all 8 project images."
+        warn " Next ./scripts/stack.sh up will REBUILD them — ~5-10 min."
+        warn " Use this only when you actually want to reclaim disk."
+        warn " For daily cleanup, use plain './scripts/stack.sh cleanup'."
+        warn "============================================================"
+        if [ -t 0 ]; then
+            printf "\nProceed? [y/N] "
+            read -r confirm
+            if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+                log "Aborted — run plain 'cleanup' for the daily case."
+                return 0
+            fi
+        fi
+    fi
+
+    log "Cleanup mode: $mode"
 
     # 1. Stop everything we control.
     cmd_down
