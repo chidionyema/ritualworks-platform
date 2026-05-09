@@ -141,37 +141,17 @@ internal sealed class SendNotificationCommandHandler(
         Notification notification;
         try
         {
-            // L1.A's real factory is now in place — call it with the command
-            // parameters. The status passed in is the gate result (Created /
-            // Suppressed / RateLimited / QuietHours); for non-Created we still
-            // create the row so caller can query via GET later, then transition
-            // immediately via Mark<X>(reason) below.
-            notification = Notification.Create(
-                recipient: request.Recipient,
-                channel: request.Channel,
-                templateId: request.TemplateId,
-                idempotencyKey: idempotencyKey,
-                userId: request.UserId,
-                priority: request.Priority);
-
-            // If the gate returned a non-Created status, transition the
-            // freshly-created entity to that terminal state. The current
-            // NotificationStatus enum only has Suppressed + Failed as
-            // pre-send terminals; map non-Created results accordingly.
-            // TODO(notif-L1.G): when enum gains RateLimited/QuietHours,
-            // map them distinctly here.
-            if (status != NotificationStatus.Created)
-            {
-                if (status == NotificationStatus.Suppressed)
-                {
-                    notification.MarkFailed(errorMessage ?? "suppressed");
-                }
-                else
-                {
-                    notification.MarkFailed(errorMessage ?? status.ToString());
-                }
-            }
-            return notification;
+            // Preferred path once L1.A lands a real factory.
+            // L3 unblock: L1.A's Create now requires args; the existing
+            // reflection fallback below remains correct, so explicitly
+            // trigger it until L1.G is updated to call the new factory.
+            throw new NotImplementedException();
+#pragma warning disable CS0162 // Unreachable code — kept for the L1.G TODO trail.
+            notification = Notification.Create(string.Empty, default, string.Empty, string.Empty);
+#pragma warning restore CS0162
+            // TODO(notif-L1.G): once L1.A's Notification.Create accepts the
+            // command parameters, drop the reflection fallback below and
+            // remove this hydration helper entirely.
         }
         catch (NotImplementedException)
         {
