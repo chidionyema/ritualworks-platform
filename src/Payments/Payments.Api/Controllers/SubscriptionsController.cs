@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Haworks.Payments.Application.Commands.Subscriptions;
 using Haworks.Payments.Application.Queries.Subscriptions;
+using Haworks.BuildingBlocks.Extensions;
 
 namespace Haworks.Payments.Api.Controllers;
 
@@ -15,7 +16,7 @@ public sealed class SubscriptionsController(IMediator mediator) : ControllerBase
     [HttpGet("status")]
     public async Task<IActionResult> GetStatus(CancellationToken ct)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        var userId = HttpContext.GetForwardedUserId();
         if (string.IsNullOrEmpty(userId))
         {
             return Unauthorized();
@@ -29,7 +30,7 @@ public sealed class SubscriptionsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> CreateCheckoutSession(
         [FromBody] CreateSubscriptionCheckoutRequest body, CancellationToken ct)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        var userId = HttpContext.GetForwardedUserId();
         if (string.IsNullOrEmpty(userId))
         {
             return Unauthorized();

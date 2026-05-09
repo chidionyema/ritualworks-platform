@@ -47,6 +47,14 @@ public sealed class TestAuthenticationHandler(
             new Claim("permission", "upload_content"),
             new Claim("permission", "manage_content"),
         };
+
+        // Also set the X-User-Id header to simulate BFF forwarding in tests.
+        // Backend controllers in Phase A read this header rather than claims.
+        if (!Context.Request.Headers.ContainsKey("X-User-Id"))
+        {
+            Context.Request.Headers["X-User-Id"] = TestUserId;
+        }
+
         var identity = new ClaimsIdentity(claims, SchemeName);
         var principal = new ClaimsPrincipal(identity);
         var ticket = new AuthenticationTicket(principal, SchemeName);

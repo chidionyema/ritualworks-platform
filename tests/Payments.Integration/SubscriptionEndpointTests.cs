@@ -73,6 +73,31 @@ public sealed class SubscriptionEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Status_returns_401_when_X_User_Id_header_missing()
+    {
+        // Arrange
+        // Use a scheme that authenticates successfully but does NOT set the X-User-Id header.
+        var client = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddScoped(_ => _managerMock.Object);
+                services.AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme = "NoHeader";
+                    options.DefaultChallengeScheme = "NoHeader";
+                }).AddScheme<AuthenticationSchemeOptions, NoHeaderAuthHandler>("NoHeader", _ => { });
+            });
+        }).CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        // Act
+        var resp = await client.GetAsync("/api/subscriptions/status");
+
+        // Assert
+        resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task Status_returns_200_with_dto_when_subscription_exists()
     {
         // Arrange
@@ -168,5 +193,18 @@ public sealed class SubscriptionEndpointTests : IAsyncLifetime
     {
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
             => Task.FromResult(AuthenticateResult.Fail("Forced failure"));
+    }
+
+    private class NoHeaderAuthHandler(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
+        : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    {
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            var claims = new[] { new Claim(ClaimTypes.NameIdentifier, "some-user") };
+            var identity = new ClaimsIdentity(claims, "NoHeader");
+            var principal = new ClaimsPrincipal(identity);
+            var ticket = new AuthenticationTicket(principal, "NoHeader");
+            return Task.FromResult(AuthenticateResult.Success(ticket));
+        }
     }
 }
