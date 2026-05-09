@@ -6,9 +6,12 @@ using Microsoft.Extensions.Hosting;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Catalog.Application.Consumers;
 using Haworks.Catalog.Application.Interfaces;
+using Haworks.Catalog.Application.Options;
 using Haworks.Catalog.Domain.Interfaces;
+using Haworks.Catalog.Infrastructure.BackgroundServices;
 using Haworks.Catalog.Infrastructure.Caching;
 using Haworks.Catalog.Infrastructure.Messaging;
+using Haworks.Catalog.Infrastructure.Metrics;
 using Haworks.Catalog.Infrastructure.Repositories;
 using Haworks.Catalog.Infrastructure.Services;
 using System;
@@ -42,6 +45,24 @@ public static class DependencyInjection
         // (registered in Catalog.Api/Program.cs) so cache state survives
         // across the per-request reader wrappers.
         services.AddScoped<IProductCacheReader, ProductCacheReader>();
+
+        // B3 — reservation sweeper. Options bind from
+        // ReservationSweeperOptions.SectionName ("Reservations:Sweeper");
+        // defaults match ADR-004 (1 minute / batch of 200). The hosted
+        // service itself is registered ONLY outside Test so integration
+        // tests can drive SweepOnceAsync deterministically without the
+        // timer firing on its own.
+        services.AddOptions<ReservationSweeperOptions>()
+            .Bind(configuration.GetSection(ReservationSweeperOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services.AddSingleton<IReservationMetrics, NullReservationMetrics>();
+
+        if (!env.IsEnvironment("Test"))
+        {
+            services.AddHostedService<ReservationSweeperService>();
+        }
 
         // MassTransit + transactional outbox anchored to CatalogDbContext.
         // BusOutboxDeliveryService polls the OutboxMessage table and

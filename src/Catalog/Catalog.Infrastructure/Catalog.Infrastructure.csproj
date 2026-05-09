@@ -11,4 +11,11 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.0" />
     <PackageReference Include="MassTransit.RabbitMQ" Version="8.3.4" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- B3: ReservationSweeperService is internal sealed; the catalog
+         integration suite drives SweepOnceAsync directly because the
+         hosted service is intentionally not registered under the Test
+         environment. -->
+    <InternalsVisibleTo Include="Haworks.Catalog.Integration" />
+  </ItemGroup>
 </Project>
