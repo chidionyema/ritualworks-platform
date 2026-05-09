@@ -15,8 +15,9 @@
 #   ./scripts/stack.sh logs <svc>      # follow logs for a compose service
 #   ./scripts/stack.sh verify          # health-probe every running service
 #   ./scripts/stack.sh prebuild        # warm caches: dotnet build + image pulls
-#   ./scripts/stack.sh cleanup         # janitor: stopped containers, dangling images, builder cache
-#   ./scripts/stack.sh cleanup --deep  # … plus project volumes (drops DB state)
+#   ./scripts/stack.sh cleanup         # janitor: project-only (containers, dangling images, recent builder cache)
+#   ./scripts/stack.sh cleanup --deep  # + project volumes (drops DB state)
+#   ./scripts/stack.sh cleanup --nuke  # SYSTEM-WIDE: every unused image, volume, builder cache. Year-old cruft. Cross-project.
 #
 # When in doubt, `./scripts/stack.sh down && ./scripts/stack.sh up` returns
 # to a known-good state in ~10s warm.
@@ -205,54 +206,75 @@ cmd_verify() {
 }
 
 cmd_cleanup() {
-    # Janitor. Reclaims disk and removes the bits that accumulate after
-    # weeks of branch-switching, rebuilds, and aborted runs. Always-safe:
-    # we only touch resources owned by THIS project (compose- prefix or
-    # rw- prefix or the Aspire-named persistent containers) plus generic
-    # Docker dangling waste. Volumes with persistent data are kept by
-    # default — pass --deep to nuke those too.
+    # Janitor. Three escalating modes:
+    #   (default)  project-scoped  — compose containers, project Aspire containers,
+    #                                dangling images, recent builder cache, orphan networks.
+    #                                Volumes preserved.
+    #   --deep      project + state — same plus drops project volumes (compose_*,
+    #                                  ritualworks-platform-*). DB state gone.
+    #   --nuke      system-wide      — Docker took over your disk. Removes EVERY
+    #                                  unused image (incl tagged-from-a-year-ago),
+    #                                  EVERY unused volume across all projects,
+    #                                  EVERY stopped container, ALL builder cache.
+    #                                  Cross-project — touches things outside this repo.
     local mode="${1:-shallow}"
-    log "Cleanup mode: $mode (use 'cleanup --deep' to also drop project volumes)"
 
     # 1. Stop everything we control.
     cmd_down
 
-    # 2. Compose's stopped containers (--rmi local would remove project
-    # images; we keep those — they're the slow build outputs).
-    log "Pruning stopped compose containers"
-    docker container prune -f --filter "label=com.docker.compose.project=compose" 2>/dev/null || true
+    if [ "$mode" = "--nuke" ] || [ "$mode" = "nuke" ]; then
+        warn "NUKE mode: system-wide cleanup. Cross-project. Year-old images + volumes will be removed."
+        log "Removing all stopped containers (system-wide)"
+        docker container prune -f >/dev/null
 
-    # 3. Aspire-named stopped containers (the *-{suffix} ones from
-    # ContainerLifetime.Persistent runs). Match the same prefix set as stop_aspire_containers.
-    local stopped_aspire
-    stopped_aspire="$(docker ps -a --filter "status=exited" --format '{{.Names}}' \
-        | grep -E '^(postgres|redis|rabbitmq|vault|localstack|meilisearch|clamav|tempo|pact-db|pact-broker)-[a-z0-9]+$' \
-        || true)"
-    if [ -n "$stopped_aspire" ]; then
-        log "Removing $(echo "$stopped_aspire" | wc -l | tr -d ' ') stopped Aspire containers"
-        echo "$stopped_aspire" | xargs -r docker rm -f >/dev/null
+        log "Removing ALL unused images (-a — includes tagged but unreferenced)"
+        docker image prune -a -f >/dev/null
+
+        log "Removing ALL unused volumes (system-wide — including non-project ones)"
+        docker volume prune -af >/dev/null 2>&1 || docker volume prune -f >/dev/null
+
+        log "Removing ALL builder cache (no time filter)"
+        docker builder prune -a -f >/dev/null 2>&1 || true
+
+        docker network prune -f >/dev/null
+
+        log "NUKE complete."
+    else
+        log "Cleanup mode: $mode (use --deep for project volumes, --nuke for system-wide)"
+
+        # Compose's stopped containers (project-labeled).
+        log "Pruning stopped compose containers"
+        docker container prune -f --filter "label=com.docker.compose.project=compose" 2>/dev/null || true
+
+        # Aspire-named stopped containers (the *-{suffix} ones from ContainerLifetime.Persistent runs).
+        local stopped_aspire
+        stopped_aspire="$(docker ps -a --filter "status=exited" --format '{{.Names}}' \
+            | grep -E '^(postgres|redis|rabbitmq|vault|localstack|meilisearch|clamav|tempo|pact-db|pact-broker)-[a-z0-9]+$' \
+            || true)"
+        if [ -n "$stopped_aspire" ]; then
+            log "Removing $(echo "$stopped_aspire" | wc -l | tr -d ' ') stopped Aspire containers"
+            echo "$stopped_aspire" | xargs -r docker rm -f >/dev/null
+        fi
+
+        # Dangling images (untagged build leftovers).
+        log "Pruning dangling images"
+        docker image prune -f >/dev/null
+
+        # Builder cache older than 72h (recent cache may still help next build).
+        log "Pruning BuildKit builder cache (filter: until=72h)"
+        docker builder prune -f --filter "until=72h" >/dev/null 2>&1 || true
+
+        # Orphan networks.
+        docker network prune -f >/dev/null
+
+        if [ "$mode" = "--deep" ] || [ "$mode" = "deep" ]; then
+            warn "DEEP cleanup: removing project volumes. DB state gone."
+            docker volume ls --format '{{.Name}}' | grep -E '^compose_' | xargs -r docker volume rm 2>/dev/null || true
+            docker volume ls --format '{{.Name}}' | grep -E '^ritualworks-platform-' | xargs -r docker volume rm 2>/dev/null || true
+        fi
     fi
 
-    # 4. Dangling images (build cache leftovers from --no-cache rebuilds).
-    log "Pruning dangling images"
-    docker image prune -f >/dev/null
-
-    # 5. Builder cache (BuildKit accumulates, can hit 10s of GB on a busy repo).
-    log "Pruning BuildKit builder cache (filtered: until=72h)"
-    docker builder prune -f --filter "until=72h" >/dev/null 2>&1 || true
-
-    # 6. Networks orphaned by stopped projects.
-    docker network prune -f >/dev/null
-
-    if [ "$mode" = "--deep" ] || [ "$mode" = "deep" ]; then
-        warn "DEEP cleanup: removing project volumes (postgres-data, vault-creds, localstack-data, …). This drops state."
-        # All compose volumes prefixed compose_ — safe; named project-scope.
-        docker volume ls --format '{{.Name}}' | grep -E '^compose_' | xargs -r docker volume rm 2>/dev/null || true
-        # Aspire's named volumes use the prefix in WithVolume().
-        docker volume ls --format '{{.Name}}' | grep -E '^ritualworks-platform-' | xargs -r docker volume rm 2>/dev/null || true
-    fi
-
-    log "Cleanup done. Disk reclaimed:"
+    log "Disk now:"
     df -h "$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || echo /)" | tail -1
 }
 
