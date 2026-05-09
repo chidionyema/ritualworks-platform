@@ -32,6 +32,7 @@ public sealed class SearchWebAppFactory : WebApplicationFactory<Program>, IAsync
         .WithEnvironment("MEILI_NO_ANALYTICS", "true")
         .WithPortBinding(7700, assignRandomHostPort: true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPath("/health").ForPort(7700)))
+        .WithReuse(true)
         .Build();
 
     public WireMockServer Catalog { get; } = WireMockServer.Start();
@@ -52,11 +53,12 @@ public sealed class SearchWebAppFactory : WebApplicationFactory<Program>, IAsync
         Environment.SetEnvironmentVariable("Catalog__BaseAddress", Catalog.Url);
     }
 
-    public new async Task DisposeAsync()
+    public new Task DisposeAsync()
     {
         Catalog.Stop();
         Catalog.Dispose();
-        await _meili.DisposeAsync();
+        // Reused Meilisearch container outlives the fixture intentionally.
+        return Task.CompletedTask;
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

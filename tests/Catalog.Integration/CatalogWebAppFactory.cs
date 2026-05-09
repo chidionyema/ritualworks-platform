@@ -4,10 +4,10 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Testcontainers.PostgreSql;
 using Xunit;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.BuildingBlocks.Testing.Authentication;
+using Haworks.BuildingBlocks.Testing.Containers;
 
 namespace Haworks.Catalog.Integration;
 
@@ -25,18 +25,11 @@ namespace Haworks.Catalog.Integration;
 /// </summary>
 public sealed class CatalogWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
-        .WithDatabase("catalog")
-        .WithUsername("postgres")
-        .WithPassword("postgres")
-        .Build();
-
-    public string ConnectionString => _postgres.GetConnectionString();
+    public string ConnectionString { get; private set; } = string.Empty;
 
     public async Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        ConnectionString = await SharedTestPostgres.CreateDatabaseAsync("catalog");
         JwtTestDefaults.SetTestEnvironmentVariables();
 
         // Env vars must be set BEFORE WebApplicationFactory builds the host.
@@ -58,7 +51,7 @@ public sealed class CatalogWebAppFactory : WebApplicationFactory<Program>, IAsyn
 
     async Task IAsyncLifetime.DisposeAsync()
     {
-        await _postgres.DisposeAsync();
+        // Shared Postgres container outlives the fixture intentionally.
         await base.DisposeAsync();
     }
 

@@ -55,8 +55,20 @@ UymtHEbEMgcO+1Sd/8UXFIbF4A==
     /// </summary>
     public static void SetTestEnvironmentVariables()
     {
+        // Legacy AddPlatformAuthentication keys — still set so any fixture
+        // booted against a pre-JWKS-swap branch keeps working.
         Environment.SetEnvironmentVariable("Jwt__Issuer", Issuer);
         Environment.SetEnvironmentVariable("Jwt__Audience", Audience);
         Environment.SetEnvironmentVariable("Jwt__SigningKeyPem", SigningKeyPem);
+
+        // AddJwksAuthentication keys (JwksOptions). [Required] + ValidateOnStart
+        // means the host fails to boot if these are absent. Tests override the
+        // scheme via TestAuthenticationHandler so the JWKS endpoint is never
+        // actually hit; values just need to satisfy validation.
+        Environment.SetEnvironmentVariable("Authentication__Jwks__JwksUri",
+            "http://test-identity.invalid/.well-known/jwks.json");
+        Environment.SetEnvironmentVariable("Authentication__Jwks__Issuer", Issuer);
+        Environment.SetEnvironmentVariable("Authentication__Jwks__Audience", Audience);
+        Environment.SetEnvironmentVariable("Authentication__Jwks__AutomaticRefresh", "false");
     }
 }
