@@ -78,13 +78,20 @@ cmd_aspire() {
     log "Pre-building solution + pulling images so Aspire boots fast"
     (cd "$REPO_ROOT" && dotnet build RitualworksPlatform.sln -c Release --nologo --verbosity quiet) &
     local build_pid=$!
+    # compose tags (postgres:16-alpine etc.) AND Aspire-default tags
+    # (postgres:17.6 etc.) — warm both so neither mode pays the pull cost.
     docker pull -q postgres:16-alpine               &
+    docker pull -q postgres:17.6                    &
     docker pull -q rabbitmq:3.13-management-alpine  &
+    docker pull -q rabbitmq:4.1-management          &
+    docker pull -q redis:7-alpine                   &
+    docker pull -q redis:8.2                        &
     docker pull -q hashicorp/vault:1.15             &
     docker pull -q localstack/localstack:3          &
     docker pull -q getmeili/meilisearch:v1.10       &
-    docker pull -q redis:7-alpine                   &
     docker pull -q grafana/tempo:latest             &
+    docker pull -q dpage/pgadmin4:9.7.0             &
+    docker pull -q pactfoundation/pact-broker:latest &
     wait $build_pid
     wait
     log "Booting Aspire AppHost (dashboard URL printed below)"
@@ -208,7 +215,7 @@ cmd_verify() {
 
 cmd_cleanup() {
     # Janitor. Reclaims disk from THIS project's resources only — never
-    # touches base images (postgres:16-alpine, …) or other Docker projects.
+    # touches base images (postgres:17.6, …) or other Docker projects.
     # PROJECT-BUILT IMAGES ARE NEVER REMOVED — they're the expensive build
     # outputs; dropping them costs 5-10 min on the next `up`. Daily cleanup
     # keeps them. If a specific image needs to go (e.g. renamed service),
@@ -339,13 +346,20 @@ cmd_prebuild() {
     log "Pre-building solution + pulling images (used by both compose and aspire)"
     (cd "$REPO_ROOT" && dotnet build RitualworksPlatform.sln -c Release --nologo --verbosity quiet) &
     local build_pid=$!
+    # compose tags (postgres:16-alpine etc.) AND Aspire-default tags
+    # (postgres:17.6 etc.) — warm both so neither mode pays the pull cost.
     docker pull -q postgres:16-alpine               &
+    docker pull -q postgres:17.6                    &
     docker pull -q rabbitmq:3.13-management-alpine  &
+    docker pull -q rabbitmq:4.1-management          &
+    docker pull -q redis:7-alpine                   &
+    docker pull -q redis:8.2                        &
     docker pull -q hashicorp/vault:1.15             &
     docker pull -q localstack/localstack:3          &
     docker pull -q getmeili/meilisearch:v1.10       &
-    docker pull -q redis:7-alpine                   &
     docker pull -q grafana/tempo:latest             &
+    docker pull -q dpage/pgadmin4:9.7.0             &
+    docker pull -q pactfoundation/pact-broker:latest &
     wait $build_pid
     wait
     log "Pre-build complete."

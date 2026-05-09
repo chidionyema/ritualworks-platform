@@ -88,8 +88,14 @@ var meilisearch = builder.AddContainer("meilisearch", "getmeili/meilisearch", "v
     .WithVolume("ritualworks-platform-meilisearch-data", "/meili_data")
     .WithHttpEndpoint(targetPort: 7700, name: "http");
 
+// Tempo needs a config file to start — without /etc/tempo.yaml it exits
+// with "failed to create store: unknown backend """. Reuse the same
+// config docker-compose bind-mounts (../../infra/tempo.yaml).
+var tempoConfigPath = Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "..", "..", "infra", "tempo.yaml"));
 var tempo = builder.AddContainer("tempo", "grafana/tempo", "latest")
     .WithLifetime(ContainerLifetime.Persistent)
+    .WithBindMount(tempoConfigPath, "/etc/tempo.yaml", isReadOnly: true)
+    .WithArgs("-config.file=/etc/tempo.yaml")
     .WithEndpoint(targetPort: 4317, name: "grpc", scheme: "http")
     .WithEndpoint(targetPort: 3200, name: "http", scheme: "http");
 
