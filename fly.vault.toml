@@ -1,35 +1,43 @@
-# Vault for the cluster's demo (dev-mode, in-memory).
+# Vault prod-mode with raft storage on a Fly volume. State persists
+# across container restarts/redeploys/OOMs — no more reseed dance every
+# time the container bounces.
 #
 # Reach from other Fly machines at:
 #   http://ritualworks-vault.internal:8200
 #
 # Deploy:
-#   flyctl apps create ritualworks-vault              # one-time
-#   flyctl deploy -c fly.vault.toml                   # builds deploy/vault/Dockerfile
+#   flyctl apps create ritualworks-vault                     # one-time
+#   flyctl volumes create vault_data --size 1 -a ritualworks-vault --yes
+#   flyctl deploy -c fly.vault.toml
+#   ./deploy/fly/bootstrap.sh                                # captures unseal key + root token
 #
-# State is in-memory (dev-mode), so a machine restart wipes secrets.
-# entrypoint.sh re-runs seed.sh on every start to make that self-healing.
+# After the first run bootstrap.sh stages VAULT_UNSEAL_KEY and
+# VAULT_ROOT_TOKEN_PROD as Fly secrets so future restarts auto-unseal.
 
 app            = "ritualworks-vault"
 primary_region = "iad"
 
 [build]
   dockerfile = "deploy/vault/Dockerfile"
-  # Build context is repo root; deploy/vault/{Dockerfile,entrypoint.sh,seed.sh}
-  # all live under the same directory for COPY simplicity.
 
 [env]
   VAULT_ADDR = "http://127.0.0.1:8200"
-  # VAULT_DEV_ROOT_TOKEN_ID is staged as a Fly secret by deploy/fly/bootstrap.sh
-  # — same value is also staged on ritualworks-identity as VAULT_ROOT_TOKEN so
-  # the bootstrap shim can fetch role_id/secret_id at startup.
+  # VAULT_UNSEAL_KEY and VAULT_ROOT_TOKEN_PROD are staged as Fly secrets
+  # by deploy/fly/bootstrap.sh after the first vault deploy + init.
 
 [deploy]
-  # Replace the existing machine instead of running rolling. Dev-mode is
-  # in-memory so two machines = two independent vaults with diverging state.
-  # immediate = stop the old machine first, then start the new one. Brief
-  # downtime during deploys is fine for a demo.
+  # Replace the existing machine — raft storage is on the persistent
+  # volume so the new machine reads the same state. immediate = stop the
+  # old one first, then start the new one. Brief downtime is fine for a
+  # demo and avoids two machines fighting over volume mount.
   strategy = "immediate"
+
+[mounts]
+  # Persistent raft storage. Vault writes its initialized + unsealed
+  # state, AppRole config, KV data, and secret IDs here. Survives
+  # container restarts.
+  source      = "vault_data"
+  destination = "/vault/data"
 
 [http_service]
   internal_port        = 8200
@@ -39,14 +47,16 @@ primary_region = "iad"
   min_machines_running = 1
   processes            = ["app"]
 
-  # Basic health check so Fly knows when the new machine is ready and
-  # can retire the previous one cleanly.
+  # Health check uses /v1/sys/health which 200s when active+unsealed,
+  # 429 when standby, 472 when DR secondary, 501 when uninitialized,
+  # 503 when sealed. We accept all of those as "process is up"; the
+  # entrypoint handles unsealing autonomously.
   [[http_service.checks]]
     interval     = "10s"
     timeout      = "2s"
-    grace_period = "30s"
+    grace_period = "60s"
     method       = "GET"
-    path         = "/v1/sys/health"
+    path         = "/v1/sys/health?standbyok=true&sealedcode=200&uninitcode=200"
 
 [[vm]]
   memory   = "256mb"

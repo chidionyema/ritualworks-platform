@@ -17,9 +17,12 @@ FROM hashicorp/vault:1.18
 # curl + jq for the seed script. The base image is alpine.
 RUN apk add --no-cache bash curl jq
 
+COPY deploy/vault/vault.hcl     /vault/config/vault.hcl
 COPY deploy/vault/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY deploy/vault/seed.sh       /usr/local/bin/seed.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/seed.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/seed.sh \
+ && mkdir -p /vault/data \
+ && chown -R vault:vault /vault
 
 EXPOSE 8200
 

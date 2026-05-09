@@ -61,59 +61,38 @@ if [[ -z "${JWT_SIGNING_KEY_PEM:-}" ]]; then
   echo "    written to $ENV_FILE (gitignored)"
 fi
 
-# Auto-generate Vault dev-mode root token on first run. Same value is staged
-# on the vault app (as VAULT_DEV_ROOT_TOKEN_ID — what `vault server -dev`
-# expects) and on identity (as VAULT_ROOT_TOKEN — what the bootstrap shim
-# reads). Persisting to .env.local means restaging is idempotent across runs.
-if [[ -z "${VAULT_DEV_ROOT_TOKEN:-}" ]]; then
-  echo "==> Generating Vault dev root token (first run)"
-  token="rw-dev-$(head -c 24 /dev/urandom | base64 | tr -d '\n=+/' | head -c 32)"
-  if grep -qE '^VAULT_DEV_ROOT_TOKEN=' "$ENV_FILE"; then
+# Vault prod-mode key handling.
+#
+# Vault is now prod-mode (raft on a Fly volume) — the vault container's
+# entrypoint self-initializes on first deploy and persists the unseal
+# key + root token to /vault/data/.init.json. This script's job is to
+# capture them via flyctl ssh, persist to .env.local, and stage them as
+# Fly secrets so future restarts auto-unseal without operator action.
+#
+# The role_id and secret_id for haworks-identity are also fetched from
+# the live vault on every run and re-staged on identity. With persistent
+# state they're stable, so this is mostly a no-op on subsequent runs;
+# the sync still runs to handle volume-recreation scenarios.
+#
+# The fetch is skipped silently if the vault app isn't deployed yet;
+# operators bootstrap → deploy vault → re-run bootstrap.
+upsert_env_var() {
+  local key="$1"; local value="$2"
+  if grep -qE "^${key}=" "$ENV_FILE"; then
     if [[ "$(uname)" == "Darwin" ]]; then
-      sed -i '' "s|^VAULT_DEV_ROOT_TOKEN=.*|VAULT_DEV_ROOT_TOKEN=$token|" "$ENV_FILE"
+      sed -i '' "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
     else
-      sed -i "s|^VAULT_DEV_ROOT_TOKEN=.*|VAULT_DEV_ROOT_TOKEN=$token|" "$ENV_FILE"
+      sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
     fi
   else
-    printf '\nVAULT_DEV_ROOT_TOKEN=%s\n' "$token" >> "$ENV_FILE"
-  fi
-  VAULT_DEV_ROOT_TOKEN="$token"
-  echo "    written to $ENV_FILE (gitignored)"
-fi
-
-# Deterministic AppRole creds for ritualworks-identity. Generated once on
-# first run, persisted to .env.local, supplied to vault's seed.sh via Fly
-# secrets so seed.sh registers them as the role's custom-role-id and
-# custom-secret-id. Same values stay valid across every vault redeploy
-# (which wipes dev-mode's in-memory state) — operators don't have to
-# re-stage identity's Vault__RoleId/SecretId after each vault deploy.
-gen_uuid() {
-  if command -v uuidgen >/dev/null 2>&1; then
-    uuidgen | tr '[:upper:]' '[:lower:]'
-  else
-    # POSIX fallback: 16 random bytes, hex-formatted as a UUID4.
-    head -c 16 /dev/urandom | xxd -p \
-      | sed -E 's/(........)(....)(....)(....)(............)/\1-\2-\3-\4-\5/'
+    printf '\n%s=%s\n' "$key" "$value" >> "$ENV_FILE"
   fi
 }
-if [[ -z "${VAULT_HAWORKS_IDENTITY_ROLE_ID:-}" ]]; then
-  echo "==> Generating deterministic AppRole creds for haworks-identity (first run)"
-  VAULT_HAWORKS_IDENTITY_ROLE_ID="$(gen_uuid)"
-  VAULT_HAWORKS_IDENTITY_SECRET_ID="$(gen_uuid)"
-  if grep -qE '^VAULT_HAWORKS_IDENTITY_ROLE_ID=' "$ENV_FILE"; then
-    if [[ "$(uname)" == "Darwin" ]]; then
-      sed -i '' "s|^VAULT_HAWORKS_IDENTITY_ROLE_ID=.*|VAULT_HAWORKS_IDENTITY_ROLE_ID=$VAULT_HAWORKS_IDENTITY_ROLE_ID|" "$ENV_FILE"
-      sed -i '' "s|^VAULT_HAWORKS_IDENTITY_SECRET_ID=.*|VAULT_HAWORKS_IDENTITY_SECRET_ID=$VAULT_HAWORKS_IDENTITY_SECRET_ID|" "$ENV_FILE"
-    else
-      sed -i "s|^VAULT_HAWORKS_IDENTITY_ROLE_ID=.*|VAULT_HAWORKS_IDENTITY_ROLE_ID=$VAULT_HAWORKS_IDENTITY_ROLE_ID|" "$ENV_FILE"
-      sed -i "s|^VAULT_HAWORKS_IDENTITY_SECRET_ID=.*|VAULT_HAWORKS_IDENTITY_SECRET_ID=$VAULT_HAWORKS_IDENTITY_SECRET_ID|" "$ENV_FILE"
-    fi
-  else
-    printf '\nVAULT_HAWORKS_IDENTITY_ROLE_ID=%s\nVAULT_HAWORKS_IDENTITY_SECRET_ID=%s\n' \
-      "$VAULT_HAWORKS_IDENTITY_ROLE_ID" "$VAULT_HAWORKS_IDENTITY_SECRET_ID" >> "$ENV_FILE"
-  fi
-  echo "    written to $ENV_FILE (gitignored)"
-fi
+
+VAULT_UNSEAL_KEY="${VAULT_UNSEAL_KEY:-}"
+VAULT_ROOT_TOKEN_PROD="${VAULT_ROOT_TOKEN_PROD:-}"
+VAULT_HAWORKS_IDENTITY_ROLE_ID="${VAULT_HAWORKS_IDENTITY_ROLE_ID:-}"
+VAULT_HAWORKS_IDENTITY_SECRET_ID="${VAULT_HAWORKS_IDENTITY_SECRET_ID:-}"
 
 # Auto-generate Meilisearch master key on first run (32 bytes urandom, base64).
 if [[ -z "${MEILI_MASTER_KEY:-}" ]]; then
@@ -253,25 +232,85 @@ else
   set_secrets "$PUBLIC_APP" "${common[@]}"
 fi
 
-# Vault dev-mode app: only secret is the dev root token, used by both the
-# `vault server -dev` flag and (mirrored as VAULT_ROOT_TOKEN) the identity
-# bootstrap shim. Vault is reachable at http://ritualworks-vault.internal:8200
-# from any other ritualworks-* machine inside Fly's 6PN.
 echo "==> Vault setup"
-# Vault gets the dev root token + the deterministic AppRole creds passed
-# as env vars; seed.sh applies them as the role's custom-role-id/
-# custom-secret-id on every container start. This way every vault
-# redeploy (which wipes dev-mode's in-memory state) ends up with the
-# same creds that identity already has staged.
-set_secrets "$VAULT_APP" \
-  "VAULT_DEV_ROOT_TOKEN_ID=$VAULT_DEV_ROOT_TOKEN" \
-  "VAULT_HAWORKS_IDENTITY_ROLE_ID=$VAULT_HAWORKS_IDENTITY_ROLE_ID" \
-  "VAULT_HAWORKS_IDENTITY_SECRET_ID=$VAULT_HAWORKS_IDENTITY_SECRET_ID"
 
-# Identity-specific: JWT key + Vault wiring (direct creds — no boot-time
-# round-trip to vault) + optional issuer/audience + optional OAuth.
-# Vault__Enabled=true here overrides the common Vault__Enabled=false above
-# (later set_secrets call wins).
+# Ensure the persistent volume exists. Vault prod-mode stores raft data
+# (initialized state, AppRole config, KV) here; without it every deploy
+# would wipe everything.
+if ! flyctl volumes list -a "$VAULT_APP" 2>/dev/null | grep -q "vault_data"; then
+  echo "    creating vault_data volume"
+  flyctl volumes create vault_data --size 1 --region "$REGION" -a "$VAULT_APP" --yes
+else
+  echo "    vault_data volume exists"
+fi
+
+# Capture init keys + AppRole creds from the live vault and persist
+# them. This is a no-op on subsequent runs — the values from .env.local
+# match what's already staged. First-ever run pulls the keys vault
+# generated at init time on the persistent volume.
+if flyctl status -a "$VAULT_APP" 2>/dev/null | grep -qE 'started\s'; then
+  # The vault entrypoint writes /vault/data/.init.json on first init.
+  # Read it once, persist locally, stage as Fly secrets so subsequent
+  # restarts auto-unseal from VAULT_UNSEAL_KEY env (no .init.json
+  # dependency).
+  if [[ -z "$VAULT_UNSEAL_KEY" || -z "$VAULT_ROOT_TOKEN_PROD" ]]; then
+    echo "    capturing unseal key + root token from $VAULT_APP"
+    # `|| true` keeps `set -e` from killing the script when /vault/data
+    # /.init.json is missing (the file only exists after the new prod-mode
+    # entrypoint has run its first init).
+    init_json=$(flyctl ssh console -a "$VAULT_APP" -C 'cat /vault/data/.init.json' 2>/dev/null \
+      | tr -d '\r' | sed -n '/^Connecting/!p' | sed -n '/{/,$p' || true)
+    if [[ -n "$init_json" ]]; then
+      VAULT_UNSEAL_KEY=$(echo "$init_json" | jq -r '.unseal_keys_b64[0]' 2>/dev/null)
+      VAULT_ROOT_TOKEN_PROD=$(echo "$init_json" | jq -r '.root_token' 2>/dev/null)
+      if [[ -n "$VAULT_UNSEAL_KEY" && "$VAULT_UNSEAL_KEY" != "null" ]]; then
+        upsert_env_var VAULT_UNSEAL_KEY "$VAULT_UNSEAL_KEY"
+        upsert_env_var VAULT_ROOT_TOKEN_PROD "$VAULT_ROOT_TOKEN_PROD"
+        echo "    ✓ captured init keys → $ENV_FILE"
+      fi
+    fi
+  fi
+
+  # Once vault is unsealed (entrypoint handles that), grab the AppRole
+  # role_id + a fresh secret_id and stage them on identity. These are
+  # stable across vault restarts because raft persists them.
+  if [[ -n "$VAULT_ROOT_TOKEN_PROD" ]]; then
+    echo "    fetching AppRole role_id/secret_id"
+    read_role='vault read -field=role_id auth/approle/role/haworks-identity-app/role-id'
+    write_secret='vault write -force -field=secret_id auth/approle/role/haworks-identity-app/secret-id'
+    cmd="export VAULT_ADDR=http://[::1]:8200 VAULT_TOKEN=$VAULT_ROOT_TOKEN_PROD; $read_role"
+    VAULT_HAWORKS_IDENTITY_ROLE_ID=$(flyctl ssh console -a "$VAULT_APP" -C "sh -c '$cmd'" 2>/dev/null \
+      | tr -d '\r' | tail -1 | tr -d ' ' || true)
+    cmd="export VAULT_ADDR=http://[::1]:8200 VAULT_TOKEN=$VAULT_ROOT_TOKEN_PROD; $write_secret"
+    VAULT_HAWORKS_IDENTITY_SECRET_ID=$(flyctl ssh console -a "$VAULT_APP" -C "sh -c '$cmd'" 2>/dev/null \
+      | tr -d '\r' | tail -1 | tr -d ' ' || true)
+    if echo "$VAULT_HAWORKS_IDENTITY_ROLE_ID" | grep -qE '^[0-9a-f-]{36}$' \
+       && echo "$VAULT_HAWORKS_IDENTITY_SECRET_ID" | grep -qE '^[0-9a-f-]{36}$'; then
+      upsert_env_var VAULT_HAWORKS_IDENTITY_ROLE_ID "$VAULT_HAWORKS_IDENTITY_ROLE_ID"
+      upsert_env_var VAULT_HAWORKS_IDENTITY_SECRET_ID "$VAULT_HAWORKS_IDENTITY_SECRET_ID"
+      echo "    ✓ AppRole creds (role_id=${VAULT_HAWORKS_IDENTITY_ROLE_ID:0:8}..., secret_id=${VAULT_HAWORKS_IDENTITY_SECRET_ID:0:8}...)"
+    else
+      echo "    ! AppRole fetch returned unexpected output — skipping identity stage"
+      VAULT_HAWORKS_IDENTITY_ROLE_ID=""
+      VAULT_HAWORKS_IDENTITY_SECRET_ID=""
+    fi
+  fi
+else
+  echo "    $VAULT_APP not yet deployed — re-run bootstrap.sh after first vault deploy"
+fi
+
+# Stage the unseal key + root token on the vault app so future restarts
+# auto-unseal from env. Skipped on first-ever bootstrap (before the
+# init has run); the operator re-runs bootstrap.sh after first deploy.
+vault_secrets=()
+[[ -n "$VAULT_UNSEAL_KEY"       ]] && vault_secrets+=("VAULT_UNSEAL_KEY=$VAULT_UNSEAL_KEY")
+[[ -n "$VAULT_ROOT_TOKEN_PROD"  ]] && vault_secrets+=("VAULT_ROOT_TOKEN_PROD=$VAULT_ROOT_TOKEN_PROD")
+[[ ${#vault_secrets[@]} -gt 0 ]] && set_secrets "$VAULT_APP" "${vault_secrets[@]}"
+
+# Identity-specific: JWT key + Vault wiring (direct creds from staged
+# Fly secrets — no boot-time round-trip to vault) + optional issuer +
+# optional OAuth. Vault__Enabled=true overrides the common false set
+# earlier (later set_secrets wins).
 id_extra=(
   "Jwt__SigningKeyPem=$JWT_SIGNING_KEY_PEM"
   "Jwt__KeyId=${JWT_KEY_ID:-fly-1}"
@@ -279,12 +318,13 @@ id_extra=(
   "Vault__Address=http://ritualworks-vault.internal:8200"
   "Vault__RequireHmacValidation=false"
   "Vault__CaCertPath="
-  # Direct mode: VaultConfigBootstrap reads Vault:RoleId/SecretId from
-  # config; the bootstrap shim short-circuits when both are present.
-  # Identity boots in <5s with zero startup dependency on vault.
-  "Vault__RoleId=$VAULT_HAWORKS_IDENTITY_ROLE_ID"
-  "Vault__SecretId=$VAULT_HAWORKS_IDENTITY_SECRET_ID"
 )
+if [[ -n "$VAULT_HAWORKS_IDENTITY_ROLE_ID" && -n "$VAULT_HAWORKS_IDENTITY_SECRET_ID" ]]; then
+  id_extra+=(
+    "Vault__RoleId=$VAULT_HAWORKS_IDENTITY_ROLE_ID"
+    "Vault__SecretId=$VAULT_HAWORKS_IDENTITY_SECRET_ID"
+  )
+fi
 [[ -n "${JWT_ISSUER:-}"   ]] && id_extra+=("Jwt__Issuer=$JWT_ISSUER")
 [[ -n "${JWT_AUDIENCE:-}" ]] && id_extra+=("Jwt__Audience=$JWT_AUDIENCE")
 [[ -n "${OAUTH_GOOGLE_CLIENT_ID:-}" ]] && id_extra+=(
