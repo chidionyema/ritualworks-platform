@@ -93,6 +93,17 @@ public static class DependencyInjection
             _ => throw new NotSupportedException()
         });
 
+        // ISubscriptionService is consumed by CreateSubscriptionCheckoutCommandHandler.
+        // Pick the impl matching the active provider — Stripe via its dedicated
+        // service, PayPal via the dual-purpose PayPalCheckoutService which
+        // implements both ICheckoutSessionService and ISubscriptionService.
+        services.AddScoped<ISubscriptionService>(sp => sp.GetRequiredService<IPaymentGateway>().ActiveProvider switch
+        {
+            PaymentProvider.Stripe => sp.GetRequiredService<StripeSubscriptionService>(),
+            PaymentProvider.PayPal => sp.GetRequiredService<PayPalCheckoutService>(),
+            _ => throw new NotSupportedException("Active payment provider does not have an ISubscriptionService impl."),
+        });
+
         services.AddScoped<IPaymentSessionCache>(sp => sp.GetRequiredService<IPaymentGateway>().ActiveProvider switch
         {
             PaymentProvider.Stripe => sp.GetRequiredService<StripePaymentSessionCacheService>(),
