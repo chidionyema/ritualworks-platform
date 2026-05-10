@@ -775,8 +775,8 @@ DESIGN
           "src/$PascalFeature/$PascalFeature.Application/$PascalFeature.Application.csproj" \
           "src/$PascalFeature/$PascalFeature.Infrastructure/$PascalFeature.Infrastructure.csproj" \
           "src/$PascalFeature/$PascalFeature.Api/$PascalFeature.Api.csproj" \
-          "tests/$PascalFeature.Unit/$PascalFeature.Unit.csproj" \
-          "tests/$PascalFeature.Integration/$PascalFeature.Integration.csproj" >/dev/null
+          "tests/$PascalFeature/$PascalFeature.Unit/$PascalFeature.Unit.csproj" \
+          "tests/$PascalFeature/$PascalFeature.Integration/$PascalFeature.Integration.csproj" >/dev/null
         echo "  added 6 projects to $sln"
       fi
     )
@@ -784,8 +784,8 @@ DESIGN
     echo "→ verifying scaffold compiles (dotnet build)"
     if ! (cd "$wt" && \
           dotnet build "src/$PascalFeature/$PascalFeature.Api/$PascalFeature.Api.csproj" --nologo --verbosity quiet && \
-          dotnet build "tests/$PascalFeature.Unit/$PascalFeature.Unit.csproj" --nologo --verbosity quiet && \
-          dotnet build "tests/$PascalFeature.Integration/$PascalFeature.Integration.csproj" --nologo --verbosity quiet); then
+          dotnet build "tests/$PascalFeature/$PascalFeature.Unit/$PascalFeature.Unit.csproj" --nologo --verbosity quiet && \
+          dotnet build "tests/$PascalFeature/$PascalFeature.Integration/$PascalFeature.Integration.csproj" --nologo --verbosity quiet); then
       die "L0 scaffold does not compile. Inspect: cd $wt && dotnet build src/$PascalFeature/$PascalFeature.Api/$PascalFeature.Api.csproj"
     fi
     echo "  ✓ scaffold compiles (Api + tests)"
@@ -801,8 +801,8 @@ DESIGN
     git add "docs/agent-briefs/$feature/parallel-tracks.md"
     if [ "$wave_mode" = "new-service" ]; then
       git add "src/$PascalFeature/" \
-              "tests/$PascalFeature.Unit/" \
-              "tests/$PascalFeature.Integration/" \
+              "tests/$PascalFeature/$PascalFeature.Unit/" \
+              "tests/$PascalFeature/$PascalFeature.Integration/" \
               "tests/Smoke/${PascalFeature}SmokeTests.cs" \
               "fly.${feature}.toml" \
               "deploy/aspire/Program.cs" \

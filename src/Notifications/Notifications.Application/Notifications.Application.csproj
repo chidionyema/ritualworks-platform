@@ -7,7 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="../Notifications.Domain/Notifications.Domain.csproj" />
     <ProjectReference Include="../../Contracts/Haworks.Contracts.csproj" />
-    <ProjectReference Include="..\..\BuildingBlocks\Haworks.BuildingBlocks.csproj" />
+    <ProjectReference Include="../..\BuildingBlocks\Haworks.BuildingBlocks.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- Per .claude/rules/dotnet-clean-arch.md handlers + validators are

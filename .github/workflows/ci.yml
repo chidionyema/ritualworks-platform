@@ -52,19 +52,19 @@ jobs:
 
       - name: Unit tests
         run: |
-          for proj in tests/*.Unit/*.csproj; do
+          for proj in tests/*/*.Unit/*.csproj; do
             dotnet test "$proj" --no-build --configuration Release --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=minimal"
           done
 
       - name: Architecture tests
         run: |
-          for proj in tests/*.Architecture/*.csproj; do
+          for proj in tests/*/*.Architecture/*.csproj; do
             dotnet test "$proj" --no-build --configuration Release --logger "console;verbosity=minimal"
           done
 
       - name: Contract (Pact) tests
         run: |
-          for proj in tests/*.Contract/*.csproj; do
+          for proj in tests/*/*.Contract/*.csproj; do
             dotnet test "$proj" --no-build --configuration Release --logger "console;verbosity=minimal"
           done
 
@@ -150,12 +150,12 @@ jobs:
 
       - name: Restore + build ${{ matrix.suite }}.Integration
         run: |
-          dotnet restore tests/${{ matrix.suite }}.Integration/${{ matrix.suite }}.Integration.csproj
-          dotnet build tests/${{ matrix.suite }}.Integration/${{ matrix.suite }}.Integration.csproj --no-restore --configuration Release
+          dotnet restore tests/${{ matrix.suite }}/${{ matrix.suite }}.Integration/${{ matrix.suite }}.Integration.csproj
+          dotnet build tests/${{ matrix.suite }}/${{ matrix.suite }}.Integration/${{ matrix.suite }}.Integration.csproj --no-restore --configuration Release
 
       - name: Run ${{ matrix.suite }}.Integration
         run: |
-          dotnet test tests/${{ matrix.suite }}.Integration/${{ matrix.suite }}.Integration.csproj \
+          dotnet test tests/${{ matrix.suite }}/${{ matrix.suite }}.Integration/${{ matrix.suite }}.Integration.csproj \
             --no-build --configuration Release \
             --logger "trx;LogFileName=test-results.trx" \
             --logger "console;verbosity=normal"

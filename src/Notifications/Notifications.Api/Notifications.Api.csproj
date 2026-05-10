@@ -5,9 +5,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Notifications.Infrastructure/Notifications.Infrastructure.csproj" />
-    <ProjectReference Include="..\..\BuildingBlocks\Haworks.BuildingBlocks.csproj" />
-    <ProjectReference Include="..\Notifications.Domain\Notifications.Domain.csproj" />
-    <ProjectReference Include="..\Notifications.Application\Notifications.Application.csproj" />
+    <ProjectReference Include="../..\BuildingBlocks\Haworks.BuildingBlocks.csproj" />
+    <ProjectReference Include="../Notifications.Domain\Notifications.Domain.csproj" />
+    <ProjectReference Include="../Notifications.Application\Notifications.Application.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="AWSSDK.SimpleNotificationService" Version="4.0.0-preview.3" />
