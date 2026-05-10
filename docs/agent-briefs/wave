@@ -389,21 +389,39 @@ cmd_attach() {
 # gemini design pass, validate it, and (optionally) launch the wave. This is
 # the "one command, one input" flow — the operator only provides the spec file.
 cmd_run() {
-  # Accept: wave run <spec.md>            (feature inferred from filename)
-  #         wave run <feature> <spec.md>  (explicit)
-  #         wave run <feature> <spec.md> --yes   (skip launch confirmation)
-  local feature spec yes=0
-  if [ $# -eq 0 ]; then
-    die "usage: wave run <spec-file>   |   wave run <feature> <spec-file> [--yes]"
-  elif [ $# -eq 1 ]; then
-    spec=$1
+  # Accept:
+  #   wave run <spec.md>                  feature inferred from filename
+  #   wave run <feature> <spec.md>        explicit feature
+  #   --yes anywhere skips the launch confirmation
+  #   --new-service / --modify (optional) overrides auto-detection of WAVE_MODE
+  #
+  # The design pass AUTO-DETECTS whether the spec is a new microservice or a
+  # modification of existing services and writes WAVE_MODE=new-service|modify
+  # into the brief's Parameters block. Wave run reads that and conditionally
+  # applies the scaffold + deploy wiring (only for new-service mode).
+  local feature spec yes=0 mode_override=""
+  local positional=()
+  for arg in "$@"; do
+    case "$arg" in
+      --yes)         yes=1 ;;
+      --modify)      mode_override="modify" ;;
+      --new-service) mode_override="new-service" ;;
+      *)             positional+=("$arg") ;;
+    esac
+  done
+
+  if [ "${#positional[@]}" -eq 0 ]; then
+    die "usage: wave run <spec-file> [--yes]   |   wave run <feature> <spec-file> [--yes]
+       (mode is auto-detected; use --modify or --new-service only to override)"
+  elif [ "${#positional[@]}" -eq 1 ]; then
+    spec="${positional[0]}"
     # Strip extension, then -service-spec, then -spec. Order matters:
     # "pricing-service-spec.md" → "pricing-service-spec" → "pricing"
     # "audit-spec.md"           → "audit-spec"           → "audit"
     feature=$(basename "$spec" | sed -E 's/\.[^.]+$//; s/-service-spec$//; s/-spec$//; s/_spec$//')
   else
-    feature=$1; spec=$2
-    [ "${3:-}" = "--yes" ] && yes=1
+    feature="${positional[0]}"
+    spec="${positional[1]}"
   fi
 
   [ -f "$spec" ] || die "spec not found: $spec"
@@ -438,6 +456,7 @@ cmd_run() {
   echo "  spec:    $spec"
   echo "  example: $example"
   echo "  output:  $brief"
+  [ -n "$mode_override" ] && echo "  mode override: $mode_override"
   echo ""
 
   mkdir -p "$(dirname "$brief")"
@@ -458,17 +477,44 @@ YOUR OUTPUT: write exactly one file at this absolute path:
 
 REQUIREMENTS for the file (the validator will reject anything missing):
 
-A. Top of file: a fenced code block declaring all wave parameters. THE PARAMETERS MUST BE EXACTLY THESE VALUES — do NOT change them based on the working directory or any inference; copy verbatim:
+FIRST: DETERMINE WAVE_MODE FROM THE SPEC
+
+Read the spec carefully. Decide which of these two cases applies:
+
+(a) NEW SERVICE — the spec proposes a brand-new microservice (its own 4-project DDD layout: Domain/Application/Infrastructure/Api). Indicators: spec defines a new service name, new csproj layout, dedicated database/Fly app/AppHost slot, all-new code under \`src/<Feature>/\`.
+
+(b) MODIFY EXISTING SERVICES — the spec describes changes to one or more EXISTING services. Indicators: spec references existing services by name (Catalog, Audit, Notifications, etc.), proposes new endpoints / event consumers / schema changes / cross-cutting features (tracing, correlation, etc.), no new csproj layout. The "feature" may not even map to a single service — it could be a cross-cutting concern touching several.
+
+Set WAVE_MODE accordingly: "new-service" or "modify".
+
+A. Top of file: a fenced code block declaring all wave parameters. Use these EXACT values for REPO/GH_REPO; tune the rest based on WAVE_MODE:
+
+   For WAVE_MODE=new-service:
    \`\`\`
    REPO=/Users/chidionyema/Documents/code/ritualworks-platform
    GH_REPO=chidionyema/ritualworks-platform
+   WAVE_MODE=new-service
    BASE_BRANCH=feat/${feature}-service
    BRIEF_FILE=docs/agent-briefs/${feature}/parallel-tracks.md
    TRACK_PREFIX=feat/${feature}-
    TRACKS=(T1 T2 T3 T4)
    WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/ritualworks-platform
    \`\`\`
-   The REPO and GH_REPO above are the canonical project paths. Even if you read this prompt from a different worktree (e.g. rw-audit), use the values above verbatim. WORKTREE_PARENT must NOT be /tmp — gemini's --yolo sandbox blocks writes there; the path above is sandbox-allowed.
+
+   For WAVE_MODE=modify:
+   \`\`\`
+   REPO=/Users/chidionyema/Documents/code/ritualworks-platform
+   GH_REPO=chidionyema/ritualworks-platform
+   WAVE_MODE=modify
+   BASE_BRANCH=feat/${feature}
+   BRIEF_FILE=docs/agent-briefs/${feature}/parallel-tracks.md
+   TRACK_PREFIX=feat/${feature}-
+   TRACKS=(T1 T2 T3 T4)
+   WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/ritualworks-platform
+   \`\`\`
+   (Note BASE_BRANCH lacks the "-service" suffix in modify mode — these tracks don't stand up a service.)
+
+   WORKTREE_PARENT must NOT be /tmp — gemini's --yolo sandbox blocks writes there; the path above is sandbox-allowed.
 
 B. Three required H2 sections (verbatim headings):
    ## Universal rules
@@ -483,22 +529,24 @@ C. Then 3-5 H3 track sections (### Track T1: ..., ### Track T2: ..., etc.).
      **NuGet (if any):**             "none" or one package name
      **Done:**                       a single shell command that exits 0 only when this track is correct
 
-DECOMPOSITION RULES:
-- Each track owns a DISJOINT file scope. If two tracks need to touch the same file, that file must be part of an L0 scaffold (NOT a parallel track).
+DECOMPOSITION RULES (apply in BOTH modes):
+- Each track owns a DISJOINT file scope. Two tracks must NEVER list the same path under "Files you own".
 - Reference files must EXIST in this repo. Look in: src/Notifications/, src/Catalog/, src/Audit/, src/Search/, etc.
 - Done checks must be REAL shell commands, typically: dotnet test ... --filter "FullyQualifiedName~..."
 - Tracks should each be 2-5 hours of focused work — not too small (overhead) or too large (slow feedback).
 
-CRITICAL DI CONVENTION (the wave tool will auto-generate the DI orchestrator + per-track stubs):
-- Each track owns exactly ONE DI file: \`src/${PascalFeature}/${PascalFeature}.Application/DependencyInjection.<TrackId>.cs\` where <TrackId> is the track's ID (e.g. T1, T2, etc., NOT a descriptive name).
-- DO NOT use descriptive names like DependencyInjection.Domain.cs or DependencyInjection.Resolver.cs.
-- DO NOT include the orchestrator file (\`src/${PascalFeature}/${PascalFeature}.Application/DependencyInjection.cs\`) in any track's "Files you own" — wave generates it. Add it to every track's "Files you may NOT touch" list.
-- DO NOT include the DbContext skeleton (\`src/${PascalFeature}/${PascalFeature}.Infrastructure/Persistence/${PascalFeature}DbContext.cs\`) in any track's "Files you own" — wave scaffolds it. Add to "Files you may NOT touch".
+NEW-SERVICE MODE — additional rules:
+- Each track owns exactly ONE DI file: \`src/${PascalFeature}/${PascalFeature}.Application/DependencyInjection.<TrackId>.cs\` (e.g. DependencyInjection.T1.cs — NOT descriptive names).
+- DO NOT include the orchestrator (\`src/${PascalFeature}/${PascalFeature}.Application/DependencyInjection.cs\`) in any track's "Files you own" — wave generates it. List it in every track's "Files you may NOT touch".
+- DO NOT include the DbContext skeleton (\`src/${PascalFeature}/${PascalFeature}.Infrastructure/Persistence/${PascalFeature}DbContext.cs\`) in any track's "Files you own". List it in "Files you may NOT touch".
+- The wave tool auto-scaffolds the 4-project skeleton + DI + DbContext + fly.toml + Aspire/bootstrap wiring + smoke test. DO NOT design an L0 track or list scaffold files as anyone's responsibility.
 
-L0 IS HANDLED BY THE WAVE TOOL — DO NOT DESIGN AN L0 TRACK:
-- The wave tool auto-scaffolds the 4-project skeleton (csprojs + Program.cs + DbContext + DI orchestrator + N stubs) before launching agents.
-- The brief should NOT mention L0 prerequisites or "merge L0 first" — by the time agents run, L0 is already on the base branch.
-- Tracks T1..Tn are pure L1 work (filling in feature-specific code on top of the scaffold).
+MODIFY MODE — additional rules:
+- Tracks own paths inside EXISTING services (e.g., src/Catalog/Catalog.Application/Foo.cs, src/Orders/Orders.Domain/Bar.cs, etc.). Do NOT create a new src/<Feature>/ layout.
+- If a track adds a new file in an existing service, that path must not already exist on origin/main.
+- If a track modifies an existing file, list it as owned (no other track may also touch it).
+- Common shared files like .csproj, Program.cs, DependencyInjection.cs of an existing service can ONLY be owned by ONE track if at all — better to avoid touching shared files; if unavoidable, that track owns them and the others list them as "may NOT touch".
+- Done checks should target the affected service's existing test project (e.g., \`dotnet test tests/Catalog.Integration\`) with a --filter that captures only this track's added test classes.
 
 WRITE the file, then VALIDATE by running this command:
   bash $SELF validate $feature
@@ -533,9 +581,19 @@ DESIGN
   echo "  $brief"
   echo ""
 
-  # ── L0 scaffold: deterministic, instant. No agent waits for another agent. ──
-  # Done in a dedicated worktree so the operator's current branch is never touched.
-  have dotnet || die "dotnet CLI required for L0 scaffold build verification"
+  # ── Determine WAVE_MODE: new-service triggers L0 scaffold; modify skips it. ──
+  local wave_mode
+  wave_mode=$(brief_param "$brief" WAVE_MODE)
+  if [ -n "$mode_override" ]; then
+    wave_mode="$mode_override"
+    echo "→ mode override active: WAVE_MODE=$wave_mode"
+  fi
+  case "$wave_mode" in
+    new-service|modify) ;;
+    "") echo "  (brief did not declare WAVE_MODE — defaulting to new-service)"; wave_mode="new-service" ;;
+    *) die "WAVE_MODE='$wave_mode' from brief is not recognised (expected new-service or modify)" ;;
+  esac
+  echo "→ WAVE_MODE=$wave_mode"
 
   local repo_root base_branch
   repo_root=$(brief_param "$brief" REPO)
@@ -548,81 +606,96 @@ DESIGN
     die "$base_branch already exists on origin. Delete it first (git push origin --delete $base_branch) or pick a different feature."
   fi
 
-  # Isolated worktree off origin/main on the new base branch
+  # Isolated worktree off origin/main on the new base branch (used in both modes
+  # so the operator's current checkout is never disturbed).
   local wt="${WAVE_WORKTREE_PARENT:-/tmp}/wave-l0-${feature}"
   git -C "$repo_root" worktree remove --force "$wt" 2>/dev/null || true
   rm -rf "$wt"
   git -C "$repo_root" branch -D "$base_branch" 2>/dev/null || true
-  echo "→ creating L0 worktree at $wt (branch=$base_branch, base=origin/main)"
+  echo "→ creating $wave_mode worktree at $wt (branch=$base_branch, base=origin/main)"
   git -C "$repo_root" worktree add -b "$base_branch" "$wt" origin/main >/dev/null \
     || die "git worktree add failed"
 
-  if [ -d "$wt/src/$PascalFeature" ]; then
-    die "src/$PascalFeature already exists in main — pick a different feature name"
-  fi
-
-  # Copy the brief into the worktree's docs/agent-briefs (so it lands in BASE_BRANCH)
+  # Copy the brief into the worktree (always — both modes need the brief on the base branch)
   mkdir -p "$wt/docs/agent-briefs/$feature"
   cp "$brief" "$wt/docs/agent-briefs/$feature/parallel-tracks.md"
 
-  echo "→ applying scaffold template to $wt/src/$PascalFeature/ + tests/"
-  apply_scaffold "$wt" "$PascalFeature" "$feature"
+  if [ "$wave_mode" = "new-service" ]; then
+    have dotnet || die "dotnet CLI required for L0 scaffold build verification"
 
-  echo "→ generating DI orchestrator + per-track stubs from brief"
-  generate_di "$wt" "$PascalFeature" "$feature" "$brief"
-
-  echo "→ wiring deploy artifacts (Aspire + bootstrap.sh + fly.toml + smoke)"
-  apply_deploy_wiring "$wt" "$PascalFeature" "$feature"
-
-  echo "→ registering scaffolded projects with the solution"
-  (
-    cd "$wt"
-    local sln
-    sln=$(find . -maxdepth 2 -name "*.sln" -type f | head -1)
-    if [ -n "$sln" ]; then
-      dotnet sln "$sln" add \
-        "src/$PascalFeature/$PascalFeature.Domain/$PascalFeature.Domain.csproj" \
-        "src/$PascalFeature/$PascalFeature.Application/$PascalFeature.Application.csproj" \
-        "src/$PascalFeature/$PascalFeature.Infrastructure/$PascalFeature.Infrastructure.csproj" \
-        "src/$PascalFeature/$PascalFeature.Api/$PascalFeature.Api.csproj" \
-        "tests/$PascalFeature.Unit/$PascalFeature.Unit.csproj" \
-        "tests/$PascalFeature.Integration/$PascalFeature.Integration.csproj" >/dev/null
-      echo "  added 6 projects to $sln"
+    if [ -d "$wt/src/$PascalFeature" ]; then
+      die "src/$PascalFeature already exists in main — pick a different feature name (or use --modify if you meant to modify the existing service)"
     fi
-  )
 
-  echo "→ verifying scaffold compiles (dotnet build)"
-  if ! (cd "$wt" && \
-        dotnet build "src/$PascalFeature/$PascalFeature.Api/$PascalFeature.Api.csproj" --nologo --verbosity quiet && \
-        dotnet build "tests/$PascalFeature.Unit/$PascalFeature.Unit.csproj" --nologo --verbosity quiet && \
-        dotnet build "tests/$PascalFeature.Integration/$PascalFeature.Integration.csproj" --nologo --verbosity quiet); then
-    die "L0 scaffold does not compile. Inspect: cd $wt && dotnet build src/$PascalFeature/$PascalFeature.Api/$PascalFeature.Api.csproj"
+    echo "→ applying scaffold template to $wt/src/$PascalFeature/ + tests/"
+    apply_scaffold "$wt" "$PascalFeature" "$feature"
+
+    echo "→ generating DI orchestrator + per-track stubs from brief"
+    generate_di "$wt" "$PascalFeature" "$feature" "$brief"
+
+    echo "→ wiring deploy artifacts (Aspire + bootstrap.sh + fly.toml + smoke)"
+    apply_deploy_wiring "$wt" "$PascalFeature" "$feature"
+
+    echo "→ registering scaffolded projects with the solution"
+    (
+      cd "$wt"
+      local sln
+      sln=$(find . -maxdepth 2 -name "*.sln" -type f | head -1)
+      if [ -n "$sln" ]; then
+        dotnet sln "$sln" add \
+          "src/$PascalFeature/$PascalFeature.Domain/$PascalFeature.Domain.csproj" \
+          "src/$PascalFeature/$PascalFeature.Application/$PascalFeature.Application.csproj" \
+          "src/$PascalFeature/$PascalFeature.Infrastructure/$PascalFeature.Infrastructure.csproj" \
+          "src/$PascalFeature/$PascalFeature.Api/$PascalFeature.Api.csproj" \
+          "tests/$PascalFeature.Unit/$PascalFeature.Unit.csproj" \
+          "tests/$PascalFeature.Integration/$PascalFeature.Integration.csproj" >/dev/null
+        echo "  added 6 projects to $sln"
+      fi
+    )
+
+    echo "→ verifying scaffold compiles (dotnet build)"
+    if ! (cd "$wt" && \
+          dotnet build "src/$PascalFeature/$PascalFeature.Api/$PascalFeature.Api.csproj" --nologo --verbosity quiet && \
+          dotnet build "tests/$PascalFeature.Unit/$PascalFeature.Unit.csproj" --nologo --verbosity quiet && \
+          dotnet build "tests/$PascalFeature.Integration/$PascalFeature.Integration.csproj" --nologo --verbosity quiet); then
+      die "L0 scaffold does not compile. Inspect: cd $wt && dotnet build src/$PascalFeature/$PascalFeature.Api/$PascalFeature.Api.csproj"
+    fi
+    echo "  ✓ scaffold compiles (Api + tests)"
+  else
+    echo "→ modify mode: skipping scaffold + deploy wiring (existing services already in place)"
   fi
-  echo "  ✓ scaffold compiles (Api + tests)"
 
-  echo "→ committing scaffold + brief to $base_branch"
+  echo "→ committing $wave_mode artifacts + brief to $base_branch"
   local n_tracks
   n_tracks=$(brief_tracks "$brief" | wc -w | tr -d ' ')
   (
     cd "$wt"
-    git add "docs/agent-briefs/$feature/parallel-tracks.md" \
-            "src/$PascalFeature/" \
-            "tests/$PascalFeature.Unit/" \
-            "tests/$PascalFeature.Integration/" \
-            "tests/Smoke/${PascalFeature}SmokeTests.cs" \
-            "fly.${feature}.toml" \
-            "deploy/aspire/Program.cs" \
-            "deploy/aspire/init-postgres.sql" \
-            "deploy/fly/bootstrap.sh" \
-            *.sln 2>/dev/null || true
-    git commit -m "L0(${feature}): scaffold + parallel-tracks brief
+    git add "docs/agent-briefs/$feature/parallel-tracks.md"
+    if [ "$wave_mode" = "new-service" ]; then
+      git add "src/$PascalFeature/" \
+              "tests/$PascalFeature.Unit/" \
+              "tests/$PascalFeature.Integration/" \
+              "tests/Smoke/${PascalFeature}SmokeTests.cs" \
+              "fly.${feature}.toml" \
+              "deploy/aspire/Program.cs" \
+              "deploy/aspire/init-postgres.sql" \
+              "deploy/fly/bootstrap.sh" \
+              *.sln 2>/dev/null || true
+      git commit -m "L0(${feature}): scaffold + parallel-tracks brief
 
 Generated by 'wave run'. The 4-project DDD skeleton (Domain, Application,
 Infrastructure, Api) compiles green. The DI orchestrator calls ${n_tracks}
 per-track stubs (DependencyInjection.<TrackId>.cs) — each owned by exactly
 one L1 track so they can be filled in parallel from second 1."
+    else
+      git commit -m "wave(${feature}): parallel-tracks brief (modify mode)
+
+Generated by 'wave run' for a feature that modifies existing services.
+${n_tracks} disjoint-scope tracks defined in the brief — each agent works
+in an existing service's file tree. No L0 scaffold needed."
+    fi
     git push -u origin "$base_branch"
-  ) || die "scaffold commit/push failed; see output above"
+  ) || die "commit/push failed; see output above"
 
   # Cleanup the temp worktree (branch is on origin now)
   git -C "$repo_root" worktree remove --force "$wt" 2>/dev/null || true
