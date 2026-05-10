@@ -95,36 +95,65 @@ The **only** thing that crosses service boundaries. Producers and consumers each
 
 ## 4. Producer side — Postgres logical replication (zero application code)
 
-The application is unaware of CDC. Producers just write to their tables. The DB does the work.
+The application is unaware of CDC. Services just write to their tables. The DB does the work.
 
-### 4.1 Per-DB configuration (one-time, IaC)
+### 4.1 Topology — see `database-topology.md`
 
-Each service's Postgres needs three things, none of which involve application code:
+The full production DB topology, capacity limits, and Vault dynamic-credential flow are documented separately in [`../architecture/database-topology.md`](../architecture/database-topology.md). One-line summary for this spec: today, all 8 service databases live in one Fly Postgres instance (`ritualworks-vault-pg`); tomorrow (per k8s-platform-spec), each gets its own CNPG cluster.
 
-**(a)** `wal_level=logical` in `postgresql.conf`. Enables WAL-based change streaming. Reload required (no downtime). Cost: ~5-10% more WAL volume on write-heavy tables, fully manageable.
+**Both topologies look the same to cdc-svc** — each `(host, database)` pair is one source. Today: 8 entries on one host. Tomorrow: 8 distinct hosts. The relay, publications, and consumers don't know or care which.
 
-**(b)** A `PUBLICATION` declaring which tables we capture:
+### 4.2 Cluster-wide configuration (one change, all services covered)
 
-```sql
--- Run once per service DB. Idempotent.
-CREATE PUBLICATION cdc_publication FOR TABLE
-    products,
-    product_categories,
-    product_prices
-WITH (publish = 'insert, update, delete');
+`wal_level=logical` is a server-wide Postgres setting — flipping it once on `ritualworks-vault-pg` enables CDC for every database on that instance. Single change, all services covered.
+
+Same for `max_replication_slots` — defaults to 10 on Fly Postgres. We need 8 slots (one per database) plus headroom for ad-hoc replays. Bump to 20.
+
+Combined Fly Postgres config update:
+
+```bash
+fly postgres config update \
+  --wal-level=logical \
+  --max-replication-slots=20 \
+  --max-wal-senders=20 \
+  -a ritualworks-vault-pg
+# requires a brief Postgres restart — schedule during low traffic
 ```
 
-The list is per-service. Tables NOT in the publication are invisible to CDC (use this to exclude noisy or sensitive tables). The publication can be altered later via `ALTER PUBLICATION ADD TABLE` — no app restart.
+This is the **only host-level change** in the entire CDC rollout. No per-service DB modifications at this level.
 
-**(c)** `REPLICA IDENTITY FULL` on tables that need before-image:
+For future CNPG topology, the same settings live in the per-service `Cluster` CR (`spec.postgresql.parameters.wal_level: logical`). One commit per cluster manifest.
+
+### 4.3 Per-database publications (one statement per logical DB)
+
+Each service's logical DB gets its own publication. Statements are cheap, run once per DB, no restart:
 
 ```sql
-ALTER TABLE products REPLICA IDENTITY FULL;
+-- Run once against the 'identity' database
+CREATE PUBLICATION cdc_publication FOR TABLE users, user_profiles
+    WITH (publish = 'insert, update, delete');
+ALTER TABLE users         REPLICA IDENTITY FULL;
+ALTER TABLE user_profiles REPLICA IDENTITY FULL;
+
+-- Repeat for catalog, orders, payments, content, checkout, audit, notifications
+-- with their respective table lists.
 ```
 
-Without this, Postgres only writes the primary key on UPDATE/DELETE — consumers wouldn't get `payload_before`. With it, the entire pre-image lands in WAL. Cost: more WAL on UPDATE/DELETE; tolerable for low-write tables, evaluate per-table for hot ones.
+Publication membership can be altered later via `ALTER PUBLICATION ADD TABLE` — no app restart, no DB restart, no consumer restart (cdc-svc picks up new tables on next WAL record).
 
-**Operationally:** `infra/stateful/postgres-clusters/<service>.yaml` (the CloudNativePG Cluster CR per the K8s platform spec) declares `wal_level=logical` in its config. Each service's L0 wave run produces a publication script in `infra/stateful/cdc-publications/<service>.sql` that ships alongside the service migration.
+Tables NOT in the publication are invisible to CDC — use this to exclude noisy or sensitive tables (e.g., audit's own `audit_events` should NOT be in audit's publication; that would be a feedback loop).
+
+### 4.4 Application code change required
+
+**None.** Services write to their tables as they always have. No new DI registration, no library to call, no outbox table, no transaction-scoping concern. The change is purely operational/infrastructural — a config flag on one Postgres instance plus 8 SQL statements (one per service DB).
+
+### 4.5 Coexistence with domain events
+
+Existing domain events stay. They carry **business intent** — "ProductPriceChangedEvent fired because of a promo rule" — which logical replication cannot infer. CDC carries **data history** — "products row updated, before=X after=Y". Both flow:
+- Domain events → MassTransit → existing typed consumers (Notifications, Orders sagas, business handlers)
+- CDC events → cdc-svc → generic consumers (cache, search, audit-data-mode, analytics, webhooks)
+
+A consumer chooses based on what it needs. Most cross-cutting consumers want CDC (data sync); most business-flow consumers want domain events (semantic meaning).
 
 ### 4.2 Application code change required
 
@@ -287,26 +316,39 @@ Subscriber registration is the public API of webhooks-svc. CDC is the firehose u
 
 This is the migration plan. The phrase "minimal touch" is the discipline — every change kept tight to avoid a months-long refactor.
 
-### 7.1 Producers (every service with state) — pure infrastructure work, no application code
+### 7.1 Producers — pure infrastructure work, no application code
 
-This is where the design pays off — there's almost nothing to do per service:
+The production topology (single Fly Postgres, multiple logical DBs — see `architecture/database-topology.md`) makes this even smaller than the per-service-Postgres case would be:
 
-| Service | Touch | Effort |
+**Step 1 — single cluster-wide change** (covers ALL services in one go):
+
+```bash
+fly postgres config update \
+  --wal-level=logical \
+  --max-replication-slots=20 \
+  --max-wal-senders=20 \
+  -a ritualworks-vault-pg
+# requires brief restart of the shared Postgres — schedule in low-traffic window
+```
+
+**Step 2 — one publication per logical DB** (8 SQL statements, run by CI script):
+
+| Logical DB | Publication tables | Effort |
 |---|---|---|
-| **Catalog** | (a) ALTER `wal_level=logical` on its Postgres (one-time, cluster CR change); (b) `CREATE PUBLICATION cdc_publication FOR TABLE products, product_categories, product_prices`; (c) `REPLICA IDENTITY FULL` on those tables. **Zero application code change.** | 30min |
-| **Orders** | Same: enable replication, declare publication for `orders`, `order_lines`. | 30min |
-| **Payments** | Same: declare publication for `payments`, `payment_attempts`, `refunds`. | 30min |
-| **Identity** | Same: `users`, `user_profiles`. | 30min |
-| **Content** | Same: `content_items`. | 30min |
-| **Notifications** | Likely SKIP. Notifications are pull-driven (consumers of intent); little state others react to. Re-evaluate if a real consumer emerges. | 0min |
-| **Search** | Skip. Search owns its index, not state others care about. | 0min |
-| **Audit** | Skip. Audit doesn't write business state. | 0min |
-| **CheckoutOrchestrator** | Optional. Saga state transitions are interesting — declare publication on `checkout_sagas` if a consumer requests. | 0-30min |
-| **BffWeb** | Skip. No state. | 0min |
+| `catalog` | products, product_categories, product_prices | 5min |
+| `orders` | orders, order_lines | 5min |
+| `payments` | payments, payment_attempts, refunds | 5min |
+| `identity` | users, user_profiles | 5min |
+| `content` | content_items | 5min |
+| `checkout` | checkout_sagas (optional, only if a consumer requests) | 0-5min |
+| `audit` | SKIP — would create a feedback loop (audit's own data being captured by audit). | 0 |
+| `notifications` | SKIP unless a real consumer emerges; notifications is pull-driven (consumes intent, doesn't produce state others react to). | 0 |
+| `search` | SKIP — search owns its Meilisearch index, not state others react to. | 0 |
+| `bffweb` | SKIP — no DB. | 0 |
 
-Total producer integration: **~3 hours of pure DB-config work**, no code review of handler changes, no risk of forgotten outbox writes, no regression surface in business logic. Parallelizable trivially since each service's Postgres is independent.
+Total producer integration: **~30 minutes of operator time** (one config update + 8 SQL statements committed to `infra/stateful/cdc-publications/`). The CI workflow that applies these is part of the cdc-svc rollout (T3 in § 11).
 
-The substantive work is in cdc-svc + the consumers. Producer integration is a footnote.
+When the platform moves to per-service CNPG clusters (per `k8s-platform-spec.md` § 12 P2), the same publication SQL files apply unchanged — only the connection target changes from "ritualworks-vault-pg + database name" to "<service>-pg cluster".
 
 ### 7.2 Existing consumers — what changes
 
@@ -466,7 +508,152 @@ cdc consumer dlq drop <event_id>        # mark as resolved without retry (with r
 
 After wave merges to `feat/cdc-platform`, integration smoke = the `CdcEndToEndJourney` test in T8. PR `feat/cdc-platform → main` is the rollup.
 
-## 12. Reference projects to mirror
+## 12. Production DB integration + day-1 automation
+
+The spec above describes the runtime architecture. This section is the operator-facing view: how the existing prod databases get CDC enabled, how every new service gets CDC by default, and what day-1 looks like for the operator.
+
+### 12.1 Current prod DB topology — what we're working with
+
+Today (May 2026), every service has its own Postgres on Fly:
+- `ritualworks-<service>-pg` Fly app per service (per `fly.<service>-pg.toml` if present, else stand-alone Fly Postgres app)
+- `wal_level` defaults to `replica` (Postgres standard) — needs upgrade to `logical` for CDC
+- Vault dynamic credentials issue per-connection roles
+- Connection strings injected via `ConnectionStrings__<service>` env in each service
+
+Future (per `k8s-platform-spec.md`): CloudNativePG `Cluster` CR per service. CDC-aware from day 1.
+
+### 12.2 Automation goal — three single commands
+
+All three of these are idempotent (re-runnable, no-op if already correct):
+
+```bash
+# Day-1 enrolment for an existing service (works on Fly Postgres OR CNPG)
+platform db cdc enable <service> [--tables T1,T2,...]
+  # 1. SET wal_level=logical (Fly: fly postgres config; CNPG: patch Cluster CR; either restarts the DB)
+  # 2. CREATE PUBLICATION cdc_publication FOR TABLE T1, T2, ... WITH (publish='insert,update,delete')
+  # 3. ALTER TABLE <each> REPLICA IDENTITY FULL
+  # 4. cdc-svc INSERT into cdc_sources + cdc_table_map (mapping derived from --tables or per defaults)
+  # 5. emit acknowledgement: 'CDC enabled for <service>: 5 tables published, slot created'
+
+platform db cdc add-table <service> <table> [--entity-type T]
+  # ALTER PUBLICATION ADD TABLE; ALTER TABLE ... REPLICA IDENTITY FULL; insert cdc_table_map row.
+  # No DB restart, no service restart.
+
+platform db cdc disable <service>
+  # Removes the publication, drops the slot in cdc-svc, deletes cdc_sources row.
+  # wal_level stays logical (no DB restart cost; benign overhead).
+```
+
+These are NOT three new commands the operator types daily — they're invoked ONCE per service during the rollout. After that, the system runs itself.
+
+### 12.3 New-service workflow — CDC by default
+
+The wave tool's `apply_deploy_wiring` (already exists per `feat/wave-l0-deploy`) extends to also generate:
+
+- `infra/stateful/cdc-publications/<service>.sql` — the publication script, derived from the service's domain entity tables (the wave's design pass identifies entity tables in the brief)
+- A line in `cdc-svc`'s seed migration registering the service in `cdc_sources`
+- Per-table `cdc_table_map` entries
+
+Net effect: **a new service shipped via `wave run <spec>` is CDC-enrolled at first deploy.** The operator does not need to remember to `platform db cdc enable`. The "is this service CDC'd?" question disappears — every service is, by construction.
+
+### 12.4 IaC anchor — `infra/stateful/cdc-publications/` is the source of truth
+
+Per service: one `<service>.sql` file in this directory, declaratively listing the publication. Format:
+
+```sql
+-- infra/stateful/cdc-publications/catalog.sql
+-- Idempotent: drops + recreates only on actual schema diff (CI-checked).
+CREATE PUBLICATION IF NOT EXISTS cdc_publication FOR TABLE
+    products,
+    product_categories,
+    product_prices,
+    inventory_items
+WITH (publish = 'insert, update, delete');
+
+ALTER TABLE products            REPLICA IDENTITY FULL;
+ALTER TABLE product_categories  REPLICA IDENTITY FULL;
+ALTER TABLE product_prices      REPLICA IDENTITY FULL;
+ALTER TABLE inventory_items     REPLICA IDENTITY FULL;
+```
+
+The CI workflow (`.github/workflows/cdc-publications.yml`) applies these on every merge to main:
+1. Fly target: `flyctl postgres connect -a ritualworks-<svc>-pg < infra/stateful/cdc-publications/<svc>.sql`
+2. CNPG target: `kubectl exec -n postgres-<svc> -c postgres -- psql -U postgres -f /tmp/cdc.sql` (after kubectl-cp'ing the file)
+
+Same source file works for both topologies — that's the seamlessness.
+
+### 12.5 cdc-svc itself — fully automated lifecycle
+
+cdc-svc is just another wave-deployed service. Its production lifecycle:
+
+| Concern | Mechanism |
+|---|---|
+| Provisioning | `wave run` produced its scaffold + Helm chart + fly.toml (Phase 1 of K8s platform). Deploys via the same path as audit/notifications/etc. |
+| Slot creation | On startup, cdc-svc reads `cdc_sources`, opens a slot per source. Idempotent — existing slots reused. |
+| Slot cleanup | On `cdc source disable`, slot is dropped from Postgres. No manual cleanup. |
+| Backups | cdc-svc has zero durable state outside its own DB (`cdc_sources`, `cdc_table_map`, DLQ). Standard Velero backup of its namespace covers everything. WAL slots are NOT backed up — they're recreated from the source DB's current LSN if cdc-svc is restored. |
+| Failover | cdc-svc runs as `replicas: 2` in prod with leader election (a single replica holds slots; the other is hot-standby). On primary failure, the standby acquires the slots within ~10s. Same pattern as the existing leader-elected hosted services in this codebase. |
+| Upgrade | Helm `upgrade` rolls the cdc-svc image. New replica acquires slots before the old one releases — at-most a few seconds of relay pause. |
+
+### 12.6 The seamless day-1 sequence
+
+The shared-Postgres topology (see `architecture/database-topology.md`) means the producer-side work is one cluster config + applying the publication SQL files committed under `infra/stateful/cdc-publications/`:
+
+```bash
+# Step 1 — one cluster-wide config (covers all services on the shared instance)
+platform db cdc enable-cluster              # under the hood:
+                                            #   fly postgres config update --wal-level=logical
+                                            #     --max-replication-slots=20 --max-wal-senders=20
+                                            #     -a ritualworks-vault-pg
+                                            # then runs every infra/stateful/cdc-publications/*.sql
+                                            # against its target logical DB. Idempotent.
+
+# Step 2 — deploy cdc-svc + consumers
+platform deploy cdc                         # cdc-svc starts; opens 5 replication slots
+platform deploy cache-invalidator           # new component
+platform redeploy search audit              # existing services pick up CDC consumers from updated charts
+
+# Step 3 — verify
+platform db cdc status                      # shows 5 sources Healthy, lag < 1s, all consumers Active
+platform doctor                             # full subsystem check
+```
+
+**Total operator effort: 5 commands.** Each idempotent. No editor sessions, no kubectl YAML hand-crafting, no SQL pasted into psql.
+
+After the wave-tool extension lands (per § 12.3), every new service shipped via `wave run <spec>` is automatically CDC-enrolled at deploy time — its publication SQL is generated alongside its scaffold, and `platform db cdc enable-cluster` is a no-op because the cluster's already configured.
+
+When the platform migrates to per-service CNPG clusters, only the implementation under `platform db cdc enable-cluster` changes (kubectl-patch each Cluster CR vs `fly postgres config update`); the operator surface stays the same.
+
+### 12.7 Day-2 dashboard — single pane of glass
+
+`platform db cdc status` output:
+
+```
+DB topology: 5 producers · 7 consumers · cdc-svc HA: 2 replicas (active=cdc-svc-0)
+
+Sources                       slot         lag         pub-rate    last-event
+  catalog                     active       0.4s        12 e/s      5s ago      ✓
+  orders                      active       0.2s        8 e/s       3s ago      ✓
+  payments                    active       0.1s        2 e/s       12s ago     ✓
+  identity                    active       0.3s        0.1 e/s     2m ago      ✓
+  content                     active       0.0s        0 e/s       8m ago      ✓
+
+Consumers                     subscribed   lag         throughput  dlq
+  cache-invalidator           5/5          0.5s        22 e/s      0           ✓
+  search                      2/5 (cat,prd) 0.3s       12 e/s      0           ✓
+  audit (data-mode)           5/5          0.4s        22 e/s      0           ✓
+  webhooks                    5/5          1.1s        22 e/s      2           ⚠
+  analytics                   not deployed
+  ...
+
+Overall: 22 events/s, e2e p99 = 1.4s, all green except webhooks DLQ
+
+→ 2 events in webhooks DLQ — run 'cdc consumer dlq list webhooks'
+```
+
+One screen. Same view on Fly today, on CNPG tomorrow, on bare-metal k3s next month.
+
+## 13. Reference projects to mirror
 
 - `MassTransit` outbox docs — the library's design follows MassTransit's transactional outbox patterns
 - `Debezium` documentation — for understanding the full CDC space (we're choosing simpler outbox-only for now)
