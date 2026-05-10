@@ -237,7 +237,7 @@ jobs:
     # on prerequisite jobs that may have been skipped.
     name: Deploy ${{ matrix.svc }}
     needs: [plan, deploy-vault-pg, deploy-vault, stage-vault-creds]
-    if: ${{ always() && needs.plan.outputs.services != '[]' && (needs.deploy-vault.result == 'success' || needs.deploy-vault.result == 'skipped') && (needs.stage-vault-creds.result == 'success' || needs.stage-vault-creds.result == 'skipped') && (needs.deploy-vault-pg.result == 'success' || needs.deploy-vault-pg.result == 'skipped') }}
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.services != '[]' && (needs.deploy-vault.result == 'success' || needs.deploy-vault.result == 'skipped') && (needs.stage-vault-creds.result == 'success' || needs.stage-vault-creds.result == 'skipped') && (needs.deploy-vault-pg.result == 'success' || needs.deploy-vault-pg.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -254,7 +254,7 @@ jobs:
   deploy-bff:
     name: Deploy bffweb
     needs: [plan, deploy-backends]
-    if: ${{ always() && needs.plan.outputs.deploy_bff == 'true' && (needs.deploy-backends.result == 'success' || needs.deploy-backends.result == 'skipped') }}
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.deploy_bff == 'true' && (needs.deploy-backends.result == 'success' || needs.deploy-backends.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
