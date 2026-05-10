@@ -6,6 +6,8 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../Pricing.Application/Pricing.Application.csproj" />
+    <ProjectReference Include="../Pricing.Domain/Pricing.Domain.csproj" />
+    <ProjectReference Include="../../BuildingBlocks/Haworks.BuildingBlocks.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0" />
