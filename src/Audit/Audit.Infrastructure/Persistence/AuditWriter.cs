@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Threading.Channels;
+using Haworks.Audit.Application.Capture;
 using Haworks.Audit.Application.Extraction;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
