@@ -238,21 +238,22 @@ apply_ci_wiring() {
     echo "  + deploy.yml: registered '${feature}' in changes-job outputs"
   fi
 
-  # b) paths-filter filters block — add '<feature>:' with src/* and fly.toml triggers
+  # b) paths-filter filters block — add '<feature>:' with src/* and fly.toml triggers.
+  # Anchor: insert directly BEFORE the 'bff:' filter key. bff is reliably the
+  # last filter block in the file (BffWeb deploys after all backends), so
+  # every new service goes above it. Inserting after the last 12-space key
+  # (the previous approach) puts content BEFORE bff's list items, which
+  # silently re-parents bff's items to the new feature — caught and fixed
+  # in commit de81bce.
   if ! grep -qE "^[ ]{12}${feature}:" "$deploy_yml"; then
     awk -v feat="$feature" -v PF="$PascalFeature" '
-      /^[ ]{12}[a-z_]+:$/ { last=NR }
-      { lines[NR]=$0 }
-      END {
-        for (i=1; i<=NR; i++) {
-          print lines[i]
-          if (i==last) {
-            printf "            %s:\n", feat
-            printf "              - '"'"'src/%s/**'"'"'\n", PF
-            printf "              - '"'"'fly.%s.toml'"'"'\n", feat
-          }
-        }
+      /^            bff:$/ && !done {
+        printf "            %s:\n", feat
+        printf "              - '"'"'src/%s/**'"'"'\n", PF
+        printf "              - '"'"'fly.%s.toml'"'"'\n", feat
+        done=1
       }
+      { print }
     ' "$deploy_yml" > "$deploy_yml.tmp" && mv "$deploy_yml.tmp" "$deploy_yml"
     echo "  + deploy.yml: added paths-filter for '${feature}' (src/${PascalFeature}/** + fly.${feature}.toml)"
   fi
