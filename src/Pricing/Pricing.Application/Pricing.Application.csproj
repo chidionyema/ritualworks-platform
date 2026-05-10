@@ -7,6 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="../Pricing.Domain/Pricing.Domain.csproj" />
     <ProjectReference Include="../../Contracts/Haworks.Contracts.csproj" />
+    <ProjectReference Include="../../BuildingBlocks/Haworks.BuildingBlocks.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Haworks.Pricing.Unit" />
