@@ -457,30 +457,220 @@ cdc consumer dlq drop <event_id>        # mark as resolved without retry (with r
 
 `docs/runbooks/cdc-operations.md` captures the above scenarios + Vault-style "in case of fire" procedures (full DLQ replay, source pause + drain, etc.). Lives next to the existing observability runbooks.
 
-## 10. Test plan
+## 10. Test plan — comprehensive coverage at every layer
 
-### 10.1 Unit (fast)
+Failures in CDC are silent failures elsewhere — a missed cache invalidation looks like staleness, a missed search index update looks like a search bug, a missed audit row is a compliance gap. **Every failure mode of the CDC chain must be covered by a test that fails fast in CI before it reaches production.**
 
-- Outbox library: `RecordAsync` enrolls in current tx; rollback drops outbox row
-- Schema-version evolution: handler tolerant of additive fields
-- Routing: `entity_type` → exchange routing key correct
+The layered strategy below is exhaustive by design. Each test layer has owners, runtime budgets, and explicit cross-references to the broader E2E framework in `e2e-framework-spec.md`.
 
-### 10.2 Integration (per consumer)
+### 10.1 Test pyramid + ownership
 
-- Cache: emit `EntityChangedEvent`, assert Redis key absent; emit `created`, assert key NOT cached (cache is invalidate-only, not preload)
-- Search: emit `cdc.entity.product.updated`, assert Meilisearch document mutated
-- Audit (data-mode): emit event, assert `data_audit_events` row persisted
-- Analytics (when built): emit event, assert warehouse row appended
+```
+                ▲                  fewest, slowest, most expensive
+   E2E (chain) ──────                      runs nightly + per release
+   Cross-component ──────
+   Component integration ──────
+   Unit ──────────────                fastest, cheapest
+                ▼                  runs every PR
+```
 
-### 10.3 E2E (super journey, ports the Phase 3c spec)
+| Layer | Owner | Where it lives | Runs on |
+|---|---|---|---|
+| 10.2 Unit | Per-component (cdc-svc + each consumer) | `tests/<component>.Unit/Cdc*Tests.cs` | every PR, < 60s |
+| 10.3 Component integration | Per-component | `tests/<component>.Integration/Cdc*Tests.cs` | every PR, < 5min |
+| 10.4 Cross-component | cdc-svc team | `tests/Cdc.Integration/CrossComponentTests.cs` | every PR, < 10min |
+| 10.5 E2E journeys | E2E framework | `tests/E2E/Journeys/Cdc*Journey.cs` (per `e2e-framework-spec.md`) | merge-to-main + nightly |
+| 10.6 Chaos | Platform team | `tests/E2E/Chaos/Cdc*ChaosTest.cs` | weekly |
+| 10.7 Load / perf | Platform team | `tests/Perf/CdcThroughputTest.cs` | weekly |
+| 10.8 Synthetic prod probes | SRE | runs against prod every 60s | continuous |
 
-`CdcEndToEndJourney` — write a product via Catalog API; assert (a) outbox row, (b) cdc-svc publishes within 1s, (c) cache invalidated, (d) search index updated, (e) data-audit row, (f) analytics row, (g) any registered webhook fired. Single test, exhausts the chain.
+Failure at layers 10.2–10.5 fails the merge. Layers 10.6–10.7 alarm but don't block (they catch regressions in capacity / resilience over time). Layer 10.8 alarms ops directly.
 
-### 10.4 Chaos
+### 10.2 Unit tests — fast, deterministic, no I/O
 
-- Kill cdc-svc mid-relay; assert resumed publishing on restart with no duplicates beyond expected at-least-once
-- Pause a consumer for 10 min while traffic flows; resume; assert no events lost
-- Bad payload in outbox; assert it's DLQ'd, not blocking the queue
+Each component has its own unit suite. The shared contract is `EntityChangedEvent` — every layer mocks it.
+
+#### 10.2.1 cdc-svc unit tests
+
+- **WAL decoder** — feed canned `pgoutput`/`wal2json` byte sequences; assert correct `entity_type` / `change_type` / `payload_before` / `payload_after` extraction.
+- **Routing key derivation** — `entity_type` + `change_type` → `<entity>.<change>` exchange routing key. Test edge cases (special chars, long names, etc.).
+- **Schema version negotiation** — emit v2 event, assert v1-only consumers tolerate the extra fields.
+- **LSN advance state machine** — pass/fail/retry combinations; never advance without confirmed publish.
+- **Source/table mapping resolution** — `cdc_table_map` lookup edge cases (table not mapped → skip; mapped twice → error).
+- **Backpressure handling** — when MQ publish fails, assert no LSN advance + no exception thrown (logged).
+
+#### 10.2.2 Per-consumer unit tests
+
+Same pattern for each consumer (cache, search, audit-data-mode, webhooks, analytics):
+
+- **Handler dispatch** — given an `EntityChangedEvent`, assert handler invokes the right downstream action (mocked Redis, mocked search index, etc.).
+- **Idempotency** — same event twice → same outcome, no duplicate side-effect.
+- **Filter logic** — events for unhandled entity types are dropped, not errored.
+- **Error handling** — handler throws → event goes to DLQ, not lost.
+- **Config-driven behaviour** (cache, webhooks): change config → handler dispatch changes accordingly without code changes.
+
+### 10.3 Component integration tests — single component + real dependencies
+
+Each component has integration tests against a real (containerised) version of its dependencies. Testcontainers handles lifecycle.
+
+#### 10.3.1 cdc-svc integration
+
+Real Postgres + real RabbitMQ in containers:
+
+- **End-to-end relay** — write a row to a publication-tracked table; assert one `EntityChangedEvent` lands on RabbitMQ within 1s with correct fields.
+- **Multi-row transaction** — `BEGIN; INSERT 5 rows; COMMIT;` → assert 5 events with the same `source_transaction_id`.
+- **DELETE with REPLICA IDENTITY FULL** — assert `payload_before` populated correctly.
+- **Slot persistence across restart** — write row, restart cdc-svc, write second row; assert both events delivered, no duplicates.
+- **Slot exhaustion / overflow** — pause cdc-svc, write enough WAL to exceed `max_slot_wal_keep_size`; restart cdc-svc; assert it detects the invalidated slot and surfaces the alarm.
+- **DDL handling** — `ALTER TABLE ADD COLUMN`; assert next row insert flows through with the new field; cdc-svc emits a single warning log per DDL detected.
+- **Backpressure** — fill RabbitMQ to its limit; assert cdc-svc holds outbox slot but doesn't crash; assert resumes when MQ has capacity.
+- **Cascading delete fan-out** — DELETE that cascades; assert one event per affected row.
+- **Connection drop recovery** — kill cdc-svc's connection to Postgres; assert reconnect with slot resumed at correct LSN.
+
+#### 10.3.2 Per-consumer integration
+
+For each downstream service, integration tests run against the consumer + its real dependencies:
+
+| Consumer | Test surface |
+|---|---|
+| **cache-invalidator** | Publish `cdc.entity.product.updated`; assert Redis key `catalog:product:<id>` deleted. Test config rule changes (add new entity_type → key pattern) → live reload picks them up. |
+| **search-svc CDC consumer** | Publish event for product; assert Meilisearch document mutated. Test delete event → document removed. Test config-mapped entity_type without index → no-op (not an error). |
+| **audit-svc data-mode** | Publish event; assert `data_audit_events` row persisted with correct payload-before/after. Test redaction config drops sensitive fields before persist. |
+| **webhooks-svc** | Register subscriber filter; publish matching event; assert HTTP POST fired with correct payload. Test failed delivery → retry + DLQ. |
+| **analytics-svc** | Publish event; assert warehouse-staging table has appended row. |
+
+### 10.4 Cross-component integration — cdc-svc + one consumer end-to-end
+
+Shorter version of E2E — verifies the wire contract between cdc-svc and consumers without spinning up the full app stack:
+
+- **Round-trip** — Postgres write → cdc-svc → RabbitMQ → consumer ack → assert observable side-effect. One test per consumer, ~10s each.
+- **Schema evolution** — cdc-svc emits v2 event; v1 consumer tolerates; v2 consumer reads new fields.
+- **Routing key fan-out** — single producer event; multiple consumers (cache + search + audit) each get their copy.
+- **No cross-talk** — consumer A's failure (handler throws) doesn't affect consumer B (they have separate queues bound to the same exchange).
+
+### 10.5 End-to-end journeys — full app + CDC + every consumer
+
+Lives under `tests/E2E/Journeys/Cdc*Journey.cs` per `e2e-framework-spec.md`. The AppHostFixture spins up the entire Aspire AppHost (services + Postgres + RabbitMQ + Redis + Vault + cdc-svc + every consumer), then drives the full chain via the public API.
+
+**`CdcCatalogChangePropagationJourney`** — the headline journey:
+
+```csharp
+[Fact]
+public async Task Catalog_product_update_propagates_to_every_downstream()
+{
+    var product = await host.SeedProduct(name: "Widget", priceCents: 5000);
+
+    // Update price via the public Catalog API
+    await host.Catalog.PutAsync($"/products/{product.Id}", new { price_cents = 4500 });
+
+    // Now assert the entire chain — every consumer reflects the change
+
+    // 1. CDC actually fired (within 2s of the API call)
+    await host.EventBus.Saw<EntityChangedEvent>(
+        timeout: TimeSpan.FromSeconds(2),
+        match: e => e.entity_type == "product" && e.entity_id == product.Id.ToString());
+
+    // 2. Cache invalidated
+    await host.Cache.AssertKeyAbsent($"catalog:product:{product.Id}");
+
+    // 3. Search index reflects new price
+    var searchResult = await host.Search.GetAsync($"/api/search?q=Widget");
+    searchResult.JsonValue("$.hits[0].price_cents").Should().Be(4500);
+
+    // 4. Data-audit row persisted with before/after
+    var auditRow = await host.Db.Audit.GetDataAuditRow(product.Id);
+    auditRow.payload_before.GetProperty("price_cents").GetInt32().Should().Be(5000);
+    auditRow.payload_after.GetProperty("price_cents").GetInt32().Should().Be(4500);
+
+    // 5. Webhook subscriber fired (test subscriber set up by fixture)
+    var calls = host.WebhookCapture.GetCallsFor(product.Id);
+    calls.Should().HaveCount(1);
+    calls[0].body.Should().Contain("\"price_cents\": 4500");
+
+    // 6. Analytics row staged
+    var analyticsRows = await host.Db.Analytics.QueryAsync(
+        "SELECT * FROM raw_product WHERE entity_id = @id", new { id = product.Id });
+    analyticsRows.Should().ContainSingle();
+}
+```
+
+**One journey, exhausts every consumer.** If it passes, every component is doing its job AND the wire contracts between them hold. If any consumer fails, the journey fails with a clear "consumer X didn't see the change" message.
+
+Additional CDC journeys:
+
+- **`CdcOrderLifecycleJourney`** — full order lifecycle (created → paid → shipped) with audit + analytics + webhook assertions at each stage.
+- **`CdcCascadingDeleteJourney`** — delete a parent row that cascades; assert downstream consumers receive one event per child + parent.
+- **`CdcTransactionalConsistencyJourney`** — a multi-table transaction (e.g., Order + OrderLines created together); assert consumers see them with the same `source_transaction_id`.
+- **`CdcSchemaEvolutionJourney`** — emit a v2 event from a schema-bumped producer; assert v1 consumer tolerates, v2 consumer reads new fields. (Schema evolution is hard to revisit; this catches breakage early.)
+
+### 10.6 Chaos — failure injection
+
+Failure modes that production WILL hit. Tested weekly on a sacrificial environment.
+
+| Test | Injection | Pass criterion |
+|---|---|---|
+| **Kill cdc-svc mid-relay** | SIGKILL while events flowing | resumes after restart; at-least-once delivery (some duplicates expected, consumers idempotent); no events lost |
+| **RabbitMQ unavailable** | Stop RabbitMQ container 5 min | cdc-svc holds slots, doesn't advance LSN, doesn't crash; resumes publishing when MQ returns; outbox depth alarm fires + clears |
+| **Slow consumer** | Inject 10s sleep into one consumer | other consumers unaffected; that consumer's lag-seconds metric climbs; DLQ depth stays at 0; recovery on lift |
+| **Bad payload** | Manually INSERT a row that violates an invariant the consumer checks | consumer DLQs the event; queue keeps draining; alarm fires |
+| **Network partition** | iptables drop between cdc-svc and Postgres for 5 min | cdc-svc detects, reconnects, resumes from last-acked LSN |
+| **Postgres failover** | Force Fly Postgres failover (or, post-CNPG, kill primary) | cdc-svc reconnects to new primary, slot persists (server-id matches), resumes |
+| **Slot disk full** | Pause cdc-svc, push WAL beyond `max_slot_wal_keep_size` | slot invalidated; cdc-svc surfaces hard alarm; runbook procedure (`cdc source resync`) executes successfully |
+| **Schema change (DDL) on captured table** | `ALTER TABLE ADD COLUMN` on a published table | cdc-svc warns; subsequent inserts include the new field; consumers tolerant of additive changes |
+| **Consumer pod kill** | Kill consumer pod mid-processing | next pod resumes; events not lost (they re-deliver from MQ); DLQ unaffected |
+
+### 10.7 Performance / load
+
+The capacity envelope CDC must handle at production scale.
+
+| Test | Target | Pass criterion |
+|---|---|---|
+| **Sustained throughput** | 1k events/sec sustained for 30 min | e2e p99 < 5s; no consumer lag accumulation; outbox depth < 100 |
+| **Burst** | 10k events in 10s | absorbed within 60s; no events lost; alarm-but-recover |
+| **Backlog recovery** | Pause cdc-svc 30 min; resume | drains the backlog at 2x normal rate; stable after recovery |
+| **Single-table flood** | One table writes 100 rows/sec for 1h | the bound table doesn't starve other tables; per-table fairness in WAL processing |
+
+Performance tests run weekly on a sacrificial environment with production-scale data.
+
+### 10.8 Synthetic production probes
+
+Every 60s in production: a synthetic event flows through the entire CDC chain. Triggered by:
+
+```sql
+-- runs from a sidecar in cdc-svc namespace
+INSERT INTO cdc_health_probes (probe_id, probe_at) VALUES (gen_random_uuid(), now());
+```
+
+The `cdc_health_probes` table is in cdc-svc's own DB and is published. The probe sidecar then asserts the probe event arrived at every consumer's "synthetic-event sink" within 30s. Any miss → page on-call.
+
+**The probe is the canary.** It catches outages at every layer (cdc-svc down, RabbitMQ down, consumer down, slot failed) within 60s — well before user-facing impact appears as cache staleness or stale search results.
+
+### 10.9 Test data + seed strategy
+
+Every test layer needs deterministic input. Strategy:
+
+- **Unit / integration**: in-test seeding via the component's API or direct DB inserts. Each test is responsible for its own data.
+- **E2E journeys**: the `AppHostFixture` provides `host.Seed*()` helpers (per `e2e-framework-spec.md`). Each journey seeds with unique GUID prefixes — collisions are bugs.
+- **Chaos**: long-running data generators (fixed-rate writers per table) running for the duration of the chaos window. Removed afterwards.
+- **Load**: a load profile YAML committed under `tests/Perf/profiles/cdc-baseline.yaml` declaring rate per table; replayable + version-controlled.
+
+### 10.10 CI integration
+
+`.github/workflows/cdc-tests.yml`:
+
+| Trigger | Layers run |
+|---|---|
+| PR touching `src/Cdc/`, `src/BuildingBlocks/Cdc/`, `infra/stateful/cdc-publications/`, or any consumer's CDC code | 10.2 + 10.3 + 10.4 |
+| Merge to main | 10.2 + 10.3 + 10.4 + 10.5 (the E2E journeys) |
+| Nightly cron | All of the above + 10.6 chaos |
+| Weekly cron | All + 10.7 perf |
+| Continuous (in-cluster) | 10.8 synthetic probes |
+
+Failure on any blocking layer (10.2–10.5) fails the relevant gate — PR-merge or main-deploy. Failure on non-blocking layers (10.6–10.7) opens a ticket without blocking, with a 7-day SLA before the failure becomes blocking.
+
+### 10.11 Coverage rule
+
+For every CDC feature added (new producer, new consumer, new event field, schema bump): a test at every applicable layer must exist before the change merges. The `cdc-tests.yml` workflow enforces this via simple file-pattern checks — code change in `src/Cdc/` requires a paired change in `tests/Cdc.Unit/` AND `tests/Cdc.Integration/`. No exceptions; if it's not testable at every layer, it shouldn't ship.
 
 ## 11. Implementation plan — parallel decomposition for one-day delivery
 
