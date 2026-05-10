@@ -220,6 +220,147 @@ cmd_attach() {
   exec tmux attach -t "wave-$feature"
 }
 
+# Auto-design: take a feature spec, generate the parallel-tracks brief via a
+# gemini design pass, validate it, and (optionally) launch the wave. This is
+# the "one command, one input" flow — the operator only provides the spec file.
+cmd_run() {
+  # Accept: wave run <spec.md>            (feature inferred from filename)
+  #         wave run <feature> <spec.md>  (explicit)
+  #         wave run <feature> <spec.md> --yes   (skip launch confirmation)
+  local feature spec yes=0
+  if [ $# -eq 0 ]; then
+    die "usage: wave run <spec-file>   |   wave run <feature> <spec-file> [--yes]"
+  elif [ $# -eq 1 ]; then
+    spec=$1
+    feature=$(basename "$spec" | sed -E 's/\.[^.]+$//; s/-spec$//; s/-service-spec$//; s/_spec$//')
+  else
+    feature=$1; spec=$2
+    [ "${3:-}" = "--yes" ] && yes=1
+  fi
+
+  [ -f "$spec" ] || die "spec not found: $spec"
+  have gemini || die "gemini CLI required"
+
+  # Convert spec to absolute path so the design agent can read it from any CWD
+  spec=$(cd "$(dirname "$spec")" && pwd)/$(basename "$spec")
+
+  local brief
+  brief=$(brief_for "$feature")
+
+  # If brief exists, refuse — operator can wave init or delete first
+  if [ -e "$brief" ]; then
+    die "$brief already exists. Run: wave validate $feature  (or: rm -rf $(dirname "$brief"))"
+  fi
+
+  # Pick a worked example to anchor the design agent on structure
+  local example=""
+  for f in audit search platform checkout; do
+    if [ -f "$BRIEFS_DIR/$f/parallel-tracks.md" ]; then
+      example="$BRIEFS_DIR/$f/parallel-tracks.md"
+      break
+    fi
+  done
+  [ -n "$example" ] || die "no worked example found in $BRIEFS_DIR/*/parallel-tracks.md — add one before using wave run"
+
+  echo "→ designing wave for feature='$feature'"
+  echo "  spec:    $spec"
+  echo "  example: $example"
+  echo "  output:  $brief"
+  echo ""
+
+  mkdir -p "$(dirname "$brief")"
+
+  # Build the design meta-prompt — instruct the agent to read spec + example +
+  # SUPERPROMPT, then write a syntactically valid parallel-tracks.md.
+  local design_prompt
+  design_prompt=$(cat <<DESIGN
+You are a software architect designing a parallel-agent wave for the feature '$feature'.
+
+READ THESE FILES IN THIS ORDER (do not skip any):
+1. $SUPERPROMPT — sections '## Mode B' and '## HARD RULES' only. This is the protocol contract.
+2. $example — a worked example of a parallel-tracks brief. STUDY ITS STRUCTURE.
+3. $spec — the spec for THIS feature. This is what you decompose.
+
+YOUR OUTPUT: write exactly one file at this absolute path:
+  $brief
+
+REQUIREMENTS for the file (the validator will reject anything missing):
+
+A. Top of file: a fenced code block declaring all wave parameters. Example:
+   \`\`\`
+   REPO=/Users/chidionyema/Documents/code/ritualworks-platform
+   GH_REPO=chidionyema/ritualworks-platform
+   BASE_BRANCH=feat/${feature}-service
+   BRIEF_FILE=docs/agent-briefs/${feature}/parallel-tracks.md
+   TRACK_PREFIX=feat/${feature}-
+   TRACKS=(T1 T2 T3 T4)
+   WORKTREE_PARENT=/tmp
+   \`\`\`
+
+B. Three required H2 sections (verbatim headings):
+   ## Universal rules
+   ## Anti-stuck
+   ## Reference file
+
+C. Then 3-5 H3 track sections (### Track T1: ..., ### Track T2: ..., etc.).
+   Each track section MUST include these labelled lines verbatim (the four asterisks and colons matter):
+     **Files you own (exclusive):**  followed by a bulleted list of file paths
+     **Files you may NOT touch:**    followed by a bulleted list of file paths
+     **Reference to mirror:**        ONE existing file path in the repo
+     **NuGet (if any):**             "none" or one package name
+     **Done:**                       a single shell command that exits 0 only when this track is correct
+
+DECOMPOSITION RULES:
+- Each track owns a DISJOINT file scope. If two tracks need to touch the same file, that file must be part of an L0 scaffold (mention this prerequisite at the top of the brief — do NOT include it as one of the parallel tracks).
+- Reference files must EXIST in this repo. Look in: src/Notifications/, src/Catalog/, src/Audit/, src/Search/, etc.
+- Done checks must be REAL shell commands, typically: dotnet test ... --filter "FullyQualifiedName~..."
+- Tracks should each be 2-5 hours of focused work — not too small (overhead) or too large (slow feedback).
+
+WRITE the file, then VALIDATE by running this command:
+  bash $SELF validate $feature
+
+If validation reports any FAIL, fix the brief and re-run validate. Continue until validate prints "OK". Do not stop until validation passes.
+DESIGN
+)
+
+  # Run the design agent
+  echo "→ invoking gemini design agent (1-3 min)..."
+  echo ""
+  gemini --yolo --prompt "$design_prompt"
+  local rc=$?
+  echo ""
+
+  if [ ! -f "$brief" ]; then
+    echo "✗ design agent did not produce $brief"
+    echo "  exit code: $rc"
+    return 1
+  fi
+
+  # Validate
+  if ! cmd_validate "$feature"; then
+    echo ""
+    echo "✗ generated brief failed validation. Inspect/fix manually:"
+    echo "  $brief"
+    return 1
+  fi
+
+  echo ""
+  echo "✓ brief generated and validated:"
+  echo "  $brief"
+  echo ""
+
+  if [ "$yes" -eq 1 ]; then
+    cmd_launch "$feature"
+    return $?
+  fi
+
+  read -r -p "Launch wave now? [y/N] " yn
+  case "$yn" in
+    y|Y|yes|YES) cmd_launch "$feature" ;;
+    *) echo "Skipping launch. When ready: wave launch $feature" ;;
+  esac
+}
+
 cmd_status() {
   local feature=${1:-}
   if [ -z "$feature" ]; then
@@ -376,7 +517,11 @@ usage() {
   cat <<'EOF'
 wave — parallel-agent wave launcher (drives SUPERPROMPT.md Mode B)
 
-USAGE
+ONE-COMMAND USAGE (typical):
+  wave run <spec-file>                   from a spec, design + launch end-to-end
+  wave run <feature> <spec-file> --yes   same, skip the launch confirmation
+
+LOWER-LEVEL SUBCOMMANDS:
   wave init <feature>            scaffold docs/agent-briefs/<feature>/parallel-tracks.md
   wave validate <feature>        check brief well-formedness
   wave prompt <feature>          print the filled-in Mode B prompt to stdout
@@ -390,12 +535,17 @@ USAGE
 The brief file is the single source of truth — its top-of-file fenced
 block declares REPO/GH_REPO/BASE_BRANCH/TRACK_PREFIX/TRACKS/etc. Every
 subcommand reads from there.
+
+'wave run' invokes a gemini design pass that reads the spec + the protocol
++ a worked example, generates the parallel-tracks brief, validates it, and
+launches the wave. Operator effort: provide a spec; everything else auto.
 EOF
 }
 
 cmd=${1:-help}
 shift || true
 case "$cmd" in
+  run)          cmd_run "$@" ;;
   init)         cmd_init "$@" ;;
   validate)     cmd_validate "$@" ;;
   prompt)       cmd_prompt "$@" ;;
