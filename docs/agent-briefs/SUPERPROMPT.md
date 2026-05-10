@@ -351,13 +351,27 @@ for t in "${TRACKS[@]}"; do
     # Branch already on origin? Distinguish live claims from zombies.
     # "alive"  = ≥1 commit beyond base (the sentinel below + real work).
     # "zombie" = 0 commits beyond base — agent died before its sentinel push.
-    # Reclaim zombies; respect alive claims.
+    # Race-window: a freshly-claimed branch sits at 0 commits for the few seconds
+    # between the atomic-claim push and the sentinel push. Don't false-reap a live
+    # agent in that window — re-check after a generous delay before declaring dead.
+    # (Also protects legacy/old-script agents that never push a sentinel until their
+    # first real commit lands; they get the full ZOMBIE_CONFIRM_SECS to push.)
     if git -C "$REPO" ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
         git -C "$REPO" fetch origin "$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null || true
         ahead=$(git -C "$REPO" rev-list --count "origin/${BASE_BRANCH}..origin/${BRANCH}" 2>/dev/null || echo "?")
         if [ "$ahead" = "0" ]; then
-            echo "[reclaim] $BRANCH dead (0 commits beyond base) — deleting and re-claiming"
-            git -C "$REPO" push origin --delete "$BRANCH" 2>/dev/null || continue
+            ZOMBIE_CONFIRM_SECS="${ZOMBIE_CONFIRM_SECS:-90}"
+            echo "[?] $BRANCH at 0 commits — could be mid-claim. Confirming dead in ${ZOMBIE_CONFIRM_SECS}s…"
+            sleep "$ZOMBIE_CONFIRM_SECS"
+            git -C "$REPO" fetch origin "$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null || true
+            ahead=$(git -C "$REPO" rev-list --count "origin/${BASE_BRANCH}..origin/${BRANCH}" 2>/dev/null || echo "?")
+            if [ "$ahead" = "0" ]; then
+                echo "[reclaim] $BRANCH still at 0 commits after ${ZOMBIE_CONFIRM_SECS}s — really dead, deleting"
+                git -C "$REPO" push origin --delete "$BRANCH" 2>/dev/null || continue
+            else
+                echo "[skip] $BRANCH advanced during confirm window — alive after all"
+                continue
+            fi
         else
             continue
         fi
