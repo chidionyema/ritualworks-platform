@@ -109,10 +109,10 @@ jobs:
             notifications:
               - 'src/Notifications/**'
               - 'fly.notifications.toml'
-            bff:
             audit:
               - 'src/Audit/**'
               - 'fly.audit.toml'
+            bff:
               - 'src/BffWeb/**'
               - 'fly.bffweb.toml'
 
