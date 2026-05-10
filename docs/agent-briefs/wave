@@ -1,0 +1,409 @@
+#!/usr/bin/env bash
+# wave — parallel-agent wave launcher.
+# Drives SUPERPROMPT.md Mode B for any feature with minimal operator effort.
+#
+# Operator workflow:
+#   wave init <feature>           # scaffold docs/agent-briefs/<feature>/parallel-tracks.md
+#   <edit brief: tracks + file scopes + Done>
+#   wave validate <feature>       # check brief well-formedness
+#   wave launch <feature> [N]     # spawn N gemini agents in tmux (default = #tracks)
+#   wave status [feature]         # dashboard
+#   wave attach <feature>         # tmux attach to the wave session
+#   wave fix-stalled <feature>    # open PRs for branches with commits but no PR
+#   wave clean <feature>          # remove dead worktrees + reclaim zombie branches
+#
+# The brief file IS the source of truth — its top-of-file Parameters block
+# (REPO=… BASE_BRANCH=… TRACK_PREFIX=… TRACKS=(…) …) is parsed by every
+# subcommand, so the operator only fills it in once.
+
+set -euo pipefail
+
+# ── locate self + briefs dir ─────────────────────────────────────────────
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BRIEFS_DIR="${WAVE_BRIEFS_DIR:-$SELF}"
+SUPERPROMPT="$BRIEFS_DIR/SUPERPROMPT.md"
+TEMPLATE="$BRIEFS_DIR/_TEMPLATE/parallel-tracks.md"
+
+# ── helpers ──────────────────────────────────────────────────────────────
+die() { echo "wave: $*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+brief_for() {
+  local feature=$1
+  echo "$BRIEFS_DIR/$feature/parallel-tracks.md"
+}
+
+# Extract a scalar parameter (REPO, GH_REPO, etc.) from the brief's first ```…``` fenced block.
+brief_param() {
+  local brief=$1 key=$2
+  awk -v k="^${key}=" '
+    /^```/ { f=!f; next }
+    f && $0 ~ k { sub(/^[A-Z_]+=/, ""); sub(/[ \t]*#.*$/, ""); print; exit }
+  ' "$brief"
+}
+
+# Extract TRACKS=(...) as a space-separated list.
+brief_tracks() {
+  local brief=$1
+  awk '
+    /^```/ { f=!f; next }
+    f && /^TRACKS=\(/ {
+      sub(/^TRACKS=\(/, ""); sub(/\).*$/, "");
+      print; exit
+    }
+  ' "$brief"
+}
+
+# Print N agents' worth of Mode B prompt (same prompt N times — agents self-claim).
+build_prompt() {
+  local feature=$1 brief=$2
+  local repo gh_repo base prefix briefpath tracks wparent
+  repo=$(brief_param "$brief" REPO)
+  gh_repo=$(brief_param "$brief" GH_REPO)
+  base=$(brief_param "$brief" BASE_BRANCH)
+  prefix=$(brief_param "$brief" TRACK_PREFIX)
+  briefpath=$(brief_param "$brief" BRIEF_FILE)
+  wparent=$(brief_param "$brief" WORKTREE_PARENT)
+  tracks=$(brief_tracks "$brief")
+
+  cat <<PROMPT
+You are an autonomous coding agent running SUPERPROMPT Mode B for feature '$feature'.
+
+Read the protocol at: $SUPERPROMPT — sections '## Mode B' and '## HARD RULES'.
+
+Execute Mode B with these parameters:
+
+  REPO=$repo
+  GH_REPO=$gh_repo
+  BASE_BRANCH=$base
+  BRIEF_FILE=$briefpath
+  TRACK_PREFIX=$prefix
+  TRACKS=($tracks)
+  WORKTREE_PARENT=$wparent
+
+The brief is at \$REPO/\$BRIEF_FILE. Read ONLY your claimed track's section + the universal rules / anti-stuck / reference file headers — do not read other tracks.
+
+Race-safety, sentinel commit, zombie reclaim and worktree tracking are handled by the protocol — follow it verbatim. When you finish a track, loop back to claim the next unclaimed one. Stop only when '[exit] all tracks claimed or merged'.
+PROMPT
+}
+
+# ── subcommands ──────────────────────────────────────────────────────────
+
+cmd_init() {
+  local feature=${1:-}
+  [ -n "$feature" ] || die "usage: wave init <feature>"
+  [ -f "$TEMPLATE" ] || die "template not found at $TEMPLATE"
+  local out
+  out=$(brief_for "$feature")
+  [ -e "$out" ] && die "$out already exists — refusing to overwrite"
+  mkdir -p "$(dirname "$out")"
+  sed "s/{{FEATURE}}/$feature/g" "$TEMPLATE" > "$out"
+  echo "scaffolded: $out"
+  echo ""
+  echo "next steps:"
+  echo "  1. Edit $out — fill in Parameters block + each ### Track section"
+  echo "  2. wave validate $feature"
+  echo "  3. wave launch $feature"
+}
+
+cmd_validate() {
+  local feature=${1:-}
+  [ -n "$feature" ] || die "usage: wave validate <feature>"
+  local brief
+  brief=$(brief_for "$feature")
+  [ -f "$brief" ] || die "no brief at $brief — run 'wave init $feature' first"
+
+  local errs=0
+  local warn=0
+  err() { echo "FAIL: $*"; errs=$((errs+1)); }
+  warn() { echo "WARN: $*"; warn=$((warn+1)); }
+
+  # Required H2 sections
+  for h in "## Universal rules" "## Anti-stuck" "## Reference file"; do
+    grep -qF "$h" "$brief" || err "missing required section '$h'"
+  done
+
+  # Required parameters
+  for p in REPO GH_REPO BASE_BRANCH BRIEF_FILE TRACK_PREFIX WORKTREE_PARENT; do
+    local v
+    v=$(brief_param "$brief" "$p")
+    [ -n "$v" ] || err "parameter $p not set in brief's fenced block"
+  done
+
+  # TRACKS list
+  local tracks
+  tracks=$(brief_tracks "$brief")
+  [ -n "$tracks" ] || err "TRACKS=(...) not set"
+
+  # Each track has a section + the four required labelled lines
+  for t in $tracks; do
+    grep -qE "^### Track $t($|[: ])" "$brief" || err "missing '### Track $t' section"
+  done
+  for required in "Files you own" "Files you may NOT touch" "Reference to mirror" "Done:"; do
+    local n n_tracks
+    n=$(grep -cE "\*\*$required\*?\*?:?\*?\*?" "$brief" || echo 0)
+    n_tracks=$(echo "$tracks" | wc -w | tr -d ' ')
+    [ "$n" -ge "$n_tracks" ] || warn "'$required' appears $n times, expected ≥ $n_tracks (one per track)"
+  done
+
+  # Brief path matches
+  local declared
+  declared=$(brief_param "$brief" BRIEF_FILE)
+  [ "$declared" = "docs/agent-briefs/$feature/parallel-tracks.md" ] \
+    || warn "BRIEF_FILE='$declared' (expected 'docs/agent-briefs/$feature/parallel-tracks.md')"
+
+  # Placeholder leakage
+  if grep -qE "<<.*>>|\{\{.*\}\}" "$brief"; then
+    warn "brief still contains placeholders (<<…>> or {{…}}) — fill them in before launch"
+  fi
+
+  echo ""
+  if [ "$errs" -eq 0 ]; then
+    echo "OK: $brief is valid (warnings: $warn)"
+    return 0
+  else
+    echo "FAIL: $errs error(s), $warn warning(s)"
+    return 1
+  fi
+}
+
+cmd_prompt() {
+  local feature=${1:-}
+  [ -n "$feature" ] || die "usage: wave prompt <feature>"
+  local brief
+  brief=$(brief_for "$feature")
+  cmd_validate "$feature" >/dev/null || die "fix brief first; run 'wave validate $feature' to see issues"
+  build_prompt "$feature" "$brief"
+}
+
+cmd_launch() {
+  local feature=${1:-} n=${2:-}
+  [ -n "$feature" ] || die "usage: wave launch <feature> [N]"
+  local brief
+  brief=$(brief_for "$feature")
+  cmd_validate "$feature" >/dev/null || die "fix brief first"
+
+  local tracks n_tracks
+  tracks=$(brief_tracks "$brief")
+  n_tracks=$(echo "$tracks" | wc -w | tr -d ' ')
+  n=${n:-$n_tracks}
+
+  have tmux || die "tmux required — install tmux, or use 'wave prompt $feature' to print the prompt and paste it into N gemini sessions manually"
+  have gemini || die "gemini CLI not found — install or use 'wave prompt $feature' to print the prompt for any other agent CLI"
+
+  local prompt
+  prompt=$(build_prompt "$feature" "$brief")
+
+  local sess="wave-$feature"
+  if tmux has-session -t "$sess" 2>/dev/null; then
+    die "tmux session '$sess' already exists. attach: 'wave attach $feature' or kill: 'tmux kill-session -t $sess'"
+  fi
+
+  echo "launching $n agents for feature '$feature' in tmux session '$sess'…"
+  # Quote the prompt safely for shell embedding via printf %q
+  local quoted
+  quoted=$(printf '%q' "$prompt")
+
+  tmux new-session -d -s "$sess" -n "agent-1"
+  tmux send-keys -t "$sess:agent-1" "gemini --yolo --prompt $quoted" Enter
+  for i in $(seq 2 "$n"); do
+    tmux new-window -t "$sess" -n "agent-$i"
+    tmux send-keys -t "$sess:agent-$i" "gemini --yolo --prompt $quoted" Enter
+  done
+
+  echo "started. attach: 'wave attach $feature'  monitor: 'wave status $feature'"
+}
+
+cmd_attach() {
+  local feature=${1:-}
+  [ -n "$feature" ] || die "usage: wave attach <feature>"
+  exec tmux attach -t "wave-$feature"
+}
+
+cmd_status() {
+  local feature=${1:-}
+  if [ -z "$feature" ]; then
+    # Status across all features that have a brief
+    for f in "$BRIEFS_DIR"/*/parallel-tracks.md; do
+      [ -f "$f" ] || continue
+      local name
+      name=$(basename "$(dirname "$f")")
+      [ "$name" = "_TEMPLATE" ] && continue
+      echo "════════════════════════════════════════"
+      cmd_status "$name" || true
+      echo ""
+    done
+    return 0
+  fi
+
+  local brief
+  brief=$(brief_for "$feature")
+  [ -f "$brief" ] || die "no brief at $brief"
+
+  local repo gh_repo base prefix tracks
+  repo=$(brief_param "$brief" REPO)
+  gh_repo=$(brief_param "$brief" GH_REPO)
+  base=$(brief_param "$brief" BASE_BRANCH)
+  prefix=$(brief_param "$brief" TRACK_PREFIX)
+  tracks=$(brief_tracks "$brief")
+
+  echo "wave: $feature   base=$base   prefix=$prefix"
+  printf "  %-6s %-8s %-12s %s\n" "TRACK" "BEYOND" "STATE" "DETAIL"
+
+  git -C "$repo" fetch origin --prune -q 2>/dev/null || true
+
+  local n_merged=0 n_open_pr=0 n_working=0 n_claiming=0 n_unclaimed=0 n_stalled=0
+  for t in $tracks; do
+    local b="${prefix}${t}"
+    local state details ahead=- last="" pr=""
+    if git -C "$repo" ls-remote --exit-code --heads origin "$b" >/dev/null 2>&1; then
+      git -C "$repo" fetch origin "$b:refs/remotes/origin/$b" -q 2>/dev/null || true
+      ahead=$(git -C "$repo" rev-list --count "origin/$base..origin/$b" 2>/dev/null || echo "?")
+      last=$(git -C "$repo" log -1 --format="%cr" "origin/$b" 2>/dev/null)
+      pr=$(gh pr list -R "$gh_repo" --head "$b" --state open --json number --jq '.[0].number // empty' 2>/dev/null)
+      if [ -n "$pr" ]; then
+        state="PR-OPEN"; details="#$pr  $ahead commits  last $last"; n_open_pr=$((n_open_pr+1))
+      elif [ "$ahead" = "0" ]; then
+        state="claiming"; details="0 commits — mid-claim or zombie ($last)"; n_claiming=$((n_claiming+1))
+      elif [ "$ahead" -ge "1" ] 2>/dev/null; then
+        # commits but no PR — could be working OR stalled
+        # Heuristic: last commit > 15 min ago = stalled
+        local last_secs
+        last_secs=$(git -C "$repo" log -1 --format=%ct "origin/$b" 2>/dev/null)
+        local now=$(date +%s)
+        local age=$((now - last_secs))
+        if [ "$age" -gt 900 ]; then
+          state="STALLED"; details="$ahead commits, last $last, no PR"; n_stalled=$((n_stalled+1))
+        else
+          state="working"; details="$ahead commits, last $last"; n_working=$((n_working+1))
+        fi
+      else
+        state="?"; details="ahead=$ahead"
+      fi
+    else
+      local merged
+      merged=$(gh pr list -R "$gh_repo" --base "$base" --head "$b" --state merged --json number --jq '.[0].number // empty' 2>/dev/null)
+      if [ -n "$merged" ]; then
+        state="MERGED"; details="PR #$merged"; n_merged=$((n_merged+1))
+      else
+        state="unclaimed"; details=""; n_unclaimed=$((n_unclaimed+1))
+      fi
+    fi
+    printf "  %-6s %-8s %-12s %s\n" "$t" "$ahead" "$state" "$details"
+  done
+
+  echo ""
+  echo "summary: $n_merged merged · $n_open_pr open-PR · $n_working working · $n_stalled STALLED · $n_claiming claiming · $n_unclaimed unclaimed"
+  if [ "$n_stalled" -gt 0 ]; then
+    echo "→ run 'wave fix-stalled $feature' to open PRs for stalled branches"
+  fi
+}
+
+cmd_fix_stalled() {
+  local feature=${1:-}
+  [ -n "$feature" ] || die "usage: wave fix-stalled <feature>"
+  local brief
+  brief=$(brief_for "$feature")
+  [ -f "$brief" ] || die "no brief at $brief"
+
+  local repo gh_repo base prefix tracks
+  repo=$(brief_param "$brief" REPO)
+  gh_repo=$(brief_param "$brief" GH_REPO)
+  base=$(brief_param "$brief" BASE_BRANCH)
+  prefix=$(brief_param "$brief" TRACK_PREFIX)
+  tracks=$(brief_tracks "$brief")
+
+  git -C "$repo" fetch origin --prune -q 2>/dev/null || true
+
+  local fixed=0
+  for t in $tracks; do
+    local b="${prefix}${t}"
+    git -C "$repo" ls-remote --exit-code --heads origin "$b" >/dev/null 2>&1 || continue
+    git -C "$repo" fetch origin "$b:refs/remotes/origin/$b" -q 2>/dev/null || true
+    local ahead
+    ahead=$(git -C "$repo" rev-list --count "origin/$base..origin/$b" 2>/dev/null || echo 0)
+    [ "$ahead" -ge 1 ] 2>/dev/null || continue
+    local pr
+    pr=$(gh pr list -R "$gh_repo" --head "$b" --state open --json number --jq '.[0].number // empty' 2>/dev/null)
+    [ -z "$pr" ] || continue
+    local title
+    title=$(git -C "$repo" log -1 --format=%s "origin/$b")
+    echo "→ opening PR for $b ($ahead commits): $title"
+    gh pr create -R "$gh_repo" --base "$base" --head "$b" \
+      --title "$title" \
+      --body "Auto-opened by 'wave fix-stalled': agent pushed $ahead commits but stopped before opening PR. Track: $t. Brief: $brief"
+    local newpr
+    newpr=$(gh pr view "$b" -R "$gh_repo" --json number --jq .number 2>/dev/null)
+    [ -n "$newpr" ] && gh pr merge "$newpr" -R "$gh_repo" --auto --squash --delete-branch || true
+    fixed=$((fixed+1))
+  done
+  echo ""
+  echo "opened $fixed PR(s)"
+}
+
+cmd_clean() {
+  local feature=${1:-}
+  [ -n "$feature" ] || die "usage: wave clean <feature>"
+  local brief
+  brief=$(brief_for "$feature")
+  [ -f "$brief" ] || die "no brief at $brief"
+
+  local repo prefix tracks wparent
+  repo=$(brief_param "$brief" REPO)
+  prefix=$(brief_param "$brief" TRACK_PREFIX)
+  wparent=$(brief_param "$brief" WORKTREE_PARENT)
+  tracks=$(brief_tracks "$brief")
+
+  echo "→ pruning git worktree metadata for missing/merged worktrees"
+  git -C "$repo" worktree prune
+  echo ""
+  echo "→ candidates for removal (worktree exists but branch is merged or gone)"
+  git -C "$repo" worktree list | while read -r path sha rest; do
+    [ "$path" = "$repo" ] && continue
+    case "$path" in *"$prefix"*) ;; *) continue ;; esac
+    local branch
+    branch=$(echo "$rest" | tr -d '[]')
+    if ! git -C "$repo" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+      echo "  $path  (branch '$branch' not on origin — likely merged + deleted)"
+      echo "    remove with: git -C \"$repo\" worktree remove --force \"$path\" && rm -rf \"$path\""
+    fi
+  done
+  echo ""
+  echo "(this command only prints suggestions — no destructive action taken)"
+}
+
+usage() {
+  cat <<'EOF'
+wave — parallel-agent wave launcher (drives SUPERPROMPT.md Mode B)
+
+USAGE
+  wave init <feature>            scaffold docs/agent-briefs/<feature>/parallel-tracks.md
+  wave validate <feature>        check brief well-formedness
+  wave prompt <feature>          print the filled-in Mode B prompt to stdout
+  wave launch <feature> [N]      spawn N gemini agents in tmux (default = #tracks)
+  wave attach <feature>          tmux attach to the wave session
+  wave status [feature]          dashboard for one feature, or all
+  wave fix-stalled <feature>     open PRs for branches with commits but no PR
+  wave clean <feature>           list dead worktrees + zombie reclaim suggestions
+  wave help                      this help
+
+The brief file is the single source of truth — its top-of-file fenced
+block declares REPO/GH_REPO/BASE_BRANCH/TRACK_PREFIX/TRACKS/etc. Every
+subcommand reads from there.
+EOF
+}
+
+cmd=${1:-help}
+shift || true
+case "$cmd" in
+  init)         cmd_init "$@" ;;
+  validate)     cmd_validate "$@" ;;
+  prompt)       cmd_prompt "$@" ;;
+  launch)       cmd_launch "$@" ;;
+  attach)       cmd_attach "$@" ;;
+  status)       cmd_status "$@" ;;
+  fix-stalled)  cmd_fix_stalled "$@" ;;
+  clean)        cmd_clean "$@" ;;
+  help|-h|--help) usage ;;
+  *)            usage; exit 1 ;;
+esac
