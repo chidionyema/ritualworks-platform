@@ -2,21 +2,22 @@
 
 **Status:** spec — not yet implemented.
 
-**Mode:** new service (introduces `cdc-svc`) + cross-cutting changes to every existing service. The wave will run mostly as `WAVE_MODE=modify` with a small new-service component.
+**Mode:** new service (introduces `cdc-svc`) + DB-level configuration on every existing service (NOT application code changes — see § 4). The wave will run mostly as `WAVE_MODE=modify` with a small new-service component.
 
 ## 1. Goal & non-goals
 
 ### Goal
 
-A platform-wide change-data-capture pipeline that lets any component react to data changes without coupling to source-service code or schema. Producers write to an outbox in the same transaction as their state change. A `cdc-svc` relays outbox rows to RabbitMQ as standardised `EntityChangedEvent` messages. Consumers — cache, search, audit, analytics, webhooks, anything future — subscribe by entity type, no shared types between source and destination.
+A platform-wide change-data-capture pipeline that lets any component react to data changes **without source services knowing they're being captured**. The capture point is the database itself, via Postgres logical replication — every committed change to a tracked table flows through Postgres' WAL stream into `cdc-svc`, which transforms it into a standardised `EntityChangedEvent` message on RabbitMQ. Consumers — cache, search, audit, analytics, webhooks, anything future — subscribe by entity type, no shared types between source and destination, no application coupling.
 
-The architectural property: **adding a new consumer never requires changes to producers; adding a new producer never requires changes to consumers**. Both sides talk to the same generic envelope.
+The architectural property: **adding a new consumer never requires changes to producers; adding a new producer is "enable logical replication on its DB" — zero application code change, zero handler edits, zero risk of forgotten events**. Migrations, manual SQL, and out-of-band edits are all captured because the DB is the source of truth.
 
 ### Non-goals
 
-- True DB-level CDC via Postgres logical replication / Debezium / Kafka. Heavier operationally and adds Kafka. **Outbox is sufficient for the listed use cases.** True CDC is a separate spec if a use case ever requires it (capturing changes from external migrations, black-box services, etc.).
-- Streaming SQL / data-warehouse synchronisation framework. Analytics consumes the same `EntityChangedEvent` stream and ships to a warehouse — but the warehouse design is its own spec.
-- Replacing existing domain events. They keep carrying business intent. CDC carries data history. **Both patterns coexist.**
+- **Application-level outbox / dual-write patterns.** Considered and rejected — they require the application to remember to record every state change, exactly the maintenance tax CDC is supposed to eliminate. Logical replication is the answer.
+- **Kafka / Debezium.** A perfectly valid heavier-weight option, but this stack already has RabbitMQ. `cdc-svc` will consume the WAL stream directly (using `pgoutput` or `wal2json`) and publish to RabbitMQ — Debezium's job, simpler topology.
+- **Streaming SQL / data-warehouse sync framework.** Analytics consumes the same `EntityChangedEvent` stream and ships to a warehouse — but the warehouse design is its own spec.
+- **Replacing existing domain events.** They keep carrying business intent ("payment refunded for fraud reason"). CDC carries data history ("orders row, status: paid → refunded"). **Both patterns coexist.**
 
 ## 2. Architecture at a glance
 
@@ -24,25 +25,28 @@ The architectural property: **adding a new consumer never requires changes to pr
 ┌──────────────────────────────────────────────────────────────────────┐
 │  PRODUCERS (every service that mutates state)                       │
 │  ┌────────────────────┐                                             │
-│  │ Catalog            │   ← writes products + WRITES OUTBOX in same │
-│  │   products tbl     │     transaction (Outbox library, ~5 lines)  │
-│  │   outbox_events    │                                             │
-│  └────────────────────┘                                             │
+│  │ Catalog            │   ← just writes to its tables as normal —   │
+│  │   products tbl     │     ZERO application code change            │
+│  │   …                │     Postgres has wal_level=logical and a    │
+│  └────────────────────┘     publication for the tables we capture   │
 └──────────────────────────────────────────────────────────────────────┘
-            │  (polling / logical replication)
+            │  Postgres logical replication slot (WAL stream)
             ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │  cdc-svc (new microservice)                                         │
-│  - polls every service's outbox_events table on a tight loop       │
-│  - publishes one EntityChangedEvent per row to RabbitMQ            │
-│  - marks outbox row as published; deletes after retention window   │
-│  - exposes admin API for backfill / replay / pause                 │
-│  - emits per-service / per-entity-type metrics                     │
+│  - one logical replication subscriber per source DB                │
+│  - decodes WAL changes (pgoutput/wal2json) → EntityChangedEvent    │
+│  - publishes to RabbitMQ topic exchange "cdc.entity"               │
+│  - tracks LSN per slot (replication offset); ack only after        │
+│    successful publish for at-least-once delivery                   │
+│  - exposes admin API for replay / pause / backfill                 │
+│  - emits per-source / per-entity-type metrics                      │
 └──────────────────────────────────────────────────────────────────────┘
-            │  RabbitMQ topic exchange "cdc.entity.<entity_type>"
+            │  RabbitMQ topic exchange "cdc.entity"
+            │  routing key = "<entity_type>.<change_type>"
             ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  CONSUMERS (subscribe by entity_type filter, no shared types)      │
+│  CONSUMERS (subscribe by routing-key filter, no shared types)      │
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌────────────┐ │
 │  │ cache-svc    │ │ search-svc   │ │ audit-svc    │ │ analytics  │ │
 │  │ invalidation │ │ reindex      │ │ data history │ │ → warehouse│ │
@@ -53,6 +57,8 @@ The architectural property: **adding a new consumer never requires changes to pr
 │  └──────────────┘                                                   │
 └──────────────────────────────────────────────────────────────────────┘
 ```
+
+**The capture is at the database layer, not in application code.** Every committed transaction's WAL records flow through cdc-svc; the application never knows. Migrations, scripted updates, even `psql` sessions are all captured. This is the property that distinguishes real CDC from manual outbox dual-write.
 
 ## 3. The wire contract — `EntityChangedEvent`
 
@@ -87,110 +93,122 @@ The **only** thing that crosses service boundaries. Producers and consumers each
 
 **Routing:** RabbitMQ topic exchange `cdc.entity` with routing key `<entity_type>.<change_type>`. Consumers bind queues to whatever subset of routing keys they care about.
 
-## 4. Producer side — the Outbox pattern
+## 4. Producer side — Postgres logical replication (zero application code)
 
-### 4.1 Schema (added to every producing service's DB)
+The application is unaware of CDC. Producers just write to their tables. The DB does the work.
+
+### 4.1 Per-DB configuration (one-time, IaC)
+
+Each service's Postgres needs three things, none of which involve application code:
+
+**(a)** `wal_level=logical` in `postgresql.conf`. Enables WAL-based change streaming. Reload required (no downtime). Cost: ~5-10% more WAL volume on write-heavy tables, fully manageable.
+
+**(b)** A `PUBLICATION` declaring which tables we capture:
 
 ```sql
-CREATE TABLE outbox_events (
-    id              uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
-    entity_type     text         NOT NULL,
-    entity_id       text         NOT NULL,
-    change_type     text         NOT NULL CHECK (change_type IN ('created','updated','deleted')),
-    payload_before  jsonb,
-    payload_after   jsonb,
-    occurred_at     timestamptz  NOT NULL DEFAULT now(),
-    metadata        jsonb        NOT NULL DEFAULT '{}',
-    schema_version  int          NOT NULL DEFAULT 1,
-    published_at    timestamptz,                              -- null until cdc-svc relays
-    published_attempts int       NOT NULL DEFAULT 0
-);
-
-CREATE INDEX outbox_events_pending ON outbox_events (occurred_at)
-    WHERE published_at IS NULL;
+-- Run once per service DB. Idempotent.
+CREATE PUBLICATION cdc_publication FOR TABLE
+    products,
+    product_categories,
+    product_prices
+WITH (publish = 'insert, update, delete');
 ```
 
-Index covers the relay's hot query (oldest unpublished). The retention worker deletes rows where `published_at < now() - interval '7 days'`.
+The list is per-service. Tables NOT in the publication are invisible to CDC (use this to exclude noisy or sensitive tables). The publication can be altered later via `ALTER PUBLICATION ADD TABLE` — no app restart.
 
-### 4.2 Library (`Haworks.BuildingBlocks.Cdc`)
+**(c)** `REPLICA IDENTITY FULL` on tables that need before-image:
 
-A new BuildingBlocks namespace. Producer integration is one DI registration + one call per state change:
-
-```csharp
-// Program.cs (one line, all services)
-builder.Services.AddOutbox<CatalogDbContext>();
-
-// In a command handler — write outbox in the same transaction
-public async Task Handle(UpdateProductCommand cmd) {
-    var product = await _db.Products.FindAsync(cmd.Id);
-    var before  = product.Snapshot();
-    product.Apply(cmd);
-    await _outbox.RecordAsync("product", product.Id, "updated", before, product.Snapshot());
-    await _db.SaveChangesAsync();           // both INSERT + outbox INSERT in one tx
-}
+```sql
+ALTER TABLE products REPLICA IDENTITY FULL;
 ```
 
-Library responsibilities:
-- Provides `IOutboxWriter` that buffers within the current `DbContext`
-- Auto-flushes on `SaveChangesAsync` so all writes commit atomically
-- Strict invariants: no I/O during `RecordAsync` (no MQ publish, no HTTP) — only the relay does that asynchronously
-- `Snapshot()` extension on entities returns a jsonb-friendly dictionary (DDD aggregate state)
+Without this, Postgres only writes the primary key on UPDATE/DELETE — consumers wouldn't get `payload_before`. With it, the entire pre-image lands in WAL. Cost: more WAL on UPDATE/DELETE; tolerable for low-write tables, evaluate per-table for hot ones.
 
-### 4.3 What about commands that produce domain events?
+**Operationally:** `infra/stateful/postgres-clusters/<service>.yaml` (the CloudNativePG Cluster CR per the K8s platform spec) declares `wal_level=logical` in its config. Each service's L0 wave run produces a publication script in `infra/stateful/cdc-publications/<service>.sql` that ships alongside the service migration.
 
-Existing pattern (kept):
+### 4.2 Application code change required
 
-```csharp
-await _eventBus.PublishAsync(new ProductPriceChangedEvent { ... });
-```
+**None.** Services write to tables as they always have. No new DI registration, no library to call, no outbox table, no transaction-scoping concern. The change is purely operational/infrastructural.
 
-The domain event carries **business intent** — "price changed for promotional reason". The outbox row carries **data state** — "products row updated, before=X after=Y". Both go in the same transaction. Consumers choose:
-- Need business meaning (e.g. compute promo win-rate) → subscribe to `ProductPriceChangedEvent`
-- Need data sync (e.g. reindex search) → subscribe to `EntityChangedEvent { entity_type: "product" }`
+### 4.3 Coexistence with domain events
 
-This is the coexistence rule.
+Existing domain events stay. They carry **business intent** — "ProductPriceChangedEvent fired because of a promo rule" — which logical replication cannot infer. CDC carries **data history** — "products row updated, before=X after=Y". Both flow:
+- Domain events → MassTransit → existing typed consumers (Notifications, Orders sagas, business handlers)
+- CDC events → cdc-svc → generic consumers (cache, search, audit-data-mode, analytics, webhooks)
+
+A consumer chooses based on what it needs. Most cross-cutting consumers want CDC (data sync); most business-flow consumers want domain events (semantic meaning).
+
+### 4.4 What about logical replication's edge cases?
+
+| Concern | Mitigation |
+|---|---|
+| **Schema changes** (DDL — ALTER TABLE etc.) | Logical replication skips DDL (Postgres limitation). cdc-svc surfaces a warning when WAL contains DDL records; ops runbook covers the resync workflow. New columns in published tables auto-flow with no consumer change required (additive). |
+| **Replication slot fills disk** if cdc-svc lags | Per-slot `max_slot_wal_keep_size` on Postgres caps the slot. If cdc-svc falls too far behind, the slot is invalidated; cdc-svc detects this and surfaces a hard alarm. Operator runs `cdc source resync` — see § 9. |
+| **TOAST'd columns** (large jsonb/text) only stream if changed | We're already storing jsonb in payload — REPLICA IDENTITY FULL ensures the full row, including unchanged TOAST, lands on UPDATE. |
+| **Cascading deletes** generate per-row events | Expected behaviour. Consumers handle high-fan-out. |
+| **Multi-statement transactions** | Logical replication preserves transaction boundaries. cdc-svc emits all changes from a transaction with the same `source_transaction_id` so consumers can correlate. |
+| **Cross-table consistency** (e.g., Order + OrderLines change atomically) | Both rows' events land in the same transaction-id. Consumers needing atomic view can buffer by `source_transaction_id` until they see a `transaction_commit` marker (cdc-svc emits this). |
 
 ## 5. The cdc-svc — relay + admin
 
-### 5.1 Relay loop
+### 5.1 Relay loop (per source DB)
 
-For each registered producer service:
-1. Open a connection to the producer's Postgres (read-only role with `SELECT` on `outbox_events`).
-2. Poll `SELECT * FROM outbox_events WHERE published_at IS NULL ORDER BY occurred_at LIMIT 100` every 500ms.
-3. For each row: publish `EntityChangedEvent` to RabbitMQ exchange `cdc.entity`, routing key `<entity_type>.<change_type>`.
-4. UPDATE `published_at = now()`, increment `published_attempts`.
-5. On RabbitMQ publish failure: log, don't update `published_at`, retry on next poll.
+For each registered producer service, cdc-svc holds one logical replication slot:
 
-**At-least-once guarantee:** if cdc-svc crashes after publishing but before UPDATE, the row gets republished on next poll. Consumers must be idempotent (use `event_id`).
+1. **Subscribe** via `START_REPLICATION SLOT <slot_name> LOGICAL <last_lsn> (proto_version '4', publication_names 'cdc_publication')`. Postgres begins streaming WAL records from `<last_lsn>`.
+2. **Decode** each WAL record using `pgoutput` (built-in) or `wal2json` (more JSON-friendly). For each row change: extract `table_name`, `change_type` (insert/update/delete), `payload_before`, `payload_after`, `source_transaction_id` (XID).
+3. **Map** `table_name` → `entity_type` via cdc-svc config (e.g. `products` → `product`, `product_prices` → `product_price`). Tables not mapped are skipped.
+4. **Publish** `EntityChangedEvent` to RabbitMQ exchange `cdc.entity`, routing key `<entity_type>.<change_type>`.
+5. **Confirm and advance LSN** only after RabbitMQ confirms the publish: `pg_replication_slot_advance(<slot_name>, <published_lsn>)`. This is the "ack" that lets Postgres reclaim WAL.
 
-**Strict ordering per `(entity_type, entity_id)`:** the LIMIT-by-occurred_at + per-key processing in the consumer guarantees this. Cross-entity ordering is not preserved.
+**At-least-once guarantee:** if cdc-svc crashes after publishing but before LSN advance, the WAL record is replayed on reconnect. Consumers MUST be idempotent — use `event_id` (a deterministic hash of `slot_name + lsn`) for dedup.
+
+**Ordering:** logical replication delivers WAL in commit order. Per-table ordering is preserved naturally; per-`(entity_type, entity_id)` is preserved because they all land in the same WAL stream.
+
+**Backpressure:** if RabbitMQ is slow, cdc-svc holds onto the WAL slot but doesn't ack. Postgres retains WAL up to `max_slot_wal_keep_size`. If cdc-svc falls too far behind, the slot is invalidated and ops needs to resync — see § 9.
 
 ### 5.2 Configuration
 
-`cdc-svc` reads from a `cdc_sources` table (in cdc-svc's own DB):
+`cdc-svc`'s own DB has two tables:
 
 ```sql
+-- One row per source DB to subscribe to
 CREATE TABLE cdc_sources (
-    service_name    text PRIMARY KEY,
-    connection      text NOT NULL,           -- read-only Postgres connection
-    enabled         bool NOT NULL DEFAULT true,
-    poll_interval_ms int NOT NULL DEFAULT 500,
-    batch_size      int NOT NULL DEFAULT 100
+    service_name      text PRIMARY KEY,
+    connection_string text NOT NULL,       -- replication-role Postgres connection
+    publication_name  text NOT NULL DEFAULT 'cdc_publication',
+    slot_name         text NOT NULL,       -- unique per cdc-svc replica
+    enabled           bool NOT NULL DEFAULT true,
+    started_at        timestamptz
+);
+
+-- Mapping from table_name → entity_type (per source)
+CREATE TABLE cdc_table_map (
+    service_name  text NOT NULL,
+    table_name    text NOT NULL,
+    entity_type   text NOT NULL,
+    enabled       bool NOT NULL DEFAULT true,
+    PRIMARY KEY (service_name, table_name)
 );
 ```
 
-Adding a new producer service = INSERT one row. No code change in cdc-svc.
+Adding a new producer service:
+1. Run the publication script on its DB: `CREATE PUBLICATION cdc_publication FOR TABLE …`
+2. INSERT into `cdc_sources` + per-table rows in `cdc_table_map`.
+
+That's it. No code change in cdc-svc, no application code change in the producer.
 
 ### 5.3 Admin API
 
 ```
-GET    /cdc/status                            # overview
-GET    /cdc/sources                           # list of producers
-POST   /cdc/sources/{name}/pause              # stop relaying
+GET    /cdc/status                            # overview: each source's slot state + lag
+GET    /cdc/sources                           # list of subscribed sources
+POST   /cdc/sources/{name}/pause              # stop reading the slot (slot stays — WAL accumulates)
 POST   /cdc/sources/{name}/resume
-GET    /cdc/lag                               # per-source: oldest unpublished row age
-POST   /cdc/replay                            # body: {entity_type, since: timestamptz}
-POST   /cdc/backfill                          # body: {entity_type, source_query}  ← see § 9
+POST   /cdc/sources/{name}/resync             # drop + recreate the slot from a snapshot — see § 9
+GET    /cdc/lag                               # per-source: LSN behind primary, age of last published change
+POST   /cdc/replay                            # body: {source, since_lsn} — re-publish from LSN forward
+POST   /cdc/backfill                          # body: {source, table, source_query} — see § 9
 ```
 
 ## 6. Consumer side — clean adapters per use case
@@ -269,22 +287,26 @@ Subscriber registration is the public API of webhooks-svc. CDC is the firehose u
 
 This is the migration plan. The phrase "minimal touch" is the discipline — every change kept tight to avoid a months-long refactor.
 
-### 7.1 Producers (every service with state)
+### 7.1 Producers (every service with state) — pure infrastructure work, no application code
+
+This is where the design pays off — there's almost nothing to do per service:
 
 | Service | Touch | Effort |
 |---|---|---|
-| **Catalog** | + `outbox_events` migration; integrate `IOutboxWriter` in command handlers (5 commands typical); ~10 line diff per handler | 2h |
-| **Orders** | Same pattern. Order state changes already produce domain events; adding outbox is a sibling write. | 2h |
-| **Payments** | Same. Payment intents + transitions + refunds = ~6 outbox writes. | 2h |
-| **Identity** | Same. User profile changes are the main outbox source. | 1h |
-| **Content** | Same. File-uploaded / file-deleted are the main events. | 1h |
-| **Notifications** | Likely OPTIONAL. Notifications are pull-based (consumer of intent), not the source of much state that other services care about. Skip unless a real consumer emerges. | 0-1h |
-| **Search** | Search-svc doesn't own state others react to (it owns its index). Skip producer integration. | 0h |
-| **Audit** | Audit doesn't write business state. Skip. | 0h |
-| **CheckoutOrchestrator** | Saga state transitions could go to outbox if other services want to react. Defer until needed. | 0-2h |
-| **BffWeb** | No state of its own. Skip. | 0h |
+| **Catalog** | (a) ALTER `wal_level=logical` on its Postgres (one-time, cluster CR change); (b) `CREATE PUBLICATION cdc_publication FOR TABLE products, product_categories, product_prices`; (c) `REPLICA IDENTITY FULL` on those tables. **Zero application code change.** | 30min |
+| **Orders** | Same: enable replication, declare publication for `orders`, `order_lines`. | 30min |
+| **Payments** | Same: declare publication for `payments`, `payment_attempts`, `refunds`. | 30min |
+| **Identity** | Same: `users`, `user_profiles`. | 30min |
+| **Content** | Same: `content_items`. | 30min |
+| **Notifications** | Likely SKIP. Notifications are pull-driven (consumers of intent); little state others react to. Re-evaluate if a real consumer emerges. | 0min |
+| **Search** | Skip. Search owns its index, not state others care about. | 0min |
+| **Audit** | Skip. Audit doesn't write business state. | 0min |
+| **CheckoutOrchestrator** | Optional. Saga state transitions are interesting — declare publication on `checkout_sagas` if a consumer requests. | 0-30min |
+| **BffWeb** | Skip. No state. | 0min |
 
-Total producer integration: ~8 hours of mechanical work, **easily parallelizable** (one track per service).
+Total producer integration: **~3 hours of pure DB-config work**, no code review of handler changes, no risk of forgotten outbox writes, no regression surface in business logic. Parallelizable trivially since each service's Postgres is independent.
+
+The substantive work is in cdc-svc + the consumers. Producer integration is a footnote.
 
 ### 7.2 Existing consumers — what changes
 
@@ -420,25 +442,29 @@ cdc consumer dlq drop <event_id>        # mark as resolved without retry (with r
 
 ## 11. Implementation plan — parallel decomposition for one-day delivery
 
-`wave run docs/agent-briefs/cdc-service-spec.md`. Mode: hybrid (introduces cdc-svc + modifies every existing producer + modifies search/audit consumers). The wave splits into 9 disjoint-scope tracks:
+`wave run docs/agent-briefs/cdc-service-spec.md`. Mode: hybrid (introduces cdc-svc + Postgres config on every existing producer DB + modifies search/audit consumers). 8 disjoint-scope tracks:
 
 | Track | Owns | Hours |
 |---|---|---|
-| **T1** Outbox library + schema | `src/BuildingBlocks/Cdc/**`, migration template, unit tests | 3 |
-| **T2** cdc-svc skeleton + relay loop | `src/Cdc/**` (new service via wave's new-service scaffold), relay worker, RabbitMQ publisher | 4 |
-| **T3** cdc-svc admin API + CLI | controllers, `tools/cdc` CLI, runbook doc | 3 |
-| **T4** Per-service producer integration (Catalog, Orders, Payments) | outbox migration + handler changes for these 3 services | 3 |
-| **T5** Per-service producer integration (Identity, Content) | outbox migration + handler changes for the lighter services | 2 |
-| **T6** Search consumer migration | refactor search-svc per `search-decoupling-spec.md` to consume CDC events instead of typed Catalog events | 3 |
-| **T7** Audit data-audit consumer | new parallel `DataAuditConsumer` in audit-svc + `data_audit_events` table | 3 |
-| **T8** Cache invalidation consumer | new component (or in BffWeb), config-driven rules YAML, replaces scattered manual invalidation | 3 |
-| **T9** Monitoring + dashboards + alarms + E2E test | Prometheus rules, Grafana dashboards, the `CdcEndToEndJourney` test, the runbook | 3 |
+| **T1** cdc-svc skeleton + WAL replication subscriber | `src/Cdc/**` (new service via wave's new-service scaffold), Postgres logical replication client (`Npgsql.PostgresReplication` or equivalent), `pgoutput` decoder, `EntityChangedEvent` model + RabbitMQ publisher | 5 |
+| **T2** cdc-svc admin API + `cdc` CLI | controllers (status, pause/resume/resync/replay/backfill), `tools/cdc` bash CLI mirroring wave/platform, runbook draft | 3 |
+| **T3** Postgres replication configuration across all producer DBs | `infra/stateful/postgres-clusters/<service>.yaml` updates (`wal_level=logical` + `max_replication_slots`); per-service publication-creation SQL committed under `infra/stateful/cdc-publications/`; cdc_sources + cdc_table_map seed data | 3 |
+| **T4** Cache invalidation consumer | new component, `ICdcEventHandler` impl, config-driven rules YAML (`infra/apps/cache-invalidator/rules.yaml`), Redis client, integration tests | 3 |
+| **T5** Search consumer migration | refactor search-svc per `search-decoupling-spec.md` to consume `cdc.entity` events instead of typed Catalog events; the typed consumers retire | 3 |
+| **T6** Audit data-mode consumer | new parallel `DataAuditConsumer` in audit-svc + `data_audit_events` table + integration tests | 3 |
+| **T7** Webhooks + analytics consumer scaffolds (deferred services, hooks ready) | minimal `ICdcEventHandler` impl in webhooks-svc and analytics-svc directories so future services have a starting point. Even though those services aren't built, the consumer pattern is established here. | 2 |
+| **T8** Monitoring + dashboards + alarms + E2E test | Prometheus rules + Grafana dashboard JSON under `infra/addons/grafana-dashboards/cdc.json`, the `CdcEndToEndJourney` test, the operations runbook completed | 3 |
 
-**Disjoint-scope contract:** T4 and T5 split producers across different services (no overlap). T6 owns only `src/Search/**` consumer changes. T8 introduces a new component (no edits to existing handlers' invalidation calls — those get removed in a follow-up sweep).
+**Disjoint-scope contract:**
+- T1 owns `src/Cdc/**` (new service) and is the only writer to `EntityChangedEvent` schema.
+- T2 owns the admin API + CLI; depends on T1 publishing the model but does not modify `src/Cdc/**` core relay code.
+- T3 only touches infrastructure: `infra/stateful/postgres-clusters/*.yaml`, `infra/stateful/cdc-publications/*.sql`. Zero application code.
+- T4-T7 each own a single consumer's directory with no overlap.
+- T8 owns observability + tests + docs; integrates everything but adds no business logic.
 
-**Total wall-clock with 9 agents in parallel: ~4 hours.**
+**Total wall-clock with 8 agents in parallel: ~5 hours** (T1 is the longest track at 5h; everything else fits inside that).
 
-After wave merges to `feat/cdc-platform`, integration smoke = the `CdcEndToEndJourney` test in T9. PR `feat/cdc-platform → main` is the rollup.
+After wave merges to `feat/cdc-platform`, integration smoke = the `CdcEndToEndJourney` test in T8. PR `feat/cdc-platform → main` is the rollup.
 
 ## 12. Reference projects to mirror
 
