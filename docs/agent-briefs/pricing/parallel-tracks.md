@@ -5,7 +5,7 @@ BASE_BRANCH=feat/pricing-service
 BRIEF_FILE=docs/agent-briefs/pricing/parallel-tracks.md
 TRACK_PREFIX=feat/pricing-
 TRACKS=(T1 T2 T3 T4)
-WORKTREE_PARENT=/tmp
+WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/ritualworks-platform
 ```
 
 # Pricing service — parallel tracks (Mode B brief)
