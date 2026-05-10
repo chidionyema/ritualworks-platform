@@ -21,6 +21,8 @@ public sealed class NotificationRequestConsumerTests
     private readonly Mock<ITemplateSelector> _templateSelector = new();
     private readonly Mock<ITemplateRenderer> _templateRenderer = new();
     private readonly Mock<IEmailChannelGateway> _emailGateway = new();
+    private readonly Mock<ISmsChannelGateway> _smsGateway = new();
+    private readonly Mock<IPushChannelGateway> _pushGateway = new();
     private readonly NotificationRequestConsumer _sut;
 
     public NotificationRequestConsumerTests()
@@ -30,7 +32,32 @@ public sealed class NotificationRequestConsumerTests
             _templateSelector.Object,
             _templateRenderer.Object,
             _emailGateway.Object,
+            _smsGateway.Object,
+            _pushGateway.Object,
             NullLogger<NotificationRequestConsumer>.Instance);
+    }
+
+    [Fact]
+    public async Task Consume_PushChannel_InvokesPushGateway()
+    {
+        // Arrange
+        var notification = CreatedNotification(NotificationChannel.Push);
+        ArrangeRepositoryReturns(notification);
+        ArrangeTemplateSelectorReturnsStub();
+        _pushGateway
+            .Setup(g => g.SendAsync(It.IsAny<Notification>(), It.IsAny<CancellationToken>()))
+            .Callback<Notification, CancellationToken>((n, _) => n.MarkSent("push-msg-id"))
+            .Returns(Task.CompletedTask);
+
+        var ctx = ConsumeContextFor(NewEvent(notification));
+
+        // Act
+        await _sut.Consume(ctx.Object);
+
+        // Assert
+        notification.Status.Should().Be(NotificationStatus.Sent);
+        notification.ProviderMessageId.Should().Be("push-msg-id");
+        _pushGateway.Verify(g => g.SendAsync(notification, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -59,6 +86,31 @@ public sealed class NotificationRequestConsumerTests
         // SaveChanges twice: once after MarkRendering, once after the dispatch.
         _repository.Verify(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
         _emailGateway.Verify(g => g.SendAsync(notification, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Consume_SmsHappyPath_InvokesSmsGateway()
+    {
+        // Arrange
+        var notification = CreatedNotification(NotificationChannel.Sms);
+        ArrangeRepositoryReturns(notification);
+        ArrangeTemplateSelectorReturnsStub();
+        _templateRenderer
+            .Setup(r => r.RenderAsync(It.IsAny<string>(), It.IsAny<IDictionary<string, object>>()))
+            .ReturnsAsync("rendered");
+        _smsGateway
+            .Setup(g => g.SendAsync(It.IsAny<Notification>(), It.IsAny<CancellationToken>()))
+            .Callback<Notification, CancellationToken>((n, _) => n.MarkSent("provider-msg-id"))
+            .Returns(Task.CompletedTask);
+
+        var ctx = ConsumeContextFor(NewEvent(notification));
+
+        // Act
+        await _sut.Consume(ctx.Object);
+
+        // Assert
+        notification.Status.Should().Be(NotificationStatus.Sent);
+        _smsGateway.Verify(g => g.SendAsync(notification, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

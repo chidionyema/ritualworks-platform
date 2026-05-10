@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
+using Haworks.BuildingBlocks.Middleware;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -39,6 +41,12 @@ public static class ServiceDefaults
 
         builder.Services.AddServiceDiscovery();
 
+        // Correlation-id propagation: registers IHttpContextAccessor + the
+        // outbound DelegatingHandler. Must be called before
+        // ConfigureHttpClientDefaults so the handler type is registered
+        // when AddHttpMessageHandler<T>() resolves it.
+        builder.Services.AddCorrelationId();
+
         builder.Services.ConfigureHttpClientDefaults(http =>
         {
             // Turn on resilience by default
@@ -46,6 +54,12 @@ public static class ServiceDefaults
 
             // Turn on service discovery by default
             http.AddServiceDiscovery();
+
+            // Stamp X-Correlation-ID on every outbound request so downstream
+            // services see the same id the BFF logged. Cheap, idempotent,
+            // skipped automatically when there is no ambient HttpContext
+            // (e.g. background workers).
+            http.AddHttpMessageHandler<CorrelationIdHttpClientHandler>();
         });
 
         // Uncomment the following to restrict the allowed schemes for service discovery.
@@ -87,7 +101,19 @@ public static class ServiceDefaults
                     // .AddGrpcClientInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddEntityFrameworkCoreInstrumentation()
-                    .AddSource("MassTransit");
+                    .AddSource("MassTransit")
+                    // Custom business ActivitySources — one per service. OTel
+                    // requires exact source names (no glob), so each service's
+                    // <Service>Activities.SourceName is hard-coded here. New
+                    // services should add their source name to this chain.
+                    .AddSource("Haworks.Catalog")
+                    .AddSource("Haworks.Orders")
+                    .AddSource("Haworks.Payments")
+                    .AddSource("Haworks.CheckoutOrchestrator")
+                    .AddSource("Haworks.BffWeb")
+                    .AddSource("Haworks.Content")
+                    .AddSource("Haworks.Search")
+                    .AddSource("Haworks.Identity");
             });
 
         builder.AddOpenTelemetryExporters();
@@ -156,6 +182,23 @@ public static class ServiceDefaults
             tags: ReadyTag);
 
     /// <summary>
+    /// Registers the dependencies needed by the correlation-id middleware
+    /// and outbound HttpClient handler. Idempotent — relies on TryAdd-style
+    /// semantics provided by <c>AddHttpContextAccessor</c> and the explicit
+    /// transient registration for the handler.
+    /// </summary>
+    public static IServiceCollection AddCorrelationId(this IServiceCollection services)
+    {
+        services.AddHttpContextAccessor();
+        // DelegatingHandlers added via AddHttpMessageHandler<T>() must be
+        // registered as transient so each named HttpClient gets its own
+        // instance per request — singletons cause the handler chain to
+        // alias.
+        services.AddTransient<CorrelationIdHttpClientHandler>();
+        return services;
+    }
+
+    /// <summary>
     /// Maps default health check endpoints.
     /// </summary>
     /// <remarks>
@@ -165,9 +208,17 @@ public static class ServiceDefaults
     ///   <item>/health/ready - Readiness checks (databases must be connected)</item>
     ///   <item>/health/live - Liveness checks only (app is responsive)</item>
     /// </list>
+    /// Also registers the correlation-id middleware early in the pipeline so
+    /// every service that calls this picks up X-Correlation-ID handling
+    /// without an extra wire-up step.
     /// </remarks>
     public static WebApplication MapDefaultEndpoints(this WebApplication app)
     {
+        // Correlation-id must be the first middleware to run so every log
+        // line emitted from this point on (including health checks, auth,
+        // routing) is enriched with CorrelationId in Serilog LogContext.
+        app.UseCorrelationId();
+
         // All health checks must pass for detailed health info
         app.MapHealthChecks("/health");
 

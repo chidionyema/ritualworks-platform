@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.CheckoutOrchestrator.Application.Telemetry;
 using Haworks.Contracts.Checkout;
 using MassTransit;
 using MediatR;
@@ -25,6 +26,13 @@ internal sealed class StartCheckoutCommandHandler(
     {
         var sagaId = request.SagaId == Guid.Empty ? Guid.NewGuid() : request.SagaId;
         var orderId = request.OrderId == Guid.Empty ? Guid.NewGuid() : request.OrderId;
+
+        using var activity = CheckoutActivities.Source.StartActivity("checkout.saga.start");
+        activity?.SetTag("saga.id", sagaId);
+        activity?.SetTag("order.id", orderId);
+        activity?.SetTag("customer.id", request.UserId);
+        activity?.SetTag("checkout.total_amount_cents", (long)(request.TotalAmount * 100m));
+        activity?.SetTag("checkout.item_count", request.Items.Count);
 
         await publishEndpoint.Publish(new CheckoutInitiatedEvent
         {

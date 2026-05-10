@@ -16,25 +16,21 @@ namespace Haworks.Notifications.Integration;
 
 /// <summary>
 /// WebApplicationFactory for notifications-svc integration tests.
-/// Mirrors OrdersWebAppFactory / PaymentsWebAppFactory: Testcontainers
-/// Postgres + in-memory MassTransit harness with the L3 dispatch consumer
-/// registered so we can publish NotificationCreatedEvent and observe DB
-/// state transitions end-to-end.
+/// Mirrors OrdersWebAppFactory / PaymentsWebAppFactory: SharedTestPostgres
+/// + in-memory MassTransit harness with the L3 dispatch consumer registered
+/// so we can publish NotificationCreatedEvent and observe DB state
+/// transitions end-to-end.
 ///
-/// IEmailProvider implementations are stripped from DI and a single mock
-/// is wired in by default; PipelineTests override per-test to install
-/// failover scenarios.
+/// **Single shared instance** across the whole test assembly via
+/// <c>NotificationsIntegrationCollection</c> (one host build per
+/// `dotnet test`, not per fixture). Tests that need different
+/// IEmailProvider mocks call <c>factory.WithWebHostBuilder(...)</c>
+/// per-test rather than subclassing the factory — see
+/// .claude/rules/testing.md.
 /// </summary>
 public class NotificationsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     public string ConnectionString { get; private set; } = string.Empty;
-
-    /// <summary>
-    /// Hook for individual test classes to override the default IEmailProvider
-    /// registration before the host is built. PipelineTests sets this to
-    /// install primary+secondary mocks for the failover path.
-    /// </summary>
-    public Action<IServiceCollection>? ConfigureEmailProviders { get; set; }
 
     public async Task InitializeAsync()
     {
@@ -86,7 +82,11 @@ public class NotificationsWebAppFactory : WebApplicationFactory<Program>, IAsync
         builder.ConfigureServices(services =>
         {
             // Strip every IEmailProvider registered by Infrastructure (SES, etc.)
-            // so the channel gateway only sees the test mocks.
+            // so PipelineTests can inject mocks per-test via
+            // factory.WithWebHostBuilder(b => b.ConfigureTestServices(...)).
+            // NotificationsApiTests doesn't dispatch through the gateway and
+            // doesn't need any IEmailProvider — leaving none registered is fine
+            // for those tests; the dispatch path simply never fires.
             var emailProviderDescriptors = services
                 .Where(d => d.ServiceType == typeof(IEmailProvider))
                 .ToList();
@@ -95,20 +95,12 @@ public class NotificationsWebAppFactory : WebApplicationFactory<Program>, IAsync
                 services.Remove(d);
             }
 
-            // Replace MassTransit with the in-memory test harness. AddMassTransit
-            // calls are additive — the AddMassTransitTestHarness call REGISTERS
-            // a fresh harness-based bus that wins because the Infrastructure-side
-            // RabbitMQ host registration is gated behind the harness defaults.
             services.AddMassTransitTestHarness(mt =>
             {
                 mt.AddConsumer<NotificationRequestConsumer>();
             });
 
             services.AddDomainEventPublisher();
-
-            // Default email provider mock — replaced per-test by PipelineTests
-            // for the failover scenario.
-            ConfigureEmailProviders?.Invoke(services);
 
             // [Authorize]-decorated endpoints need an auth scheme. Tests use
             // the no-op TestAuthenticationHandler.

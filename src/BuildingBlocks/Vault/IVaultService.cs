@@ -61,4 +61,13 @@ public interface IVaultService : IDisposable
     /// Gets information about the current Vault token.
     /// </summary>
     Task<VaultTokenInfo> GetTokenInfoAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Revokes the current Vault token via auth/token/revoke-self. Reduces
+    /// blast radius if a host is compromised after shutdown but before the
+    /// token's natural TTL expires. Safe no-op if no client has been built
+    /// yet (nothing to revoke). Failures are swallowed + logged because
+    /// shutdown is in flight and there's nothing useful to do on failure.
+    /// </summary>
+    Task RevokeTokenAsync(CancellationToken ct = default);
 }

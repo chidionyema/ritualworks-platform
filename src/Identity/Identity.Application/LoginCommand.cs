@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using Haworks.Identity.Application.DTOs;
+using Haworks.Identity.Application.Telemetry;
 using Haworks.BuildingBlocks.Common;
 using Haworks.Identity.Domain;
 using MediatR;
@@ -44,6 +45,12 @@ internal sealed class LoginCommandHandler : IRequestHandler<LoginCommand, Result
 
     public async Task<Result<AuthResponseDto>> Handle(LoginCommand request, CancellationToken cancellationToken)
     {
+        using var activity = IdentityActivities.Source.StartActivity("identity.login");
+        // Username is PII-light (not the password) and is the primary
+        // axis ops want to slice login traces by. user.id is filled in
+        // below once we resolve the user — gated on the lookup succeeding.
+        activity?.SetTag("user.username", request.Username);
+
         _logger.LogInformation("Attempting to login user: {Username}", request.Username);
 
         var correlationId = request.HttpContext.GetCorrelationId();
@@ -146,6 +153,9 @@ internal sealed class LoginCommandHandler : IRequestHandler<LoginCommand, Result
 
         // Reset failed access count on successful login
         await _userManager.ResetAccessFailedCountAsync(user);
+
+        activity?.SetTag("user.id", user.Id);
+        activity?.SetTag("login.two_factor", user.TwoFactorEnabled);
 
         _logger.LogInformation("Login successful for user: {Username}, Id: {UserId}", user.UserName, user.Id);
 

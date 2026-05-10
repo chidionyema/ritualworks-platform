@@ -43,6 +43,8 @@ public sealed class NotificationRequestConsumer(
     ITemplateSelector templateSelector,
     ITemplateRenderer templateRenderer,
     IEmailChannelGateway emailGateway,
+    ISmsChannelGateway smsGateway,
+    IPushChannelGateway pushGateway,
     ILogger<NotificationRequestConsumer> logger
 ) : IConsumer<NotificationCreatedEvent>
 {
@@ -136,18 +138,20 @@ public sealed class NotificationRequestConsumer(
                 await emailGateway.SendAsync(notification, ct);
                 break;
             case NotificationChannel.Sms:
+                await smsGateway.SendAsync(notification, ct);
+                break;
             case NotificationChannel.Push:
-                // SMS/Push gateways are owned by other tracks. Mark failed
-                // explicitly so we don't leave the aggregate stuck in Queued.
+                await pushGateway.SendAsync(notification, ct);
+                break;
+            default:
+                // Unknown channel — mark failed explicitly so the aggregate
+                // doesn't stay stuck in Queued.
                 notification.RecordAttempt(new DeliveryAttempt(
                     AttemptedAt: DateTime.UtcNow,
                     ProviderName: "n/a",
                     ProviderMessageId: null,
                     IsSuccess: false,
-                    ErrorMessage: $"channel {notification.Channel} not implemented"));
-                notification.MarkFailed($"channel {notification.Channel} not implemented");
-                break;
-            default:
+                    ErrorMessage: $"unknown channel {notification.Channel}"));
                 notification.MarkFailed($"unknown channel {notification.Channel}");
                 break;
         }

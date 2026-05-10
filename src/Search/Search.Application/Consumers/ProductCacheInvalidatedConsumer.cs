@@ -3,6 +3,7 @@ using Haworks.Search.Application.Catalog;
 using Haworks.Search.Application.Indexing;
 using Haworks.Search.Application.Interfaces;
 using Haworks.Search.Application.Models;
+using Haworks.Search.Application.Telemetry;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 
@@ -31,6 +32,12 @@ public sealed class ProductCacheInvalidatedConsumer : IConsumer<ProductCacheInva
     {
         var msg = context.Message;
         var productKey = msg.ProductId.ToString("N");
+
+        using var activity = SearchActivities.Source.StartActivity("search.index");
+        activity?.SetTag("document.id", msg.ProductId);
+        activity?.SetTag("index.name", "products");
+        activity?.SetTag("index.reason", msg.Reason);
+        activity?.SetTag("index.source_version", msg.NewVersion ?? 0);
 
         if (string.Equals(msg.Reason, "deleted", StringComparison.OrdinalIgnoreCase))
         {

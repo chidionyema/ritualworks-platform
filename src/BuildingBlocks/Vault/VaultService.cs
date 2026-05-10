@@ -73,10 +73,23 @@ public class VaultService : IVaultService
     {
         if (string.IsNullOrWhiteSpace(_vaultOptions.Address))
             throw new ArgumentNullException(nameof(_vaultOptions.Address));
-        if (string.IsNullOrWhiteSpace(_vaultOptions.RoleIdPath))
-            throw new ArgumentNullException(nameof(_vaultOptions.RoleIdPath));
-        if (string.IsNullOrWhiteSpace(_vaultOptions.SecretIdPath))
-            throw new ArgumentNullException(nameof(_vaultOptions.SecretIdPath));
+
+        // Accept either auth shape — VaultClientFactory branches on the
+        // same condition. Direct creds are preferred (staged as Fly
+        // secrets by ci-stage-vault-creds.sh); the *Path fields exist
+        // only for the legacy file-on-disk shim.
+        bool hasDirectCreds =
+            !string.IsNullOrWhiteSpace(_vaultOptions.RoleId) &&
+            !string.IsNullOrWhiteSpace(_vaultOptions.SecretId);
+        bool hasPathCreds =
+            !string.IsNullOrWhiteSpace(_vaultOptions.RoleIdPath) &&
+            !string.IsNullOrWhiteSpace(_vaultOptions.SecretIdPath);
+        if (!hasDirectCreds && !hasPathCreds)
+            throw new InvalidOperationException(
+                "Vault configuration requires either direct credentials " +
+                "(Vault:RoleId + Vault:SecretId) or file paths " +
+                "(Vault:RoleIdPath + Vault:SecretIdPath).");
+
         if (string.IsNullOrWhiteSpace(_dbOptions.Host))
             throw new ArgumentNullException(nameof(_dbOptions.Host));
     }
@@ -123,17 +136,30 @@ public class VaultService : IVaultService
         ThrowIfDisposed();
         if (_initialized) return;
 
-        _logger.LogInformation("Initializing VaultService...");
-        var start = DateTime.UtcNow;
-
-        await BuildClientAsync(ct);
-
-        _initialized = true;
-        _logger.LogInformation("Initialized in {ElapsedMs}ms", (DateTime.UtcNow - start).TotalMilliseconds);
-        _telemetry.TrackEvent("VaultServiceInitialized", new Dictionary<string, string>
+        // Serialize first-time init under _clientGate to prevent concurrent
+        // GetDatabaseCredentialsAsync/GetKvSecretAsync calls (which now
+        // self-initialize) from racing two AppRole logins.
+        await _clientGate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            ["ElapsedMs"] = (DateTime.UtcNow - start).TotalMilliseconds.ToString()
-        });
+            if (_initialized) return;
+
+            _logger.LogInformation("Initializing VaultService...");
+            var start = DateTime.UtcNow;
+
+            await BuildClientAsync(ct);
+
+            _initialized = true;
+            _logger.LogInformation("Initialized in {ElapsedMs}ms", (DateTime.UtcNow - start).TotalMilliseconds);
+            _telemetry.TrackEvent("VaultServiceInitialized", new Dictionary<string, string>
+            {
+                ["ElapsedMs"] = (DateTime.UtcNow - start).TotalMilliseconds.ToString()
+            });
+        }
+        finally
+        {
+            _clientGate.Release();
+        }
     }
 
     /// <summary>
@@ -187,7 +213,7 @@ public class VaultService : IVaultService
     public async Task<(string Username, SecureString Password)> GetDatabaseCredentialsAsync(string roleName, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-        EnsureInitialized();
+        await InitializeAsync(ct);
         ValidateRoleName(roleName);
 
         var store = _stores.GetOrAdd(roleName, _ => _credentialStoreFactory());
@@ -203,7 +229,7 @@ public class VaultService : IVaultService
     public async Task RefreshCredentials(string roleName, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-        EnsureInitialized();
+        await InitializeAsync(ct);
         ValidateRoleName(roleName);
 
         var store = _stores.GetOrAdd(roleName, _ => _credentialStoreFactory());
@@ -255,7 +281,7 @@ public class VaultService : IVaultService
     public async Task<string?> GetKvSecretAsync(string path, string key, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-        EnsureInitialized();
+        await InitializeAsync(ct);
 
         try
         {
@@ -293,7 +319,7 @@ public class VaultService : IVaultService
 
     public async Task StartCredentialRenewalAsync(CancellationToken stoppingToken)
     {
-        EnsureInitialized();
+        await InitializeAsync(stoppingToken);
         _logger.LogInformation("Starting renewal loop.");
 
         var jitterRng = new Random();
@@ -348,11 +374,6 @@ public class VaultService : IVaultService
         }
     }
 
-    private void EnsureInitialized()
-    {
-        if (!_initialized) throw new InvalidOperationException("Call InitializeAsync first.");
-    }
-
     private static void ValidateRoleName(string roleName)
     {
         if (string.IsNullOrWhiteSpace(roleName))
@@ -389,6 +410,25 @@ public class VaultService : IVaultService
         // The underlying VaultSharp client hides the actual lease ID of the auth token.
         // We synthesize a lease ID string from the address for demo purposes.
         return Task.FromResult(new VaultTokenInfo(ttlSeconds, $"{_vaultOptions.Address}_token", true));
+    }
+
+    public async Task RevokeTokenAsync(CancellationToken ct = default)
+    {
+        // Safe no-op if no client built yet — nothing to revoke.
+        if (_client is null) return;
+
+        try
+        {
+            await _client.V1.Auth.Token.RevokeSelfAsync().ConfigureAwait(false);
+            _logger.LogInformation("[VaultService] Token revoked via auth/token/revoke-self");
+        }
+        catch (Exception ex)
+        {
+            // Shutdown is in flight — nothing useful to do on failure.
+            // Token will expire naturally at its TTL anyway. Log + swallow.
+            _logger.LogWarning(ex,
+                "[VaultService] Failed to revoke token on shutdown; relying on natural TTL expiry");
+        }
     }
 
     public void Dispose()

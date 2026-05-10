@@ -2,6 +2,7 @@ using System.Text.Json;
 using MassTransit;
 using Microsoft.Extensions.Options;
 using Haworks.CheckoutOrchestrator.Application.Options;
+using Haworks.CheckoutOrchestrator.Application.Telemetry;
 using Haworks.Contracts.Catalog;
 using Haworks.Contracts.Checkout;
 using Haworks.Contracts.Payments;
@@ -138,7 +139,11 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                     }))
                 .TransitionTo(StockReservedState),
             When(StockReservationFailed)
-                .Then(ctx => ctx.Saga.FailureReason = $"StockReservationFailed: {ctx.Message.Reason}")
+                .Then(ctx =>
+                {
+                    ctx.Saga.FailureReason = $"StockReservationFailed: {ctx.Message.Reason}";
+                    EmitCompensateSpan(ctx.Saga.CorrelationId, ctx.Saga.OrderId, "stock_reservation_failed");
+                })
                 .TransitionTo(Abandoned));
 
         During(StockReservedState,
@@ -151,7 +156,11 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                 })
                 .TransitionTo(ReadyForPayment),
             When(PaymentSessionFailed)
-                .Then(ctx => ctx.Saga.FailureReason = $"PaymentSessionFailed: {ctx.Message.ErrorCode}")
+                .Then(ctx =>
+                {
+                    ctx.Saga.FailureReason = $"PaymentSessionFailed: {ctx.Message.ErrorCode}";
+                    EmitCompensateSpan(ctx.Saga.CorrelationId, ctx.Saga.OrderId, "payment_session_failed");
+                })
                 .Unschedule(PaymentExpirySchedule)
                 .PublishAsync(ctx => ctx.Init<StockReleaseRequestedEvent>(new StockReleaseRequestedEvent
                 {
@@ -162,7 +171,11 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                 }))
                 .TransitionTo(Abandoned),
             When(PaymentExpirySchedule!.Received)
-                .Then(ctx => ctx.Saga.FailureReason = "PaymentExpired (no payment session created within 15min)")
+                .Then(ctx =>
+                {
+                    ctx.Saga.FailureReason = "PaymentExpired (no payment session created within 15min)";
+                    EmitCompensateSpan(ctx.Saga.CorrelationId, ctx.Saga.OrderId, "payment_expired");
+                })
                 .PublishAsync(ctx => ctx.Init<StockReleaseRequestedEvent>(new StockReleaseRequestedEvent
                 {
                     OrderId = ctx.Saga.OrderId,
@@ -185,7 +198,11 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                 .TransitionTo(Completed)
                 .Finalize(),
             When(PaymentSessionFailed)
-                .Then(ctx => ctx.Saga.FailureReason = $"PaymentSessionFailed (mid-flight): {ctx.Message.ErrorCode}")
+                .Then(ctx =>
+                {
+                    ctx.Saga.FailureReason = $"PaymentSessionFailed (mid-flight): {ctx.Message.ErrorCode}";
+                    EmitCompensateSpan(ctx.Saga.CorrelationId, ctx.Saga.OrderId, "payment_session_failed_post_session");
+                })
                 .Unschedule(PaymentExpirySchedule)
                 .PublishAsync(ctx => ctx.Init<StockReleaseRequestedEvent>(new StockReleaseRequestedEvent
                 {
@@ -196,7 +213,11 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                 }))
                 .TransitionTo(Abandoned),
             When(PaymentExpirySchedule!.Received)
-                .Then(ctx => ctx.Saga.FailureReason = "PaymentExpired (customer abandoned payment session)")
+                .Then(ctx =>
+                {
+                    ctx.Saga.FailureReason = "PaymentExpired (customer abandoned payment session)";
+                    EmitCompensateSpan(ctx.Saga.CorrelationId, ctx.Saga.OrderId, "payment_expired");
+                })
                 .PublishAsync(ctx => ctx.Init<StockReleaseRequestedEvent>(new StockReleaseRequestedEvent
                 {
                     OrderId = ctx.Saga.OrderId,
@@ -248,6 +269,21 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
     // any terminal transition (PaymentCompleted, PaymentSessionFailed,
     // PaymentAmountMismatch).
     public Schedule<CheckoutSagaState, PaymentExpiredEvent> PaymentExpirySchedule { get; private set; } = null!;
+
+    /// <summary>
+    /// Emits a discrete <c>checkout.saga.compensate</c> span on each
+    /// compensation entry. The span is start-and-immediately-disposed —
+    /// it represents the moment the saga decided to compensate, not a
+    /// duration. Tags carry the failure reason and ids so Tempo can
+    /// correlate the span back to the order/saga across services.
+    /// </summary>
+    private static void EmitCompensateSpan(Guid sagaId, Guid orderId, string reason)
+    {
+        using var activity = CheckoutActivities.Source.StartActivity("checkout.saga.compensate");
+        activity?.SetTag("saga.id", sagaId);
+        activity?.SetTag("order.id", orderId);
+        activity?.SetTag("compensate.reason", reason);
+    }
 
     private static IReadOnlyList<StockReservationItem> DeserializeItems(string? json)
     {

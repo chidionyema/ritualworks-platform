@@ -1,6 +1,7 @@
 using MassTransit;
 using Haworks.Contracts.Orders;
 using Haworks.Contracts.Payments;
+using Haworks.Orders.Application.Telemetry;
 
 namespace Haworks.Orders.Application.Consumers;
 
@@ -32,6 +33,12 @@ public sealed class PaymentCompletedConsumer(
     public async Task Consume(ConsumeContext<PaymentCompletedEvent> context)
     {
         var evt = context.Message;
+
+        using var activity = OrdersActivities.Source.StartActivity("orders.complete");
+        activity?.SetTag("order.id", evt.OrderId);
+        activity?.SetTag("payment.id", evt.PaymentId);
+        activity?.SetTag("saga.id", evt.SagaId);
+
         logger.LogInformation(
             "Processing PaymentCompletedEvent: orderId={OrderId}, paymentId={PaymentId}, sagaId={SagaId}",
             evt.OrderId, evt.PaymentId, evt.SagaId);

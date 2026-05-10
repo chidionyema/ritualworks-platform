@@ -2,6 +2,7 @@ using System.Text.Json;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Haworks.Contracts.Payments;
+using Haworks.Payments.Application.Telemetry;
 
 namespace Haworks.Payments.Application.Consumers;
 
@@ -32,6 +33,12 @@ public sealed class PaymentWebhookValidatedConsumer(
     public async Task Consume(ConsumeContext<PaymentWebhookValidatedEvent> context)
     {
         var evt = context.Message;
+
+        using var activity = PaymentsActivities.Source.StartActivity("payments.webhook.handle");
+        activity?.SetTag("payment.provider", evt.Provider);
+        activity?.SetTag("payment.event_type", evt.EventType);
+        activity?.SetTag("payment.provider_event_id", evt.ProviderEventId);
+
         logger.LogInformation(
             "Processing webhook: provider={Provider}, eventType={EventType}, providerEventId={ProviderEventId}",
             evt.Provider, evt.EventType, evt.ProviderEventId);
