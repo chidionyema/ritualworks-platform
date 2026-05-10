@@ -11,7 +11,9 @@ BASE_BRANCH=feat/{{FEATURE}}-service
 BRIEF_FILE=docs/agent-briefs/{{FEATURE}}/parallel-tracks.md
 TRACK_PREFIX=feat/{{FEATURE}}-
 TRACKS=(T1 T2 T3 T4)
-WORKTREE_PARENT=/tmp
+# Gemini --yolo workspace sandbox blocks /tmp writes. Use ~/.gemini/tmp/<project>
+# (allowed by the sandbox) so agents can create their per-track worktrees.
+WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/ritualworks-platform
 ```
 
 > **Prerequisite:** any L0 scaffold (interfaces, project skeleton, DI orchestrator) MUST be merged into `$BASE_BRANCH` before launching. Tracks can only run in parallel if the contracts they depend on are already stable.

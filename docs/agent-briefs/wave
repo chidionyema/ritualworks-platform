@@ -392,9 +392,9 @@ A. Top of file: a fenced code block declaring all wave parameters. THE PARAMETER
    BRIEF_FILE=docs/agent-briefs/${feature}/parallel-tracks.md
    TRACK_PREFIX=feat/${feature}-
    TRACKS=(T1 T2 T3 T4)
-   WORKTREE_PARENT=/tmp
+   WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/ritualworks-platform
    \`\`\`
-   The REPO and GH_REPO above are the canonical project paths. Even if you read this prompt from a different worktree (e.g. rw-audit), use the values above verbatim.
+   The REPO and GH_REPO above are the canonical project paths. Even if you read this prompt from a different worktree (e.g. rw-audit), use the values above verbatim. WORKTREE_PARENT must NOT be /tmp — gemini's --yolo sandbox blocks writes there; the path above is sandbox-allowed.
 
 B. Three required H2 sections (verbatim headings):
    ## Universal rules
