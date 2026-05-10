@@ -119,22 +119,27 @@ apply_deploy_wiring() {
     echo "  + declared ${feature}Db = postgres.AddDatabase(\"${feature}\")"
   fi
 
-  # 1b. Aspire AppHost — insert service registration block (with DB + rabbitmq refs)
-  # before the bff-web anchor.
+  # 1b. Aspire AppHost — insert service registration block (with DB + rabbitmq +
+  # Vault env vars) before the bff-web anchor. The Vault env vars match the
+  # canonical pattern used by audit/catalog/etc; RoleIdPath/SecretIdPath
+  # helpers are defined at the top of Program.cs.
   if [ -f "$apphost" ] && ! grep -q "Projects.${PascalFeature}_Api" "$apphost"; then
     local marker="// --- bff-web -"
     if grep -q "$marker" "$apphost"; then
       local block
-      block="// --- ${feature}-svc (auto-added by wave) ----------------------------------\nvar ${feature} = AddJwksConfig(builder.AddProject<Projects.${PascalFeature}_Api>(\"${feature}-svc\")\n    .WaitFor(vault)\n    .WaitFor(${feature}Db)\n    .WithReference(${feature}Db)\n    .WaitFor(rabbitmq)\n    .WithReference(rabbitmq), identity);\n\n"
+      block="// --- ${feature}-svc (auto-added by wave) ----------------------------------\nvar ${feature} = AddJwksConfig(builder.AddProject<Projects.${PascalFeature}_Api>(\"${feature}-svc\")\n    .WaitFor(vault)\n    .WaitFor(${feature}Db)\n    .WithReference(${feature}Db)\n    .WaitFor(rabbitmq)\n    .WithReference(rabbitmq)\n    .WithEnvironment(\"Vault__Enabled\",      \"false\")\n    .WithEnvironment(\"Vault__Address\",      vault.GetEndpoint(\"http\"))\n    .WithEnvironment(\"Vault__RoleIdPath\",   RoleIdPath(\"${feature}\"))\n    .WithEnvironment(\"Vault__SecretIdPath\", SecretIdPath(\"${feature}\")), identity);\n\n"
       awk -v marker="$marker" -v block="$block" '
         $0 ~ marker && !done { printf "%s", block; done=1 }
         { print }
       ' "$apphost" > "$apphost.tmp" && mv "$apphost.tmp" "$apphost"
-      echo "  + registered ${feature}-svc in deploy/aspire/Program.cs"
+      echo "  + registered ${feature}-svc with Vault wiring in deploy/aspire/Program.cs"
     fi
   fi
 
-  # 2. init-postgres.sql — add CREATE DATABASE so the service has a backing DB locally
+  # 2. init-postgres.sql — three insertions: CREATE DATABASE, CREATE ROLE owner,
+  # ALTER DATABASE OWNER, GRANT ALL. These match the Vault dynamic-creds
+  # pattern: each service has a NOLOGIN owner role; Vault issues ephemeral
+  # users that join the role to acquire permissions.
   if [ -f "$initsql" ] && ! grep -q "CREATE DATABASE ${feature}" "$initsql"; then
     awk -v feat="${feature}" '
       /CREATE DATABASE [a-z]+/ { last=NR }
@@ -149,6 +154,48 @@ apply_deploy_wiring() {
     echo "  + added CREATE DATABASE ${feature} to init-postgres.sql"
   fi
 
+  if [ -f "$initsql" ] && ! grep -q "CREATE ROLE ${feature}_owner" "$initsql"; then
+    awk -v feat="${feature}" '
+      /CREATE ROLE [a-z]+_owner/ { last=NR }
+      { lines[NR]=$0 }
+      END {
+        for (i=1; i<=NR; i++) {
+          print lines[i]
+          if (i==last) printf "SELECT '\''CREATE ROLE %s_owner NOLOGIN'\'' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '\''%s_owner'\'')\\gexec\n", feat, feat
+        }
+      }
+    ' "$initsql" > "$initsql.tmp" && mv "$initsql.tmp" "$initsql"
+    echo "  + added CREATE ROLE ${feature}_owner to init-postgres.sql"
+  fi
+
+  if [ -f "$initsql" ] && ! grep -q "ALTER DATABASE ${feature} OWNER" "$initsql"; then
+    awk -v feat="${feature}" '
+      /ALTER DATABASE [a-z]+ OWNER/ { last=NR }
+      { lines[NR]=$0 }
+      END {
+        for (i=1; i<=NR; i++) {
+          print lines[i]
+          if (i==last) printf "ALTER DATABASE %s OWNER TO %s_owner;\n", feat, feat
+        }
+      }
+    ' "$initsql" > "$initsql.tmp" && mv "$initsql.tmp" "$initsql"
+    echo "  + added ALTER DATABASE ${feature} OWNER to init-postgres.sql"
+  fi
+
+  if [ -f "$initsql" ] && ! grep -q "GRANT ALL PRIVILEGES ON DATABASE ${feature} " "$initsql"; then
+    awk -v feat="${feature}" '
+      /GRANT ALL PRIVILEGES ON DATABASE [a-z]+/ { last=NR }
+      { lines[NR]=$0 }
+      END {
+        for (i=1; i<=NR; i++) {
+          print lines[i]
+          if (i==last) printf "GRANT ALL PRIVILEGES ON DATABASE %s TO %s_owner;\n", feat, feat
+        }
+      }
+    ' "$initsql" > "$initsql.tmp" && mv "$initsql.tmp" "$initsql"
+    echo "  + added GRANT ALL PRIVILEGES ${feature} to init-postgres.sql"
+  fi
+
   # 3. bootstrap.sh INTERNAL_APPS — add ritualworks-<feature> if not present
   if [ -f "$bootstrap" ] && ! grep -q "ritualworks-${feature}" "$bootstrap"; then
     awk -v app="  ritualworks-${feature}" '
@@ -158,6 +205,86 @@ apply_deploy_wiring() {
     ' "$bootstrap" > "$bootstrap.tmp" && mv "$bootstrap.tmp" "$bootstrap"
     chmod +x "$bootstrap"
     echo "  + added ritualworks-${feature} to deploy/fly/bootstrap.sh INTERNAL_APPS"
+  fi
+
+  # 4. .github/workflows/deploy.yml — four insertions (idempotent):
+  #    a) changes-job outputs:   <feature>: ${{ steps.filter.outputs.<feature> }}
+  #    b) paths-filter filters:  <feature>: ['src/<F>/**', 'fly.<feature>.toml']
+  #    c) plan-job env:          C_<FEATURE>: ${{ needs.changes.outputs.<feature> }}
+  #    d) plan-job add_if line:  add_if <feature> "$C_<FEATURE>" "$C_SHARED"
+  apply_ci_wiring "$repo_root" "$PascalFeature" "$feature"
+}
+
+# Insert deploy.yml's four CI-matrix wiring points for a new service.
+apply_ci_wiring() {
+  local repo_root=$1 PascalFeature=$2 feature=$3
+  local deploy_yml="$repo_root/.github/workflows/deploy.yml"
+  [ -f "$deploy_yml" ] || return 0
+  local FEAT_UPPER
+  FEAT_UPPER=$(echo "$feature" | tr '[:lower:]-' '[:upper:]_')
+
+  # a) changes-job outputs
+  if ! grep -qE "^[ ]+${feature}:[ ]+\\\$\{\{ steps\.filter\.outputs\.${feature} \}\}" "$deploy_yml"; then
+    awk -v feat="$feature" '
+      /^[ ]+[a-z_]+:[ ]+\$\{\{ steps\.filter\.outputs\.[a-z_]+ \}\}/ { last=NR }
+      { lines[NR]=$0 }
+      END {
+        for (i=1; i<=NR; i++) {
+          print lines[i]
+          if (i==last) printf "      %s: ${{ steps.filter.outputs.%s }}\n", feat, feat
+        }
+      }
+    ' "$deploy_yml" > "$deploy_yml.tmp" && mv "$deploy_yml.tmp" "$deploy_yml"
+    echo "  + deploy.yml: registered '${feature}' in changes-job outputs"
+  fi
+
+  # b) paths-filter filters block — add '<feature>:' with src/* and fly.toml triggers
+  if ! grep -qE "^[ ]{12}${feature}:" "$deploy_yml"; then
+    awk -v feat="$feature" -v PF="$PascalFeature" '
+      /^[ ]{12}[a-z_]+:$/ { last=NR }
+      { lines[NR]=$0 }
+      END {
+        for (i=1; i<=NR; i++) {
+          print lines[i]
+          if (i==last) {
+            printf "            %s:\n", feat
+            printf "              - '"'"'src/%s/**'"'"'\n", PF
+            printf "              - '"'"'fly.%s.toml'"'"'\n", feat
+          }
+        }
+      }
+    ' "$deploy_yml" > "$deploy_yml.tmp" && mv "$deploy_yml.tmp" "$deploy_yml"
+    echo "  + deploy.yml: added paths-filter for '${feature}' (src/${PascalFeature}/** + fly.${feature}.toml)"
+  fi
+
+  # c) plan-job env — C_<FEATURE>
+  if ! grep -qE "^[ ]+C_${FEAT_UPPER}:" "$deploy_yml"; then
+    awk -v feat="$feature" -v UF="$FEAT_UPPER" '
+      /^[ ]+C_[A-Z_]+:[ ]+\$\{\{ needs\.changes\.outputs\.[a-z_]+ \}\}/ { last=NR }
+      { lines[NR]=$0 }
+      END {
+        for (i=1; i<=NR; i++) {
+          print lines[i]
+          if (i==last) printf "      C_%s: ${{ needs.changes.outputs.%s }}\n", UF, feat
+        }
+      }
+    ' "$deploy_yml" > "$deploy_yml.tmp" && mv "$deploy_yml.tmp" "$deploy_yml"
+    echo "  + deploy.yml: added C_${FEAT_UPPER} env binding"
+  fi
+
+  # d) plan-job add_if line
+  if ! grep -qE "^[ ]+add_if ${feature}[ ]" "$deploy_yml"; then
+    awk -v feat="$feature" -v UF="$FEAT_UPPER" '
+      /^[ ]+add_if [a-z_]+[ ]+\"\$C_[A-Z_]+\"/ { last=NR }
+      { lines[NR]=$0 }
+      END {
+        for (i=1; i<=NR; i++) {
+          print lines[i]
+          if (i==last) printf "          add_if %-12s \"$C_%s\" \"$C_SHARED\"\n", feat, UF
+        }
+      }
+    ' "$deploy_yml" > "$deploy_yml.tmp" && mv "$deploy_yml.tmp" "$deploy_yml"
+    echo "  + deploy.yml: added 'add_if ${feature} ...' to plan job"
   fi
 }
 
@@ -680,6 +807,7 @@ DESIGN
               "deploy/aspire/Program.cs" \
               "deploy/aspire/init-postgres.sql" \
               "deploy/fly/bootstrap.sh" \
+              ".github/workflows/deploy.yml" \
               *.sln 2>/dev/null || true
       git commit -m "L0(${feature}): scaffold + parallel-tracks brief
 
