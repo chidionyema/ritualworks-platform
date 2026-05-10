@@ -4,14 +4,13 @@ using MassTransit;
 namespace Haworks.Audit.Application.Capture;
 
 /// <summary>
-/// Static seam between L0's <c>Program.cs</c> and L1.B.
-///
-/// Registers <see cref="AuditConsumer{T}"/> for every <see cref="IDomainEvent"/>
-/// via reflection over <c>Haworks.Contracts</c>.
+/// Implementation of <see cref="IAuditConsumerRegistry"/> that registers
+/// <see cref="AuditConsumer{T}"/> for every <see cref="IDomainEvent"/>
+/// found in the contracts assembly.
 /// </summary>
-public static class AuditMassTransit
+public sealed class AuditConsumerRegistry : IAuditConsumerRegistry
 {
-    public static void RegisterConsumers(IBusRegistrationConfigurator cfg)
+    public void RegisterConsumers(IBusRegistrationConfigurator cfg)
     {
         var eventTypes = typeof(IDomainEvent).Assembly.GetTypes()
             .Where(t => t.IsClass && !t.IsAbstract && typeof(IDomainEvent).IsAssignableFrom(t));
