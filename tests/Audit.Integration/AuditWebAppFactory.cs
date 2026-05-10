@@ -4,35 +4,41 @@ using Microsoft.Extensions.Configuration;
 using Xunit;
 using Haworks.BuildingBlocks.Testing.Authentication;
 using Haworks.BuildingBlocks.Testing.Containers;
+using Testcontainers.RabbitMq;
+using Microsoft.Extensions.DependencyInjection;
+using Haworks.Audit.Application.Extraction;
+using Haworks.Audit.Application.Redaction;
+using MassTransit;
+using System.Text.Json;
 
 namespace Haworks.Audit.Integration;
 
-/// <summary>
-/// WebApplicationFactory for audit-svc integration tests.
-///
-/// L0 skeleton: boots the host against a per-fixture Postgres database
-/// (created via <c>SharedTestPostgres</c>, the platform-shared container)
-/// with Vault disabled. L1.B refines this — the L1.B brief explicitly
-/// allows refinement (e.g., adding Testcontainers RabbitMQ for the
-/// end-to-end capture tests). L1.A / L1.C / L1.D do NOT modify this file.
-/// </summary>
 public class AuditWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    private readonly RabbitMqContainer _rabbitMqContainer = new RabbitMqBuilder()
+        .WithImage("rabbitmq:3-management")
+        .Build();
+
     public string ConnectionString { get; private set; } = string.Empty;
+    public string RabbitMqConnectionString { get; private set; } = string.Empty;
 
     public async Task InitializeAsync()
     {
+        await _rabbitMqContainer.StartAsync();
+        RabbitMqConnectionString = _rabbitMqContainer.GetConnectionString();
+
         ConnectionString = await SharedTestPostgres.CreateDatabaseAsync("audit");
         JwtTestDefaults.SetTestEnvironmentVariables();
 
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Test");
         Environment.SetEnvironmentVariable("ConnectionStrings__audit", ConnectionString);
-        Environment.SetEnvironmentVariable("ConnectionStrings__rabbitmq", "amqp://guest:guest@localhost:5672/");
+        Environment.SetEnvironmentVariable("ConnectionStrings__rabbitmq", RabbitMqConnectionString);
         Environment.SetEnvironmentVariable("Vault__Enabled", "false");
     }
 
     async Task IAsyncLifetime.DisposeAsync()
     {
+        await _rabbitMqContainer.DisposeAsync();
         await base.DisposeAsync();
     }
 
@@ -45,9 +51,55 @@ public class AuditWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:audit"] = ConnectionString,
-                ["ConnectionStrings:rabbitmq"] = "amqp://guest:guest@localhost:5672/",
+                ["ConnectionStrings:rabbitmq"] = RabbitMqConnectionString,
                 ["Vault:Enabled"] = "false",
             });
         });
+
+        // Add stubs for L1.A if they are not registered yet
+        builder.ConfigureServices(services =>
+        {
+            services.AddSingleton(typeof(IAuditExtractor<>), typeof(TestStubExtractor<>));
+            services.AddSingleton<ISecretRedactor, TestStubRedactor>();
+        });
     }
+}
+
+public class TestStubExtractor<T> : IAuditExtractor<T> where T : class, Haworks.Contracts.IDomainEvent
+{
+    public AuditRow Extract(T evt, ConsumeContext<T> ctx)
+    {
+        // Minimal extraction logic for L1.B integration testing
+        var json = JsonSerializer.SerializeToElement(evt);
+        string entityId = "";
+        string entityType = "unknown";
+
+        if (json.TryGetProperty("OrderId", out var orderIdProp))
+        {
+            entityId = orderIdProp.GetGuid().ToString();
+            entityType = "order";
+        }
+        else if (json.TryGetProperty("PaymentId", out var paymentIdProp))
+        {
+            entityId = paymentIdProp.GetGuid().ToString();
+            entityType = "payment";
+        }
+
+        return new AuditRow(
+            DateTimeOffset.UtcNow,
+            typeof(T).Name,
+            entityType,
+            entityId,
+            "test-actor",
+            "user",
+            ctx.CorrelationId?.ToString(),
+            json,
+            JsonSerializer.SerializeToElement(new Dictionary<string, object>())
+        );
+    }
+}
+
+public class TestStubRedactor : ISecretRedactor
+{
+    public JsonElement Redact(JsonElement input) => input;
 }

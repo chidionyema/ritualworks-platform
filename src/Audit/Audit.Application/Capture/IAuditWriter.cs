@@ -1,6 +1,6 @@
 using Haworks.Audit.Application.Extraction;
 
-namespace Haworks.Audit.Infrastructure.Persistence;
+namespace Haworks.Audit.Application.Capture;
 
 /// <summary>
 /// Append-only writer for <c>audit_events</c>. L1.B implements this with
