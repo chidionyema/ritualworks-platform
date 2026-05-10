@@ -38,6 +38,7 @@ var paymentsDb = postgres.AddDatabase("payments");
 var contentDb  = postgres.AddDatabase("content");
 var checkoutDb = postgres.AddDatabase("checkout");
 var notificationsDb = postgres.AddDatabase("notifications");
+var auditDb         = postgres.AddDatabase("audit");
 
 var redis = builder.AddRedis("redis")
     .WithLifetime(ContainerLifetime.Persistent)
@@ -284,6 +285,21 @@ var notifications = AddJwksConfig(builder.AddProject<Projects.Notifications_Api>
     .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
     .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("notifications"))
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("notifications"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
+
+// --- audit-svc -------------------------------------------------------------
+var audit = AddJwksConfig(builder.AddProject<Projects.Audit_Api>("audit-svc")
+    .WaitFor(vault)
+    .WaitFor(auditDb)
+    .WithReference(auditDb)
+    .WaitFor(rabbitmq)
+    .WithReference(rabbitmq)
+    .WaitFor(identity)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("audit"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("audit"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
 // --- bff-web ---------------------------------------------------------------

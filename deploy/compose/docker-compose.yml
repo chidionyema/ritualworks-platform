@@ -458,6 +458,30 @@ services:
       - Authentication__Jwks__Issuer=http://localhost
       - Authentication__Jwks__Audience=ritualworks-dev
 
+  audit-svc:
+    build:
+      context: ../..
+      dockerfile: src/Audit/Audit.Api/Dockerfile
+    container_name: rw-audit-svc
+    depends_on:
+      vault-seed:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__audit=Host=postgres;Port=5432;Database=audit;Username=postgres;Password=postgres
+      - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
+      # audit-svc has no Vault-backed secrets at L0 — pure listener.
+      # If L1.D's S3 export needs credentials, switch Vault__Enabled to
+      # true and follow the orders-svc pattern.
+      - Vault__Enabled=false
+      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
+      - Authentication__Jwks__Issuer=http://localhost
+      - Authentication__Jwks__Audience=ritualworks-dev
+
   bff-web:
     build:
       context: ../..

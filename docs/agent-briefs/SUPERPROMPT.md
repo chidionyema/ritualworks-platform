@@ -342,15 +342,49 @@ git -C "$REPO" fetch origin --prune
 CLAIMED=""
 for t in "${TRACKS[@]}"; do
     BRANCH="${TRACK_PREFIX}${t}"
-    # In-flight on origin? skip
-    if git -C "$REPO" ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then continue; fi
-    # Already merged into THIS BASE_BRANCH? skip
-    # (note: --base "$BASE_BRANCH" — without it we'd skip a track whose branch
-    # name happens to match a merged PR against a different base, which is
-    # the bug that made agents exit early when reusing prior wave's branch names)
+
+    # Already merged into THIS BASE_BRANCH? skip permanently.
+    # (--base "$BASE_BRANCH" prevents collisions with merged PRs on other bases —
+    # the bug that made agents exit early when reusing prior waves' branch names.)
     if gh pr list -R "$GH_REPO" --state merged --base "$BASE_BRANCH" --head "$BRANCH" --json number --jq '.[].number' | grep -q .; then continue; fi
-    # Atomic claim: race-safe push of a branch ref pointing at origin/$BASE_BRANCH
+
+    # Branch already on origin? Distinguish live claims from zombies.
+    # "alive"  = ≥1 commit beyond base (the sentinel below + real work).
+    # "zombie" = 0 commits beyond base — agent died before its sentinel push.
+    # Race-window: a freshly-claimed branch sits at 0 commits for the few seconds
+    # between the atomic-claim push and the sentinel push. Don't false-reap a live
+    # agent in that window — re-check after a generous delay before declaring dead.
+    # (Also protects legacy/old-script agents that never push a sentinel until their
+    # first real commit lands; they get the full ZOMBIE_CONFIRM_SECS to push.)
+    if git -C "$REPO" ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+        git -C "$REPO" fetch origin "$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null || true
+        ahead=$(git -C "$REPO" rev-list --count "origin/${BASE_BRANCH}..origin/${BRANCH}" 2>/dev/null || echo "?")
+        if [ "$ahead" = "0" ]; then
+            ZOMBIE_CONFIRM_SECS="${ZOMBIE_CONFIRM_SECS:-90}"
+            echo "[?] $BRANCH at 0 commits — could be mid-claim. Confirming dead in ${ZOMBIE_CONFIRM_SECS}s…"
+            sleep "$ZOMBIE_CONFIRM_SECS"
+            git -C "$REPO" fetch origin "$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null || true
+            ahead=$(git -C "$REPO" rev-list --count "origin/${BASE_BRANCH}..origin/${BRANCH}" 2>/dev/null || echo "?")
+            if [ "$ahead" = "0" ]; then
+                echo "[reclaim] $BRANCH still at 0 commits after ${ZOMBIE_CONFIRM_SECS}s — really dead, deleting"
+                git -C "$REPO" push origin --delete "$BRANCH" 2>/dev/null || continue
+            else
+                echo "[skip] $BRANCH advanced during confirm window — alive after all"
+                continue
+            fi
+        else
+            continue
+        fi
+    fi
+
+    # Atomic claim: race-safe push of a branch ref pointing at origin/$BASE_BRANCH.
+    # First push wins; concurrent loser falls through to the next track id.
     if git -C "$REPO" push origin "refs/remotes/origin/${BASE_BRANCH}:refs/heads/${BRANCH}" 2>/dev/null; then
+        # Refresh local tracking ref so the worktree forks from the right commit
+        # and `git status` doesn't report "upstream is gone". Required because the
+        # `refs/remotes/origin/$BASE:refs/heads/$BRANCH` push above does NOT update
+        # the local `refs/remotes/origin/$BRANCH` ref.
+        git -C "$REPO" fetch origin "$BRANCH:refs/remotes/origin/$BRANCH"
         CLAIMED=$t
         break
     fi
@@ -365,7 +399,18 @@ fi
 WT="${WORKTREE_PARENT}/$(basename "$TRACK_PREFIX")${CLAIMED}"
 git -C "$REPO" worktree remove --force "$WT" 2>/dev/null || true
 rm -rf "$WT"
-git -C "$REPO" worktree add "$WT" "${TRACK_PREFIX}${CLAIMED}"
+# Drop any stale local branch from a prior failed run before re-creating
+git -C "$REPO" branch -D "${TRACK_PREFIX}${CLAIMED}" 2>/dev/null || true
+# Create worktree on a fresh local branch tracking origin/$BRANCH explicitly
+git -C "$REPO" worktree add -b "${TRACK_PREFIX}${CLAIMED}" --track "$WT" "origin/${TRACK_PREFIX}${CLAIMED}"
+
+# Sentinel commit — proves this claim is alive to future waves' zombie detector.
+# Without it, if the agent dies before its first real commit, the branch sits at
+# 0 commits beyond base and the next wave will (correctly) reclaim it. The sentinel
+# embeds host+pid so an operator can see who claimed when from `git log`.
+git -C "$WT" commit --allow-empty -m "claim(${CLAIMED}): pid=$$ host=$(hostname) ts=$(date -u +%FT%TZ)"
+git -C "$WT" push origin "${TRACK_PREFIX}${CLAIMED}"
+
 echo "[ready] TRACK=$CLAIMED BRANCH=${TRACK_PREFIX}${CLAIMED} WORKTREE=$WT"
 ```
 
