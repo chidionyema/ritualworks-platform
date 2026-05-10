@@ -27,13 +27,13 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identity.Api", "src\Identit
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{8D0D9A2A-1FBD-4D8E-A96F-A417C12FC09F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identity.Architecture", "tests\Identity.Architecture\Identity.Architecture.csproj", "{494F5A1B-6E31-4F79-9DE2-24532CDDDA7F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identity.Architecture", "tests\Identity\Identity.Architecture\Identity.Architecture.csproj", "{494F5A1B-6E31-4F79-9DE2-24532CDDDA7F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identity.Integration", "tests\Identity.Integration\Identity.Integration.csproj", "{2C4BD481-D58C-4A5D-9BF3-ED2C99E5BAB1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identity.Integration", "tests\Identity\Identity.Integration\Identity.Integration.csproj", "{2C4BD481-D58C-4A5D-9BF3-ED2C99E5BAB1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identity.Contract", "tests\Identity.Contract\Identity.Contract.csproj", "{B125B6B1-18B1-4382-9274-A6C411A66BFB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identity.Contract", "tests\Identity\Identity.Contract\Identity.Contract.csproj", "{B125B6B1-18B1-4382-9274-A6C411A66BFB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identity.Unit", "tests\Identity.Unit\Identity.Unit.csproj", "{A051C8FF-3B82-41DE-9D15-0CBCE0FE02C4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identity.Unit", "tests\Identity\Identity.Unit\Identity.Unit.csproj", "{A051C8FF-3B82-41DE-9D15-0CBCE0FE02C4}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Catalog", "Catalog", "{6C0F790A-76BE-4369-870D-2DB939F0F210}"
 EndProject
@@ -55,45 +55,45 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Content.Infrastructure", "s
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Content.Api", "src\Content\Content.Api\Content.Api.csproj", "{E499001D-E043-4D49-BF0E-69DC8728EC66}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Content.Unit", "tests\Content.Unit\Content.Unit.csproj", "{713501B9-F283-4801-B99E-8AA175B8802F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Content.Unit", "tests\Content\Content.Unit\Content.Unit.csproj", "{713501B9-F283-4801-B99E-8AA175B8802F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Content.Integration", "tests\Content.Integration\Content.Integration.csproj", "{4EE83C1D-7745-47FE-8D85-A520075FA254}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Content.Integration", "tests\Content\Content.Integration\Content.Integration.csproj", "{4EE83C1D-7745-47FE-8D85-A520075FA254}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Catalog.Architecture", "tests\Catalog.Architecture\Catalog.Architecture.csproj", "{A22C0E74-7398-400E-AB89-B68B66073C1E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Catalog.Architecture", "tests\Catalog\Catalog.Architecture\Catalog.Architecture.csproj", "{A22C0E74-7398-400E-AB89-B68B66073C1E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Catalog.Integration", "tests\Catalog.Integration\Catalog.Integration.csproj", "{1DC4BD63-7295-4C9D-806C-079A274439B5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Catalog.Integration", "tests\Catalog\Catalog.Integration\Catalog.Integration.csproj", "{1DC4BD63-7295-4C9D-806C-079A274439B5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Catalog.Contract", "tests\Catalog.Contract\Catalog.Contract.csproj", "{82E26126-6433-43F6-B5E7-C8737D114D95}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Catalog.Contract", "tests\Catalog\Catalog.Contract\Catalog.Contract.csproj", "{82E26126-6433-43F6-B5E7-C8737D114D95}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Catalog.Unit", "tests\Catalog.Unit\Catalog.Unit.csproj", "{825153E5-65AD-4566-BDA3-6588610988A2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Catalog.Unit", "tests\Catalog\Catalog.Unit\Catalog.Unit.csproj", "{825153E5-65AD-4566-BDA3-6588610988A2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Payments.Architecture", "tests\Payments.Architecture\Payments.Architecture.csproj", "{3377BB9F-2D1B-47E4-BEFC-4B3ABA93682D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Payments.Architecture", "tests\Payments\Payments.Architecture\Payments.Architecture.csproj", "{3377BB9F-2D1B-47E4-BEFC-4B3ABA93682D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Payments.Unit", "tests\Payments.Unit\Payments.Unit.csproj", "{2AD55CA0-5B4C-4587-A731-2B2F02CFBB53}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Payments.Unit", "tests\Payments\Payments.Unit\Payments.Unit.csproj", "{2AD55CA0-5B4C-4587-A731-2B2F02CFBB53}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Payments.Integration", "tests\Payments.Integration\Payments.Integration.csproj", "{FF0C7BDD-2CDB-4D47-808E-7228169D30AB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Payments.Integration", "tests\Payments\Payments.Integration\Payments.Integration.csproj", "{FF0C7BDD-2CDB-4D47-808E-7228169D30AB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Payments.Contract", "tests\Payments.Contract\Payments.Contract.csproj", "{94F40E80-39BE-4E11-813D-9152D1C5BA67}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Payments.Contract", "tests\Payments\Payments.Contract\Payments.Contract.csproj", "{94F40E80-39BE-4E11-813D-9152D1C5BA67}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Orders.Architecture", "tests\Orders.Architecture\Orders.Architecture.csproj", "{34FBAC75-2826-4FDF-B6F0-0A5820A77B36}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Orders.Architecture", "tests\Orders\Orders.Architecture\Orders.Architecture.csproj", "{34FBAC75-2826-4FDF-B6F0-0A5820A77B36}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Orders.Unit", "tests\Orders.Unit\Orders.Unit.csproj", "{18174C54-6836-4E42-B62F-09BB004A5DBA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Orders.Unit", "tests\Orders\Orders.Unit\Orders.Unit.csproj", "{18174C54-6836-4E42-B62F-09BB004A5DBA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Orders.Contract", "tests\Orders.Contract\Orders.Contract.csproj", "{4F996DCF-3FB5-4B82-B9AC-38AB23482A10}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Orders.Contract", "tests\Orders\Orders.Contract\Orders.Contract.csproj", "{4F996DCF-3FB5-4B82-B9AC-38AB23482A10}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Orders.Integration", "tests\Orders.Integration\Orders.Integration.csproj", "{B6887D17-2A27-45E7-8EFF-B8D80E9CC7B9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Orders.Integration", "tests\Orders\Orders.Integration\Orders.Integration.csproj", "{B6887D17-2A27-45E7-8EFF-B8D80E9CC7B9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheckoutOrchestrator.Architecture", "tests\CheckoutOrchestrator.Architecture\CheckoutOrchestrator.Architecture.csproj", "{F62E2F21-697D-4E12-9300-4A5D16BCAF09}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheckoutOrchestrator.Architecture", "tests\CheckoutOrchestrator\CheckoutOrchestrator.Architecture\CheckoutOrchestrator.Architecture.csproj", "{F62E2F21-697D-4E12-9300-4A5D16BCAF09}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheckoutOrchestrator.Integration", "tests\CheckoutOrchestrator.Integration\CheckoutOrchestrator.Integration.csproj", "{278ACF02-ED65-406C-97F5-047441B4193C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheckoutOrchestrator.Integration", "tests\CheckoutOrchestrator\CheckoutOrchestrator.Integration\CheckoutOrchestrator.Integration.csproj", "{278ACF02-ED65-406C-97F5-047441B4193C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BffWeb.Architecture", "tests\BffWeb.Architecture\BffWeb.Architecture.csproj", "{32509012-99E9-4CD0-A600-0C373BDE1004}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BffWeb.Architecture", "tests\BffWeb\BffWeb.Architecture\BffWeb.Architecture.csproj", "{32509012-99E9-4CD0-A600-0C373BDE1004}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BffWeb.Integration", "tests\BffWeb.Integration\BffWeb.Integration.csproj", "{4D0DF63A-3370-436E-AAD4-2A6F381B1F4E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BffWeb.Integration", "tests\BffWeb\BffWeb.Integration\BffWeb.Integration.csproj", "{4D0DF63A-3370-436E-AAD4-2A6F381B1F4E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BuildingBlocks.Unit", "tests\BuildingBlocks.Unit\BuildingBlocks.Unit.csproj", "{FE2DD535-BD0F-4CC4-BCC4-3DAC8925D461}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BuildingBlocks.Unit", "tests\BuildingBlocks\BuildingBlocks.Unit\BuildingBlocks.Unit.csproj", "{FE2DD535-BD0F-4CC4-BCC4-3DAC8925D461}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheckoutOrchestrator.Unit", "tests\CheckoutOrchestrator.Unit\CheckoutOrchestrator.Unit.csproj", "{E0DFB603-17F1-4DE8-9D6B-D50CE4E2430F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheckoutOrchestrator.Unit", "tests\CheckoutOrchestrator\CheckoutOrchestrator.Unit\CheckoutOrchestrator.Unit.csproj", "{E0DFB603-17F1-4DE8-9D6B-D50CE4E2430F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Smoke", "tests\Smoke\Smoke.csproj", "{03E9B723-3DA2-48D9-94CA-8A5F916BD5D9}"
 EndProject
@@ -109,11 +109,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Search.Infrastructure", "sr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Search.Api", "src\Search\Search.Api\Search.Api.csproj", "{4CB8C946-48D0-45F8-A6EE-700BABD790DD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Search.Unit", "tests\Search.Unit\Search.Unit.csproj", "{27701986-1ACC-406D-A388-2D2489D4277A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Search.Unit", "tests\Search\Search.Unit\Search.Unit.csproj", "{27701986-1ACC-406D-A388-2D2489D4277A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Search.Integration", "tests\Search.Integration\Search.Integration.csproj", "{99343C24-9C31-4058-95D7-C0DCE811BA31}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Search.Integration", "tests\Search\Search.Integration\Search.Integration.csproj", "{99343C24-9C31-4058-95D7-C0DCE811BA31}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BuildingBlocks.Tests", "tests\BuildingBlocks.Tests\BuildingBlocks.Tests.csproj", "{873FA0EA-7950-40A5-BAE5-2B409250342B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BuildingBlocks.Tests", "tests\BuildingBlocks\BuildingBlocks.Tests\BuildingBlocks.Tests.csproj", "{873FA0EA-7950-40A5-BAE5-2B409250342B}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Notifications", "Notifications", "{473D8356-6777-4422-B275-549249C59D27}"
 EndProject
@@ -125,9 +125,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Notifications.Infrastructur
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Notifications.Api", "src\Notifications\Notifications.Api\Notifications.Api.csproj", "{88C231F2-F474-4E97-B4AD-C19322C7076F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Notifications.Unit", "tests\Notifications.Unit\Notifications.Unit.csproj", "{D5941FD0-E5E1-42C5-AA49-505578D3668B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Notifications.Unit", "tests\Notifications\Notifications.Unit\Notifications.Unit.csproj", "{D5941FD0-E5E1-42C5-AA49-505578D3668B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Notifications.Integration", "tests\Notifications.Integration\Notifications.Integration.csproj", "{DA9DEB89-FB80-42D8-B128-E828901E8CD7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Notifications.Integration", "tests\Notifications\Notifications.Integration\Notifications.Integration.csproj", "{DA9DEB89-FB80-42D8-B128-E828901E8CD7}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Audit", "Audit", "{AA56FBEC-EF6E-4D04-8A56-E70D26013B10}"
 EndProject
@@ -139,9 +139,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Audit.Infrastructure", "src
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Audit.Api", "src\Audit\Audit.Api\Audit.Api.csproj", "{A8B3C219-4D43-47D2-96BD-9FA471900E1B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Audit.Unit", "tests\Audit.Unit\Audit.Unit.csproj", "{233C0A27-0ACB-4757-B98C-A25723681B07}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Audit.Unit", "tests\Audit\Audit.Unit\Audit.Unit.csproj", "{233C0A27-0ACB-4757-B98C-A25723681B07}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Audit.Integration", "tests\Audit.Integration\Audit.Integration.csproj", "{80911308-94C3-4B8D-8DA5-799DBED7869B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Audit.Integration", "tests\Audit\Audit.Integration\Audit.Integration.csproj", "{80911308-94C3-4B8D-8DA5-799DBED7869B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
