@@ -513,6 +513,115 @@ cmd_attach() {
   exec tmux attach -t "wave-$feature"
 }
 
+# Score a brief on token-efficiency dimensions (see token-efficient-briefs.md).
+# Exits 0 if the brief is efficient; non-zero if there are token-waste warnings.
+cmd_audit_brief() {
+  local feature=${1:-}
+  [ -n "$feature" ] || die "usage: wave audit-brief <feature>"
+  local brief
+  brief=$(brief_for "$feature")
+  [ -f "$brief" ] || die "no brief at $brief"
+
+  local warns=0 passes=0
+  warn() { warns=$((warns+1)); echo "⚠ $*"; }
+  pass() { passes=$((passes+1)); echo "✓ $*"; }
+  echo "=== Token-efficiency audit: $brief ==="
+  echo ""
+
+  # 1. Inline reference excerpts (Rule 1 — biggest single saving)
+  if grep -qE '^Reference \(inline excerpt' "$brief" || grep -qE '\*\*Reference \(inline excerpt' "$brief"; then
+    pass "Rule 1: brief includes inline reference excerpts (saves whole-file reads)"
+  else
+    warn "Rule 1: brief uses 'Reference to mirror: <path>' but no inline excerpt found. Agents will read the whole reference file. PASTE a 20-40 line excerpt of the reference under each track."
+  fi
+
+  # 2. Exact symbol signatures provided?
+  local sig_blocks
+  sig_blocks=$(grep -cE '^\s*(public|internal|private|class|interface|record)[ a-zA-Z<>(),]*' "$brief" || true)
+  if [ "$sig_blocks" -ge 3 ]; then
+    pass "Rule 3: brief includes $sig_blocks code-signature lines — agents don't need to design"
+  else
+    warn "Rule 3: brief has only $sig_blocks code-signature lines. Per new file a track owns, include the class/method signature + body skeleton so agents fill bodies, not designs."
+  fi
+
+  # 3. Done commands verbatim?
+  local done_count vague_done
+  done_count=$(grep -cE '^\s*\*\*Done:\*\* `' "$brief" || true)
+  vague_done=$(grep -cE '\*\*Done:\*\* (Run|Implement|Make|Ensure|All)' "$brief" || true)
+  if [ "$vague_done" -gt 0 ]; then
+    warn "Rule 7: $vague_done Done check(s) read as prose, not commands. Replace with verbatim: 'dotnet test ... --filter \"FullyQualifiedName~...\"' or equivalent."
+  elif [ "$done_count" -ge 1 ]; then
+    pass "Rule 7: Done checks use verbatim commands"
+  else
+    warn "Rule 7: no \`backtick-quoted\` Done commands found. Each track's Done must be a runnable shell command."
+  fi
+
+  # 4. No-exploration rule present?
+  if grep -qiE '(do not|don.t).*(grep|find|ls|explore)' "$brief"; then
+    pass "Rule 8: brief forbids exploration outside owned files"
+  else
+    warn "Rule 8: brief does NOT include the 'no exploration' instruction. Add to ## Universal rules: 'Do not grep/find/ls outside your Files-you-own list unless required for compilation.'"
+  fi
+
+  # 5. Skip-preamble rule?
+  if grep -qiE '(skip preamble|execute.*not.*narrate|no.*let me first)' "$brief"; then
+    pass "Rule 8: brief instructs agents to skip preamble"
+  else
+    warn "Rule 8: brief does NOT include the 'skip preamble' instruction. Add to ## Universal rules: 'Execute, don't narrate.'"
+  fi
+
+  # 6. No-scope-creep rule?
+  if grep -qiE '(no.*tangential|no.*scope creep|do not refactor)' "$brief"; then
+    pass "Rule 6: brief forbids scope creep"
+  else
+    warn "Rule 6: brief does NOT include the 'no scope creep' instruction. Add to ## Universal rules with the TODO(track-Tn) escape hatch."
+  fi
+
+  # 7. Track size estimate via section length
+  local tracks oversized
+  tracks=$(brief_tracks "$brief")
+  oversized=0
+  for t in $tracks; do
+    local lines
+    lines=$(awk -v t="### Track $t" '
+      $0 ~ "^"t"($|[: ])" { p=1 }
+      p && /^### Track / && !($0 ~ "^"t"($|[: ])") { exit }
+      p { print }
+    ' "$brief" | wc -l | tr -d ' ')
+    if [ "$lines" -gt 80 ]; then
+      oversized=$((oversized+1))
+      echo "    track $t section is $lines lines — may indicate >4h scope"
+    fi
+  done
+  if [ "$oversized" -eq 0 ]; then
+    pass "Rule 5: track sections are reasonably sized (≤80 lines each)"
+  else
+    warn "Rule 5: $oversized track section(s) over 80 lines — consider splitting"
+  fi
+
+  # 8. Brief overall size
+  local size_lines
+  size_lines=$(wc -l < "$brief")
+  if [ "$size_lines" -gt 400 ]; then
+    warn "Rule 10: brief is $size_lines lines — large briefs force agents to re-read. Aim for ≤300 lines with self-contained track sections."
+  else
+    pass "Rule 10: brief is $size_lines lines (manageable)"
+  fi
+
+  echo ""
+  echo "=== Summary: $passes pass · $warns warn ==="
+  if [ "$warns" -eq 0 ]; then
+    echo "Brief is token-efficient. Estimated per-agent budget: ~20-30k tokens."
+    return 0
+  else
+    local mult=$((warns + 1))
+    echo "Brief has $warns leak(s). Estimated agent budget multiplier: ~${mult}× the minimum (each warning typically adds 30-50% to per-agent token spend)."
+    echo ""
+    echo "See: docs/agent-briefs/token-efficient-briefs.md for the full discipline."
+    return 1
+  fi
+}
+
 # Auto-design: take a feature spec, generate the parallel-tracks brief via a
 # gemini design pass, validate it, and (optionally) launch the wave. This is
 # the "one command, one input" flow — the operator only provides the spec file.
@@ -676,10 +785,24 @@ MODIFY MODE — additional rules:
 - Common shared files like .csproj, Program.cs, DependencyInjection.cs of an existing service can ONLY be owned by ONE track if at all — better to avoid touching shared files; if unavoidable, that track owns them and the others list them as "may NOT touch".
 - Done checks should target the affected service's existing test project (e.g., \`dotnet test tests/Catalog.Integration\`) with a --filter that captures only this track's added test classes.
 
-WRITE the file, then VALIDATE by running this command:
+TOKEN-EFFICIENT BRIEFS — the wave protocol's discipline (see token-efficient-briefs.md):
+Briefs are read by N agents in parallel. Every leak in a brief multiplies. Make briefs TIGHT.
+
+- **Inline reference excerpts, not paths.** When a track needs to mirror an existing file's pattern, paste 20-40 lines of that file DIRECTLY under a "Reference (inline excerpt, lines X-Y of <path>):" subsection in the track. Do NOT just write "Reference to mirror: <path>" — that forces every agent to read the whole file (often 500+ lines). Inline excerpts save thousands of tokens per agent.
+- **Exact symbol names + signatures, not design instructions.** For every new file a track owns, include the class/method signature + 2-5 line body skeleton in a code block. Agents fill bodies, not designs. Don't write "implement a service that handles X" — write "Create class FooHandler with signature: \`internal sealed class FooHandler(IBar bar) : IRequestHandler<FooCommand>\` and a Handle method that: 1) ..., 2) ...".
+- **Done command verbatim.** Use the full dotnet test command with --filter "FullyQualifiedName~..." — not "run the tests". Agent should never have to figure out test layout.
+- **No exploration.** Add to "## Universal rules" of every brief: "Do not grep, find, or ls outside your Files-you-own list unless required for compilation. The brief has the exact paths you need." This single rule saves dozens of tool calls per agent.
+- **No preamble.** Add to "## Universal rules": "Execute, don't narrate. No 'let me first understand' prose. Output text is limited to: progress signals (one line per file group), error reports, final Done-Report. Internal reasoning stays internal."
+- **No scope creep.** Add to "## Universal rules": "No tangential edits. If you notice an obvious improvement outside your listed file paths, write a // TODO(track-Tn) comment in YOUR file and continue. Do not refactor unrelated code."
+- **Track size: 2-4 hours, not 6+.** Big tracks accumulate big agent context. Split a 6-hour scope into two 3-hour tracks if you can keep file scopes disjoint.
+
+WRITE the file, then VALIDATE by running:
   bash $SELF validate $feature
 
-If validation reports any FAIL, fix the brief and re-run validate. Continue until validate prints "OK". Do not stop until validation passes.
+THEN AUDIT the brief for token efficiency by running:
+  bash $SELF audit-brief $feature
+
+If validate reports any FAIL, fix and re-run. If audit-brief reports warnings, address them — they translate to agent token waste. Continue until both pass. Do not stop until both are green.
 DESIGN
 )
 
@@ -1009,6 +1132,7 @@ ONE-COMMAND USAGE (typical):
 LOWER-LEVEL SUBCOMMANDS:
   wave init <feature>            scaffold docs/agent-briefs/<feature>/parallel-tracks.md
   wave validate <feature>        check brief well-formedness
+  wave audit-brief <feature>     score the brief on token-efficiency (lower = less agent quota burn)
   wave prompt <feature>          print the filled-in Mode B prompt to stdout
   wave launch <feature> [N]      spawn N gemini agents in tmux (default = #tracks)
   wave attach <feature>          tmux attach to the wave session
@@ -1033,6 +1157,7 @@ case "$cmd" in
   run)          cmd_run "$@" ;;
   init)         cmd_init "$@" ;;
   validate)     cmd_validate "$@" ;;
+  audit-brief)  cmd_audit_brief "$@" ;;
   prompt)       cmd_prompt "$@" ;;
   launch)       cmd_launch "$@" ;;
   attach)       cmd_attach "$@" ;;
