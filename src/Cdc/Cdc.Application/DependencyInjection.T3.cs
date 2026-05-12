@@ -3,10 +3,13 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Haworks.Cdc.Application;
 
 /// <summary>
-/// Track T3 — owned by L1 track T3. Replace the stub body with this track's
-/// service registrations. L0 ships the empty stub so the orchestrator compiles.
+/// Track T3 — infrastructure and publications.
+/// Currently purely data-layer configuration (Postgres SQL).
 /// </summary>
 public static class CdcT3Registration
 {
-    public static IServiceCollection AddCdcT3(this IServiceCollection services) => services;
+    public static IServiceCollection AddCdcT3(this IServiceCollection services)
+    {
+        return services;
+    }
 }
