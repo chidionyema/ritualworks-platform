@@ -23,6 +23,17 @@ public interface ISearchIndex
     Task<SearchPage> SearchAsync(SearchQuery query, CancellationToken ct = default);
 
     /// <summary>
+    /// Matches a product document against registered percolator queries.
+    /// Returns the IDs and user IDs of the matching saved searches.
+    /// </summary>
+    Task<IReadOnlyCollection<SavedSearchMatch>> PercolateAsync(ProductSearchDocument doc, CancellationToken ct = default);
+
+    /// <summary>
+    /// Registers a saved search query for percolation.
+    /// </summary>
+    Task RegisterSavedSearchAsync(string id, string userId, SearchQuery query, CancellationToken ct = default);
+
+    /// <summary>
     /// Idempotent bootstrap — creates the index with the primary key, applies
     /// the canonical settings (searchableAttributes, filterableAttributes,
     /// rankingRules, etc.) per spec §4. Safe to call on every cold start.

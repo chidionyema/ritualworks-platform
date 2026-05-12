@@ -14,7 +14,7 @@ namespace Haworks.Search.Integration;
 
 /// <summary>
 /// End-to-end indexer coverage: publish a Catalog event through the test
-/// harness, observe Meilisearch state. Catalog HTTP enrichment is
+/// harness, observe Elasticsearch state. Catalog HTTP enrichment is
 /// served by WireMock (the SearchWebAppFactory wires Catalog:BaseAddress
 /// to the WireMock URL).
 /// </summary>

@@ -115,20 +115,11 @@ VAULT_ROOT_TOKEN_PROD="${VAULT_ROOT_TOKEN_PROD:-}"
 VAULT_HAWORKS_IDENTITY_ROLE_ID="${VAULT_HAWORKS_IDENTITY_ROLE_ID:-}"
 VAULT_HAWORKS_IDENTITY_SECRET_ID="${VAULT_HAWORKS_IDENTITY_SECRET_ID:-}"
 
-# Auto-generate Meilisearch master key on first run (32 bytes urandom, base64).
-if [[ -z "${MEILI_MASTER_KEY:-}" ]]; then
-  echo "==> Generating Meilisearch master key (first run)"
-  key="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
-  if grep -qE '^MEILI_MASTER_KEY=' "$ENV_FILE"; then
-    if [[ "$(uname)" == "Darwin" ]]; then
-      sed -i '' "s|^MEILI_MASTER_KEY=.*|MEILI_MASTER_KEY=$key|" "$ENV_FILE"
-    else
-      sed -i "s|^MEILI_MASTER_KEY=.*|MEILI_MASTER_KEY=$key|" "$ENV_FILE"
-    fi
-  else
-    printf '\nMEILI_MASTER_KEY=%s\n' "$key" >> "$ENV_FILE"
-  fi
-  MEILI_MASTER_KEY="$key"
+# Auto-generate Elasticsearch admin password on first run (32-char alphanumeric).
+if [[ -z "${ELASTICSEARCH_PASSWORD:-}" ]]; then
+  echo "==> Generating Elasticsearch password (first run)"
+  password="$(openssl rand -hex 16)"
+  upsert_env_var ELASTICSEARCH_PASSWORD "$password"
   echo "    written to $ENV_FILE (gitignored)"
 fi
 
@@ -159,7 +150,7 @@ INTERNAL_APPS=(
   ritualworks-payments
   ritualworks-checkout
   ritualworks-search
-  ritualworks-meilisearch
+  ritualworks-elasticsearch
   ritualworks-notifications
   ritualworks-audit
 )
@@ -248,7 +239,7 @@ jwt_secrets=(
 [[ -n "${JWT_AUDIENCE:-}" ]] && jwt_secrets+=("Jwt__Audience=$JWT_AUDIENCE")
 
 for app in "${INTERNAL_APPS[@]}"; do
-  if [[ "$app" == "ritualworks-meilisearch" ]]; then
+  if [[ "$app" == "ritualworks-elasticsearch" ]]; then
     continue
   fi
   db="${app#ritualworks-}"
@@ -256,17 +247,17 @@ for app in "${INTERNAL_APPS[@]}"; do
   set_secrets "$app" "${common[@]}" "${jwt_secrets[@]}" "ConnectionStrings__${db}=$conn"
 done
 
-# Meilisearch volume + master key secrets.
-echo "==> Meilisearch setup"
-if ! flyctl volumes list -a ritualworks-meilisearch 2>/dev/null | grep -q "meili_data"; then
-  echo "    creating meili_data volume"
-  flyctl volumes create meili_data --size 1 --region "$REGION" -a ritualworks-meilisearch --yes
+# Elasticsearch volume setup.
+echo "==> Elasticsearch setup"
+if ! flyctl volumes list -a ritualworks-elasticsearch 2>/dev/null | grep -q "elasticsearch_data"; then
+  echo "    creating elasticsearch_data volume"
+  flyctl volumes create elasticsearch_data --size 5 --region "$REGION" -a ritualworks-elasticsearch --yes
 else
-  echo "    meili_data volume exists"
+  echo "    elasticsearch_data volume exists"
 fi
 
-set_secrets ritualworks-meilisearch "MEILI_MASTER_KEY=$MEILI_MASTER_KEY"
-set_secrets ritualworks-search "Meilisearch__MasterKey=$MEILI_MASTER_KEY"
+set_secrets ritualworks-elasticsearch "ELASTIC_PASSWORD=$ELASTICSEARCH_PASSWORD" "discovery.type=single-node" "xpack.security.enabled=false"
+set_secrets ritualworks-search "Elasticsearch__Url=http://ritualworks-elasticsearch.internal:9200"
 
 # BFF: only secrets here. Service-discovery overrides for the BFF's
 # HttpClients (Services__<svc>__http__0=...flycast:8080) live in
