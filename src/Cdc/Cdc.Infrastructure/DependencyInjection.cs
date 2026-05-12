@@ -8,6 +8,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddCdcInfrastructure(this IServiceCollection services)
     {
+        services.AddScoped<ICdcStore, EfCdcStore>();
         services.AddTransient<PgOutputDecoder>();
         services.AddScoped<ICdcRelay, PostgresLogicalReplicationSubscriber>();
         

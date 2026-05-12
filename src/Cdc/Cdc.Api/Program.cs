@@ -1,4 +1,5 @@
 using Haworks.Cdc.Application;
+using Haworks.Cdc.Infrastructure;
 using Haworks.Cdc.Infrastructure.Persistence;
 using Haworks.BuildingBlocks.Extensions;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ builder.AddServiceDefaults();
 builder.Services.AddDbContext<CdcDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("cdc")));
 
+builder.Services.AddCdcInfrastructure();
 builder.Services.AddCdcApplication();
 
 builder.Services.AddHttpContextAccessor();
