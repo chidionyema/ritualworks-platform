@@ -2,6 +2,7 @@
   <PropertyGroup>
     <RootNamespace>Haworks.Location.Infrastructure</RootNamespace>
     <AssemblyName>Haworks.Location.Infrastructure</AssemblyName>
+    <NoWarn>$(NoWarn);CA1861</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Location.Application/Location.Application.csproj" />
