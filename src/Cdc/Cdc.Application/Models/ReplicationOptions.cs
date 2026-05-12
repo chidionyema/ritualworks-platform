@@ -1,4 +1,4 @@
-namespace Haworks.Cdc.Infrastructure.Replication;
+namespace Haworks.Cdc.Application.Models;
 
 public sealed class ReplicationOptions
 {

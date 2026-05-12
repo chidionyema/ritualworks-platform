@@ -1,4 +1,5 @@
 using Haworks.Cdc.Application.Interfaces;
+using Haworks.Cdc.Application.Models;
 using Haworks.Contracts.Cdc;
 using MassTransit;
 using Microsoft.Extensions.Logging;
