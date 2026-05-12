@@ -1,6 +1,7 @@
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.BuildingBlocks.Persistence;
 using Haworks.BuildingBlocks.Vault;
+using Haworks.Location.Application.Interfaces;
 using Haworks.Location.Infrastructure.Persistence;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -48,8 +49,14 @@ public static class DependencyInjection
             }
         });
 
+        services.AddScoped<ILocationDbContext>(sp => sp.GetRequiredService<LocationDbContext>());
+
+        // MassTransit and external eventing are skipped in Test environment
+        // to avoid dependency on RabbitMQ/External Search if not using Testcontainers.
         if (env.IsEnvironment("Test"))
         {
+            // Even in tests, we might want a publisher stub if not using MassTransit
+            services.AddDomainEventPublisher();
             return services;
         }
 

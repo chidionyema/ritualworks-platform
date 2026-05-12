@@ -11,6 +11,9 @@ using System;
 using System.Threading.Tasks;
 using Npgsql;
 using Testcontainers.PostgreSql;
+using Haworks.BuildingBlocks.CurrentUser;
+using Haworks.BuildingBlocks.Messaging;
+using Moq;
 
 namespace Haworks.Location.Integration;
 
@@ -68,7 +71,21 @@ public class LocationWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
                 ["ConnectionStrings:location"] = ConnectionString,
                 ["ConnectionStrings:rabbitmq"] = RabbitMqConnectionString,
                 ["Vault:Enabled"] = "false",
+                ["MigrateDatabase"] = "true",
             });
+        });
+
+        builder.ConfigureServices(services =>
+        {
+            // Identity
+            var currentUserMock = new Mock<ICurrentUserService>();
+            currentUserMock.Setup(x => x.UserId).Returns("test-user");
+            currentUserMock.Setup(x => x.ClientIp).Returns("127.0.0.1");
+            services.AddSingleton(currentUserMock.Object);
+
+            // Messaging (Stub out MassTransit dependencies in Test environment)
+            var publisherMock = new Mock<IDomainEventPublisher>();
+            services.AddScoped(_ => publisherMock.Object);
         });
     }
 }

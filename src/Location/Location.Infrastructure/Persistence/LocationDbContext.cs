@@ -1,5 +1,6 @@
 using Haworks.BuildingBlocks.CurrentUser;
 using Haworks.BuildingBlocks.Persistence;
+using Haworks.Location.Application.Interfaces;
 using Haworks.Location.Domain.Entities;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +13,7 @@ namespace Haworks.Location.Infrastructure.Persistence;
 /// DbContext for the Location bounded context. 
 /// Uses PostGIS for geospatial data and EF Core Outbox for transactional messaging.
 /// </summary>
-public class LocationDbContext : DbContext
+public class LocationDbContext : DbContext, ILocationDbContext
 {
     private readonly IHostEnvironment _environment;
     private readonly ILoggerFactory _loggerFactory;

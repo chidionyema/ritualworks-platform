@@ -65,11 +65,16 @@ public class LocationFlowsTests(LocationWebAppFactory factory) : IClassFixture<L
 
         // Assert
         response.EnsureSuccessStatusCode();
-        var results = await response.Content.ReadFromJsonAsync<List<dynamic>>();
+        var results = await response.Content.ReadFromJsonAsync<List<NearbyAddressResponse>>();
         results.Should().NotBeNull();
-        // london is approx 0 distance, bristol is ~170km away
-        results!.Count.Should().Be(1);
+        
+        // We expect at least one result (London). 
+        // We check that Bristol is NOT in the results by filtering for its unique postcode.
+        results.Should().Contain(x => x.Postcode == "SW1A 2AA");
+        results.Should().NotContain(x => x.Postcode == "BS1 1AA");
     }
+
+    private record NearbyAddressResponse(Guid Id, string Street, string Postcode, double Distance);
 }
 
 [CollectionDefinition("Location Integration")]

@@ -19,6 +19,8 @@ builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 // Application: MediatR + Validators
 builder.Services.AddApplication();
 
+builder.Services.AddGrpc();
+
 // Identity: JWKS Auth
 builder.Services.AddJwksAuthentication(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
@@ -38,8 +40,9 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 
 var app = builder.Build();
 
-// Auto-migrate database at startup (except in tests)
-if (!app.Environment.IsEnvironment("Test"))
+// Auto-migrate database at startup (except in tests, unless forced)
+var migrateForced = builder.Configuration.GetValue("MigrateDatabase", false);
+if (!app.Environment.IsEnvironment("Test") || migrateForced)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<LocationDbContext>();
@@ -62,6 +65,7 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapGrpcService<Haworks.Location.Api.Services.LocationHydrationService>();
 
 app.Run();
 
