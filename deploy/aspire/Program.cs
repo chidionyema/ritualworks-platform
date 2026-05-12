@@ -39,6 +39,9 @@ var contentDb  = postgres.AddDatabase("content");
 var checkoutDb = postgres.AddDatabase("checkout");
 var notificationsDb = postgres.AddDatabase("notifications");
 var auditDb         = postgres.AddDatabase("audit");
+var locationDb      = postgres.AddDatabase("location");
+var webhooksDb      = postgres.AddDatabase("webhooks");
+var payoutsDb       = postgres.AddDatabase("payouts");
 
 var redis = builder.AddRedis("redis")
     .WithLifetime(ContainerLifetime.Persistent)
@@ -302,6 +305,38 @@ var audit = AddJwksConfig(builder.AddProject<Projects.Audit_Api>("audit-svc")
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("audit"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
+// --- webhooks-svc ----------------------------------------------------------
+var webhooks = AddJwksConfig(builder.AddProject<Projects.Webhooks_Api>("webhooks-svc")
+    .WaitFor(vault)
+    .WaitFor(webhooksDb)
+    .WithReference(webhooksDb)
+    .WaitFor(rabbitmq)
+    .WithReference(rabbitmq)
+    .WaitFor(kafka)
+    .WithReference(kafka)
+    .WaitFor(identity)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("webhooks"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("webhooks"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
+
+// --- payouts-svc -----------------------------------------------------------
+var payouts = AddJwksConfig(builder.AddProject<Projects.Payouts_Api>("payouts-svc")
+    .WaitFor(vault)
+    .WaitFor(payoutsDb)
+    .WithReference(payoutsDb)
+    .WaitFor(rabbitmq)
+    .WithReference(rabbitmq)
+    .WaitFor(identity)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("payouts"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("payouts"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
+
 // --- bff-web ---------------------------------------------------------------
 var bffWeb = AddJwksConfig(builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WaitFor(vault)
@@ -324,6 +359,8 @@ var bffWeb = AddJwksConfig(builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WithReference(search)
     .WaitFor(notifications)
     .WithReference(notifications)
+    .WaitFor(payouts)
+    .WithReference(payouts)
     .WithEndpoint("http",  e => e.Port = 5050)
     .WithEndpoint("https", e => e.Port = 5051)
     .WithExternalHttpEndpoints()

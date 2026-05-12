@@ -12,10 +12,13 @@ SELECT 'CREATE DATABASE orders'   WHERE NOT EXISTS (SELECT FROM pg_database WHER
 SELECT 'CREATE DATABASE payments' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'payments')\gexec
 SELECT 'CREATE DATABASE content'  WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'content')\gexec
 SELECT 'CREATE DATABASE identity' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'identity')\gexec
-SELECT 'CREATE DATABASE checkout' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'checkout')\gexec
 SELECT 'CREATE DATABASE audit'    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'audit')\gexec
+SELECT 'CREATE DATABASE location' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'location')\gexec
+SELECT 'CREATE DATABASE webhooks' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'webhooks')\gexec
+SELECT 'CREATE DATABASE payouts'  WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'payouts')\gexec
 
 -- 2. Per-DB owner group roles (NOLOGIN — they're groups Vault users join).
+
 SELECT 'CREATE ROLE catalog_owner  NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'catalog_owner')\gexec
 SELECT 'CREATE ROLE orders_owner   NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'orders_owner')\gexec
 SELECT 'CREATE ROLE payments_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'payments_owner')\gexec
@@ -23,6 +26,9 @@ SELECT 'CREATE ROLE content_owner  NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_rol
 SELECT 'CREATE ROLE identity_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'identity_owner')\gexec
 SELECT 'CREATE ROLE checkout_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'checkout_owner')\gexec
 SELECT 'CREATE ROLE audit_owner    NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'audit_owner')\gexec
+SELECT 'CREATE ROLE location_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'location_owner')\gexec
+SELECT 'CREATE ROLE webhooks_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'webhooks_owner')\gexec
+SELECT 'CREATE ROLE payouts_owner  NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'payouts_owner')\gexec
 
 -- 3. Transfer database ownership + grant ALL.
 ALTER DATABASE catalog  OWNER TO catalog_owner;
@@ -32,6 +38,8 @@ ALTER DATABASE content  OWNER TO content_owner;
 ALTER DATABASE identity OWNER TO identity_owner;
 ALTER DATABASE checkout OWNER TO checkout_owner;
 ALTER DATABASE audit    OWNER TO audit_owner;
+ALTER DATABASE location OWNER TO location_owner;
+ALTER DATABASE webhooks OWNER TO webhooks_owner;
 
 GRANT ALL PRIVILEGES ON DATABASE catalog  TO catalog_owner;
 GRANT ALL PRIVILEGES ON DATABASE orders   TO orders_owner;
@@ -40,6 +48,9 @@ GRANT ALL PRIVILEGES ON DATABASE content  TO content_owner;
 GRANT ALL PRIVILEGES ON DATABASE identity TO identity_owner;
 GRANT ALL PRIVILEGES ON DATABASE checkout TO checkout_owner;
 GRANT ALL PRIVILEGES ON DATABASE audit    TO audit_owner;
+GRANT ALL PRIVILEGES ON DATABASE location TO location_owner;
+GRANT ALL PRIVILEGES ON DATABASE webhooks TO webhooks_owner;
+GRANT ALL PRIVILEGES ON DATABASE payouts  TO payouts_owner;
 
 -- 4. Per-DB schema grants + default privileges so EF migrations work cleanly.
 \c catalog
@@ -83,3 +94,6 @@ GRANT ALL ON SCHEMA public TO audit_owner;
 ALTER DEFAULT PRIVILEGES FOR ROLE audit_owner GRANT ALL ON TABLES    TO audit_owner;
 ALTER DEFAULT PRIVILEGES FOR ROLE audit_owner GRANT ALL ON SEQUENCES TO audit_owner;
 ALTER DEFAULT PRIVILEGES FOR ROLE audit_owner GRANT ALL ON FUNCTIONS TO audit_owner;
+webhooks_owner;
+ALTER DEFAULT PRIVILEGES FOR ROLE webhooks_owner GRANT ALL ON SEQUENCES TO webhooks_owner;
+ALTER DEFAULT PRIVILEGES FOR ROLE webhooks_owner GRANT ALL ON FUNCTIONS TO webhooks_owner;
