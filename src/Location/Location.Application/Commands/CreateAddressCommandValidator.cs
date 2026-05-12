@@ -4,7 +4,7 @@ namespace Haworks.Location.Application.Commands;
 
 /// <summary>
 /// Mandatory validator for <see cref="CreateAddressCommand"/>.
-/// Wired into the MediatR pipeline via <see cref="Haworks.BuildingBlocks.Behaviors.ValidationBehavior{TRequest, TResponse}"/>.
+/// Coordinates are optional as they can be geocoded.
 /// </summary>
 public class CreateAddressCommandValidator : AbstractValidator<CreateAddressCommand>
 {
@@ -14,7 +14,13 @@ public class CreateAddressCommandValidator : AbstractValidator<CreateAddressComm
         RuleFor(x => x.City).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Postcode).NotEmpty().MaximumLength(20);
         RuleFor(x => x.Country).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.Latitude).InclusiveBetween(-90, 90);
-        RuleFor(x => x.Longitude).InclusiveBetween(-180, 180);
+        
+        RuleFor(x => x.Latitude)
+            .InclusiveBetween(-90, 90)
+            .When(x => x.Latitude.HasValue);
+            
+        RuleFor(x => x.Longitude)
+            .InclusiveBetween(-180, 180)
+            .When(x => x.Longitude.HasValue);
     }
 }

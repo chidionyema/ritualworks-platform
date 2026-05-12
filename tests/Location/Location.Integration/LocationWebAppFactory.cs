@@ -13,6 +13,7 @@ using Npgsql;
 using Testcontainers.PostgreSql;
 using Haworks.BuildingBlocks.CurrentUser;
 using Haworks.BuildingBlocks.Messaging;
+using Haworks.Location.Application.Interfaces;
 using Moq;
 
 namespace Haworks.Location.Integration;
@@ -86,6 +87,12 @@ public class LocationWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
             // Messaging (Stub out MassTransit dependencies in Test environment)
             var publisherMock = new Mock<IDomainEventPublisher>();
             services.AddScoped(_ => publisherMock.Object);
+
+            // Geocoding (Mock for stability)
+            var geocodingMock = new Mock<IGeocodingService>();
+            geocodingMock.Setup(x => x.GeocodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((51.5074, -0.1278));
+            services.AddScoped(_ => geocodingMock.Object);
         });
     }
 }
