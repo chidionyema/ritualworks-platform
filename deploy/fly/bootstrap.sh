@@ -162,6 +162,7 @@ INTERNAL_APPS=(
   ritualworks-meilisearch
   ritualworks-notifications
   ritualworks-audit
+  ritualworks-cdc
 )
 if [[ "$DEPLOY_CONTENT" == "true" ]]; then
   INTERNAL_APPS+=(ritualworks-content)

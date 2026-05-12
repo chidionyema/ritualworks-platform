@@ -39,6 +39,7 @@ var contentDb  = postgres.AddDatabase("content");
 var checkoutDb = postgres.AddDatabase("checkout");
 var notificationsDb = postgres.AddDatabase("notifications");
 var auditDb         = postgres.AddDatabase("audit");
+var cdcDb = postgres.AddDatabase("cdc");
 
 var redis = builder.AddRedis("redis")
     .WithLifetime(ContainerLifetime.Persistent)
@@ -301,6 +302,18 @@ var audit = AddJwksConfig(builder.AddProject<Projects.Audit_Api>("audit-svc")
     .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("audit"))
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("audit"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
+
+// --- cdc-svc (auto-added by wave) ----------------------------------
+var cdc = AddJwksConfig(builder.AddProject<Projects.Cdc_Api>("cdc-svc")
+    .WaitFor(vault)
+    .WaitFor(cdcDb)
+    .WithReference(cdcDb)
+    .WaitFor(rabbitmq)
+    .WithReference(rabbitmq)
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("cdc"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("cdc")), identity);
 
 // --- bff-web ---------------------------------------------------------------
 var bffWeb = AddJwksConfig(builder.AddProject<Projects.BffWeb_Api>("bff-web")

@@ -14,6 +14,7 @@ SELECT 'CREATE DATABASE content'  WHERE NOT EXISTS (SELECT FROM pg_database WHER
 SELECT 'CREATE DATABASE identity' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'identity')\gexec
 SELECT 'CREATE DATABASE checkout' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'checkout')\gexec
 SELECT 'CREATE DATABASE audit'    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'audit')\gexec
+SELECT 'CREATE DATABASE cdc' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'cdc')\gexec
 
 -- 2. Per-DB owner group roles (NOLOGIN — they're groups Vault users join).
 SELECT 'CREATE ROLE catalog_owner  NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'catalog_owner')\gexec
@@ -23,6 +24,7 @@ SELECT 'CREATE ROLE content_owner  NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_rol
 SELECT 'CREATE ROLE identity_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'identity_owner')\gexec
 SELECT 'CREATE ROLE checkout_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'checkout_owner')\gexec
 SELECT 'CREATE ROLE audit_owner    NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'audit_owner')\gexec
+SELECT 'CREATE ROLE cdc_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'cdc_owner')\gexec
 
 -- 3. Transfer database ownership + grant ALL.
 ALTER DATABASE catalog  OWNER TO catalog_owner;
@@ -31,6 +33,7 @@ ALTER DATABASE payments OWNER TO payments_owner;
 ALTER DATABASE content  OWNER TO content_owner;
 ALTER DATABASE identity OWNER TO identity_owner;
 ALTER DATABASE checkout OWNER TO checkout_owner;
+ALTER DATABASE cdc OWNER TO cdc_owner;
 ALTER DATABASE audit    OWNER TO audit_owner;
 
 GRANT ALL PRIVILEGES ON DATABASE catalog  TO catalog_owner;
@@ -40,6 +43,7 @@ GRANT ALL PRIVILEGES ON DATABASE content  TO content_owner;
 GRANT ALL PRIVILEGES ON DATABASE identity TO identity_owner;
 GRANT ALL PRIVILEGES ON DATABASE checkout TO checkout_owner;
 GRANT ALL PRIVILEGES ON DATABASE audit    TO audit_owner;
+GRANT ALL PRIVILEGES ON DATABASE cdc TO cdc_owner;
 
 -- 4. Per-DB schema grants + default privileges so EF migrations work cleanly.
 \c catalog

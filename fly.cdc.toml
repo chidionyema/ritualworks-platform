@@ -1,0 +1,30 @@
+# Internal-only service. Reach via http://ritualworks-cdc.flycast:8080
+
+app            = "ritualworks-cdc"
+primary_region = "iad"
+
+[build]
+  dockerfile = "src/Cdc/Cdc.Api/Dockerfile"
+
+[env]
+  ASPNETCORE_URLS        = "http://+:8080"
+  ASPNETCORE_ENVIRONMENT = "Production"
+
+  # OpenTelemetry resource identity. Fly's [env] is static (no ${VAR}
+  # interpolation), so the OTLP endpoint must be set out-of-band via:
+  #   fly secrets set OTEL_EXPORTER_OTLP_ENDPOINT=... -a ritualworks-cdc
+  OTEL_SERVICE_NAME         = "cdc-svc"
+  OTEL_RESOURCE_ATTRIBUTES  = "deployment.environment=production,service.namespace=ritualworks"
+
+[http_service]
+  internal_port        = 8080
+  force_https          = false
+  auto_stop_machines   = "off"
+  auto_start_machines  = true
+  min_machines_running = 1
+  processes            = ["app"]
+
+[[vm]]
+  memory   = "512mb"
+  cpu_kind = "shared"
+  cpus     = 1
