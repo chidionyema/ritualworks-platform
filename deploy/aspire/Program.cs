@@ -29,7 +29,8 @@ var postgres = builder.AddPostgres("postgres")
     .WithLifetime(ContainerLifetime.Persistent)
     .WithDataVolume("ritualworks-platform-postgres-data")
     .WithBindMount("./init-postgres.sql", "/docker-entrypoint-initdb.d/init.sql")
-    .WithPgAdmin();
+    .WithPgAdmin()
+    .WithArgs("-c", "wal_level=logical", "-c", "max_replication_slots=10", "-c", "max_wal_senders=10");
 
 var identityDb = postgres.AddDatabase("identity");
 var catalogDb  = postgres.AddDatabase("catalog");
