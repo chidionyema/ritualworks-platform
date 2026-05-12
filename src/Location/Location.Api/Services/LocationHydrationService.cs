@@ -1,5 +1,5 @@
 using Grpc.Core;
-using Haworks.Contracts.LocationServices;
+using LocationGrpc;
 using Haworks.Location.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 

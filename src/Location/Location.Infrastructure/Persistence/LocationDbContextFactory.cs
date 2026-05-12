@@ -26,7 +26,7 @@ public class LocationDbContextFactory : IDesignTimeDbContextFactory<LocationDbCo
             new DummyCurrentUserService());
     }
 
-    private class DummyHostEnvironment : IHostEnvironment
+    private sealed class DummyHostEnvironment : IHostEnvironment
     {
         public string EnvironmentName { get; set; } = "Development";
         public string ApplicationName { get; set; } = "Location.Api";
@@ -34,7 +34,7 @@ public class LocationDbContextFactory : IDesignTimeDbContextFactory<LocationDbCo
         public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = null!;
     }
 
-    private class DummyCurrentUserService : ICurrentUserService
+    private sealed class DummyCurrentUserService : ICurrentUserService
     {
         public string? UserId => "system";
         public string? ClientIp => "127.0.0.1";

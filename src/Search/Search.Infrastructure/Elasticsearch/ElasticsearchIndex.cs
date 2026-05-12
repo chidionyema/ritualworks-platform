@@ -113,7 +113,7 @@ public sealed class ElasticsearchIndex : ISearchIndex
                     {
                         if (string.IsNullOrWhiteSpace(query.Query))
                         {
-                            m.MatchAll();
+                            m.MatchAll(ma => { });
                         }
                         else
                         {

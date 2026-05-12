@@ -9,4 +9,7 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
     <PackageReference Include="Grpc.AspNetCore" Version="2.67.0" />
   </ItemGroup>
+  <ItemGroup>
+    <Protobuf Include="../../Contracts/location.proto" GrpcServices="Both" Link="location.proto" />
+  </ItemGroup>
 </Project>
