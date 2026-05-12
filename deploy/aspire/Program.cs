@@ -39,6 +39,7 @@ var contentDb  = postgres.AddDatabase("content");
 var checkoutDb = postgres.AddDatabase("checkout");
 var notificationsDb = postgres.AddDatabase("notifications");
 var auditDb         = postgres.AddDatabase("audit");
+var locationDb      = postgres.AddDatabase("location");
 
 var redis = builder.AddRedis("redis")
     .WithLifetime(ContainerLifetime.Persistent)
@@ -298,6 +299,21 @@ var audit = AddJwksConfig(builder.AddProject<Projects.Audit_Api>("audit-svc")
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("audit"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
+// --- location-svc ----------------------------------------------------------
+var location = AddJwksConfig(builder.AddProject<Projects.Location_Api>("location-svc")
+    .WaitFor(vault)
+    .WaitFor(locationDb)
+    .WithReference(locationDb)
+    .WaitFor(rabbitmq)
+    .WithReference(rabbitmq)
+    .WaitFor(identity)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("location"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("location"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
+
 // --- bff-web ---------------------------------------------------------------
 var bffWeb = AddJwksConfig(builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WaitFor(vault)
@@ -320,6 +336,8 @@ var bffWeb = AddJwksConfig(builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WithReference(search)
     .WaitFor(notifications)
     .WithReference(notifications)
+    .WaitFor(location)
+    .WithReference(location)
     .WithEndpoint("http",  e => e.Port = 5050)
     .WithEndpoint("https", e => e.Port = 5051)
     .WithExternalHttpEndpoints()
