@@ -1,7 +1,7 @@
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Contracts.Location;
+using Haworks.Location.Application.Interfaces;
 using Haworks.Location.Domain.Entities;
-using Haworks.Location.Infrastructure.Persistence;
 using MediatR;
 using NetTopologySuite.Geometries;
 
@@ -21,7 +21,7 @@ public record CreateAddressCommand : IRequest<Guid>
 }
 
 public class CreateAddressCommandHandler(
-    LocationDbContext dbContext,
+    ILocationDbContext dbContext,
     IDomainEventPublisher publisher) : IRequestHandler<CreateAddressCommand, Guid>
 {
     public async Task<Guid> Handle(CreateAddressCommand request, CancellationToken cancellationToken)
