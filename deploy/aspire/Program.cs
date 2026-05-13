@@ -42,6 +42,7 @@ var auditDb         = postgres.AddDatabase("audit");
 var locationDb      = postgres.AddDatabase("location");
 var webhooksDb      = postgres.AddDatabase("webhooks");
 var payoutsDb       = postgres.AddDatabase("payouts");
+var schedulerDb     = postgres.AddDatabase("scheduler");
 
 var redis = builder.AddRedis("redis")
     .WithLifetime(ContainerLifetime.Persistent)
@@ -337,6 +338,21 @@ var payouts = AddJwksConfig(builder.AddProject<Projects.Payouts_Api>("payouts-sv
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("payouts"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
+// --- scheduler-svc -----------------------------------------------------------
+var scheduler = AddJwksConfig(builder.AddProject<Projects.Scheduler_Api>("scheduler-svc")
+    .WaitFor(vault)
+    .WaitFor(schedulerDb)
+    .WithReference(schedulerDb)
+    .WaitFor(rabbitmq)
+    .WithReference(rabbitmq)
+    .WaitFor(identity)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("scheduler"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("scheduler"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
+
 // --- bff-web ---------------------------------------------------------------
 var bffWeb = AddJwksConfig(builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WaitFor(vault)
@@ -361,6 +377,8 @@ var bffWeb = AddJwksConfig(builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WithReference(notifications)
     .WaitFor(payouts)
     .WithReference(payouts)
+    .WaitFor(scheduler)
+    .WithReference(scheduler)
     .WithEndpoint("http",  e => e.Port = 5050)
     .WithEndpoint("https", e => e.Port = 5051)
     .WithExternalHttpEndpoints()
