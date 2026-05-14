@@ -1,10 +1,13 @@
+using Elastic.Clients.Elasticsearch;
 using FluentAssertions;
 using Haworks.Contracts.Catalog;
 using Haworks.Search.Application.Interfaces;
 using Haworks.Search.Application.Models;
+using Haworks.Search.Infrastructure.Options;
 using MassTransit;
 using MassTransit.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using System.Text.Json;
 using WireMock.RequestBuilders;
 using Xunit;
@@ -158,6 +161,10 @@ public sealed class IndexerTests : IAsyncLifetime
                 MakeDoc(p2, "P2", "OldCat", 1, categoryId),
                 MakeDoc(p3, "P3", "OldCat", 1, categoryId),
             });
+
+            var esClient = scope.ServiceProvider.GetRequiredService<ElasticsearchClient>();
+            var esOptions = scope.ServiceProvider.GetRequiredService<IOptions<ElasticsearchOptions>>().Value;
+            await esClient.Indices.RefreshAsync(esOptions.IndexName);
         }
 
         var harness = _factory.Services.GetRequiredService<ITestHarness>();

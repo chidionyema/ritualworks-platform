@@ -2,10 +2,13 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Elastic.Clients.Elasticsearch;
 using FluentAssertions;
 using Haworks.Search.Application.Interfaces;
 using Haworks.Search.Application.Models;
+using Haworks.Search.Infrastructure.Options;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Haworks.Search.Integration;
@@ -149,5 +152,9 @@ public sealed class SearchEndpointTests : IAsyncLifetime
         using var scope = _factory.Services.CreateScope();
         var index = scope.ServiceProvider.GetRequiredService<ISearchIndex>();
         await index.UpsertAsync(docs);
+
+        var esClient = scope.ServiceProvider.GetRequiredService<ElasticsearchClient>();
+        var options = scope.ServiceProvider.GetRequiredService<IOptions<ElasticsearchOptions>>().Value;
+        await esClient.Indices.RefreshAsync(options.IndexName);
     }
 }

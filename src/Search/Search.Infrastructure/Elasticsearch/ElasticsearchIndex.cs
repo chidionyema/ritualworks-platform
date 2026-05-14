@@ -58,6 +58,9 @@ public sealed class ElasticsearchIndex : ISearchIndex
             var props = new Properties();
             props.Add("query", new PercolatorProperty());
             props.Add("userId", new KeywordProperty());
+            props.Add("name", new TextProperty());
+            props.Add("categoryName", new TextProperty());
+            props.Add("description", new TextProperty());
 
             var createResponse = await _client.Indices.CreateAsync(SavedSearchIndexName, c => c
                 .Mappings(m => m.Properties(props)), ct).ConfigureAwait(false);
@@ -85,7 +88,7 @@ public sealed class ElasticsearchIndex : ISearchIndex
 
     public async Task DeleteAsync(string productIdKey, CancellationToken ct = default)
     {
-        var response = await _client.DeleteAsync(_options.IndexName, (Id)productIdKey, ct).ConfigureAwait(false);
+        var response = await _client.DeleteAsync<ProductSearchDocument>(productIdKey, d => d.Index(_options.IndexName), ct).ConfigureAwait(false);
         if (!response.IsSuccess() && response.ElasticsearchServerError?.Status != 404)
         {
             _logger.LogError("Elasticsearch delete failed: {Debug}", response.DebugInformation);
@@ -108,8 +111,9 @@ public sealed class ElasticsearchIndex : ISearchIndex
             .From((query.Page - 1) * query.PageSize)
             .Size(query.PageSize)
             .Query(q => q
-                .Bool(b => b
-                    .Must(m => 
+                .Bool(b =>
+                {
+                    b.Must(m =>
                     {
                         if (string.IsNullOrWhiteSpace(query.Query))
                         {
@@ -120,17 +124,18 @@ public sealed class ElasticsearchIndex : ISearchIndex
                             m.MultiMatch(mm => mm
                                 .Query(query.Query)
                                 .Fields(SearchFields)
+                                .Fuzziness(new Fuzziness("AUTO"))
                             );
                         }
-                    })
-                    .Filter(f => 
+                    });
+
+                    if (query.CategoryFilter.HasValue)
                     {
-                        if (query.CategoryFilter.HasValue)
-                        {
-                            f.Term(t => t.Field(p => p.CategoryId).Value(query.CategoryFilter.Value.ToString()));
-                        }
-                    })
-                )
+                        b.Filter(f => f
+                            .Term(t => t.Field(p => p.CategoryId).Value(query.CategoryFilter.Value.ToString()))
+                        );
+                    }
+                })
             )
         , ct).ConfigureAwait(false);
 
@@ -152,16 +157,21 @@ public sealed class ElasticsearchIndex : ISearchIndex
 
     public async Task RegisterSavedSearchAsync(string id, string userId, SearchQuery query, CancellationToken ct = default)
     {
-        var queryDoc = new Dictionary<string, object>
+        var queryDoc = new SavedSearchDoc
         {
-            ["userId"] = userId,
-            ["query"] = new {
-                @bool = new {
-                    must = new[] {
-                        new {
-                            multi_match = new {
-                                query = query.Query,
-                                fields = new[] { "name", "categoryName", "description" }
+            UserId = userId,
+            Query = new Dictionary<string, object>
+            {
+                ["bool"] = new Dictionary<string, object>
+                {
+                    ["must"] = new[]
+                    {
+                        new Dictionary<string, object>
+                        {
+                            ["multi_match"] = new Dictionary<string, object>
+                            {
+                                ["query"] = query.Query ?? "",
+                                ["fields"] = new[] { "name", "categoryName", "description" }
                             }
                         }
                     }
@@ -205,8 +215,18 @@ public sealed class ElasticsearchIndex : ISearchIndex
         }).Where(m => !string.IsNullOrEmpty(m.Id)).ToList();
     }
 
+    private sealed class SavedSearchDoc
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("userId")]
+        public string UserId { get; set; } = "";
+
+        [System.Text.Json.Serialization.JsonPropertyName("query")]
+        public object? Query { get; set; }
+    }
+
     private sealed class SavedSearchMatchDoc
     {
+        [System.Text.Json.Serialization.JsonPropertyName("userId")]
         public string UserId { get; set; } = "";
     }
 }
