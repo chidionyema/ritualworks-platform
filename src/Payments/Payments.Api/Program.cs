@@ -49,8 +49,7 @@ builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddApplication(builder.Configuration);
 builder.Services.AddPostgresIdempotency<PaymentDbContext>();
 
-builder.Services.AddJwksAuthentication(builder.Configuration);
-builder.Services.AddHttpContextAccessor();
+builder.Services.AddPlatformAuthentication(builder.Configuration);
 
 // Bind webhook options. DataAnnotations validation is OFF here because the
 // integration tests stub Stripe's WebhookSecret per-test rather than via

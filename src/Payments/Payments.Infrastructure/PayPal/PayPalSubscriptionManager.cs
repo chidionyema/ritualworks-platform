@@ -9,73 +9,256 @@ using Polly;
 using System.Net.Http.Json;
 using System.Text.Json;
 using DomainSubscription = Haworks.Payments.Domain.Subscription;
+using DomainSubscriptionStatus = Haworks.Payments.Domain.SubscriptionStatus;
 
 namespace Haworks.Payments.Infrastructure.PayPal;
 
+/// <summary>
+/// PayPal implementation of ISubscriptionManager.
+/// Handles subscription lifecycle operations using the PayPal Billing Subscriptions API.
+/// </summary>
 internal sealed class PayPalSubscriptionManager(
     IPaymentRepository paymentRepository,
     IDomainEventPublisher eventPublisher,
     IPayPalClientFactory clientFactory,
-    IResiliencePolicyFactory resiliencePolicyFactory) : ISubscriptionManager
+    IResiliencePolicyFactory resiliencePolicyFactory,
+    ILogger<PayPalSubscriptionManager> logger,
+    ITelemetryService telemetry) : ISubscriptionManager
 {
-    private readonly IAsyncPolicy _resiliencePolicy = resiliencePolicyFactory.CreateCombinedPolicy(ResilienceOptions.Default);
+    private readonly IAsyncPolicy _resiliencePolicy = 
+        resiliencePolicyFactory.CreateCombinedPolicy(ResilienceOptions.PayPal);
 
+    /// <inheritdoc />
     public async Task<SubscriptionStatusResult> GetStatusAsync(string userId, CancellationToken ct = default)
     {
         var subscription = await paymentRepository.GetSubscriptionByUserIdAsync(userId, ct);
-        if (subscription == null || subscription.Provider != PaymentProvider.PayPal) return new SubscriptionStatusResult { IsActive = false, Provider = PaymentProvider.PayPal };
-        
+        if (subscription == null || subscription.Provider != PaymentProvider.PayPal)
+        {
+            return new SubscriptionStatusResult { IsActive = false, Provider = PaymentProvider.PayPal };
+        }
+
         return await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
         {
-            var client = await clientFactory.GetAuthenticatedClientAsync(token);
-            var response = await client.GetAsync(PayPalEndpoints.GetSubscription(subscription.ProviderSubscriptionId), token);
-            if (!response.IsSuccessStatusCode) return new SubscriptionStatusResult { IsActive = false, Provider = PaymentProvider.PayPal };
-            var paypalSub = await response.Content.ReadFromJsonAsync<PayPalSubscriptionResponse>(PayPalJsonOptions.Default, token);
-            return new SubscriptionStatusResult { IsActive = paypalSub!.Status == "ACTIVE", SubscriptionId = paypalSub.Id, Status = paypalSub.Status == "ACTIVE" ? SubscriptionStatus.Active : SubscriptionStatus.Canceled, Provider = PaymentProvider.PayPal };
+            try
+            {
+                var client = await clientFactory.GetAuthenticatedClientAsync(token);
+                var response = await client.GetAsync(PayPalEndpoints.GetSubscription(subscription.ProviderSubscriptionId), token);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    logger.LogWarning("Failed to fetch PayPal subscription {SubscriptionId} for status check", subscription.ProviderSubscriptionId);
+                    return MapToStatusResult(subscription);
+                }
+
+                var paypalSub = await response.Content.ReadFromJsonAsync<PayPalSubscriptionResponse>(PayPalJsonOptions.Default, token);
+                var newStatus = MapSubscriptionStatus(paypalSub?.Status);
+
+                // Update local record if status changed
+                if (subscription.Status != newStatus)
+                {
+                    subscription.UpdateStatus(newStatus);
+                    await paymentRepository.SaveChangesAsync(token);
+                }
+
+                return new SubscriptionStatusResult
+                {
+                    IsActive = subscription.IsActive,
+                    SubscriptionId = subscription.ProviderSubscriptionId,
+                    PlanId = subscription.PlanId,
+                    Status = subscription.Status,
+                    CurrentPeriodEnd = subscription.ExpiresAt,
+                    CanceledAt = subscription.CanceledAt,
+                    Provider = PaymentProvider.PayPal
+                };
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error verifying PayPal subscription {SubscriptionId}", subscription.ProviderSubscriptionId);
+                return MapToStatusResult(subscription);
+            }
         }, new Context(), ct);
     }
 
+    /// <inheritdoc />
     public async Task<bool> CancelAsync(string subscriptionId, bool immediate = false, CancellationToken ct = default)
     {
         return await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
         {
             var client = await clientFactory.GetAuthenticatedClientAsync(token);
-            var response = await client.PostAsJsonAsync(PayPalEndpoints.CancelSubscription(subscriptionId), new { reason = "User requested" }, token);
+            
+            // PayPal doesn't have a direct "cancel at period end" update like Stripe.
+            // We usually cancel and let the local record manage access until expiry.
+            var cancelRequest = new PayPalCancelSubscriptionRequest { Reason = "User requested cancellation" };
+            var response = await client.PostAsJsonAsync(PayPalEndpoints.CancelSubscription(subscriptionId), cancelRequest, token);
+            
             if (response.IsSuccessStatusCode)
             {
-                var sub = await paymentRepository.GetSubscriptionByProviderIdAsync(subscriptionId, token);
-                if (sub != null) { sub.Cancel(); await paymentRepository.SaveChangesAsync(token); }
+                logger.LogInformation("PayPal subscription {SubscriptionId} cancellation requested", subscriptionId);
+                
+                // Note: Domain events and DB updates are typically handled by webhooks (BILLING.SUBSCRIPTION.CANCELLED)
+                // for consistency across all async flows.
+                
+                telemetry.TrackEvent("SubscriptionCancellationRequested", new Dictionary<string, string>
+                {
+                    ["Provider"] = PaymentProvider.PayPal.ToString(),
+                    ["SubscriptionId"] = subscriptionId
+                });
+
                 return true;
             }
+
+            var errorBody = await response.Content.ReadAsStringAsync(token);
+            logger.LogError("PayPal subscription cancellation failed: {Body}", errorBody);
             return false;
         }, new Context(), ct);
     }
 
+    /// <inheritdoc />
     public async Task<bool> ResumeAsync(string subscriptionId, CancellationToken ct = default)
     {
         return await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
         {
             var client = await clientFactory.GetAuthenticatedClientAsync(token);
+            
+            // Activate previously suspended subscription
             var response = await client.PostAsJsonAsync(PayPalEndpoints.ActivateSubscription(subscriptionId), new { reason = "User resumed" }, token);
+            
             if (response.IsSuccessStatusCode)
             {
-                var sub = await paymentRepository.GetSubscriptionByProviderIdAsync(subscriptionId, token);
-                if (sub != null) { sub.Activate(); await paymentRepository.SaveChangesAsync(token); }
+                logger.LogInformation("PayPal subscription {SubscriptionId} activation requested", subscriptionId);
                 return true;
             }
+
             return false;
         }, new Context(), ct);
     }
 
+    /// <inheritdoc />
     public async Task HandleSubscriptionEventAsync(SubscriptionEvent subscriptionEvent, CancellationToken ct = default)
     {
-        var subscription = await paymentRepository.GetSubscriptionByProviderIdAsync(subscriptionEvent.SubscriptionId, ct);
-        if (subscriptionEvent.EventType == SubscriptionEventType.Created && subscription == null)
+        using var scope = logger.BeginScope(new Dictionary<string, object>
         {
-            var newSub = DomainSubscription.Create(subscriptionEvent.UserId!, PaymentProvider.PayPal, subscriptionEvent.SubscriptionId, subscriptionEvent.PlanId!, DateTime.UtcNow, subscriptionEvent.CurrentPeriodEnd ?? DateTime.UtcNow.AddMonths(1));
-            await paymentRepository.AddSubscriptionAsync(newSub, ct);
-            await eventPublisher.PublishAsync(new SubscriptionStartedEvent { SubscriptionId = newSub.ProviderSubscriptionId, UserId = newSub.UserId, PlanId = newSub.PlanId, Provider = PaymentProvider.PayPal, CurrentPeriodEnd = newSub.ExpiresAt }, ct);
+            ["SubscriptionId"] = subscriptionEvent.SubscriptionId,
+            ["EventType"] = subscriptionEvent.EventType.ToString(),
+            ["Provider"] = PaymentProvider.PayPal.ToString()
+        });
+
+        var existing = await paymentRepository.GetSubscriptionByProviderIdAsync(subscriptionEvent.SubscriptionId, ct);
+
+        switch (subscriptionEvent.EventType)
+        {
+            case SubscriptionEventType.Created:
+                if (existing == null)
+                {
+                    var newSub = DomainSubscription.Create(
+                        subscriptionEvent.UserId!, 
+                        PaymentProvider.PayPal, 
+                        subscriptionEvent.SubscriptionId, 
+                        subscriptionEvent.PlanId!, 
+                        DateTime.UtcNow, 
+                        subscriptionEvent.CurrentPeriodEnd ?? DateTime.UtcNow.AddMonths(1));
+                    
+                    newSub.UpdateStatus(subscriptionEvent.NewStatus);
+                    await paymentRepository.AddSubscriptionAsync(newSub, ct);
+                    
+                    await eventPublisher.PublishAsync(new SubscriptionStartedEvent 
+                    { 
+                        SubscriptionId = newSub.ProviderSubscriptionId, 
+                        UserId = newSub.UserId, 
+                        PlanId = newSub.PlanId, 
+                        Provider = PaymentProvider.PayPal, 
+                        CurrentPeriodEnd = newSub.ExpiresAt 
+                    }, ct);
+                }
+                break;
+
+            case SubscriptionEventType.Updated:
+            case SubscriptionEventType.Resumed:
+                if (existing != null)
+                {
+                    existing.UpdateStatus(subscriptionEvent.NewStatus);
+                    if (subscriptionEvent.CurrentPeriodEnd.HasValue)
+                    {
+                        existing.SetExpiresAt(subscriptionEvent.CurrentPeriodEnd.Value);
+                    }
+                    if (subscriptionEvent.EventType == SubscriptionEventType.Resumed)
+                    {
+                        existing.Activate();
+                    }
+                }
+                break;
+
+            case SubscriptionEventType.Renewed:
+                if (existing != null)
+                {
+                    existing.UpdateStatus(subscriptionEvent.NewStatus);
+                    if (subscriptionEvent.CurrentPeriodEnd.HasValue)
+                    {
+                        existing.SetExpiresAt(subscriptionEvent.CurrentPeriodEnd.Value);
+                    }
+
+                    _ = long.TryParse(subscriptionEvent.Metadata.GetValueOrDefault("amount_cents"), out var amount);
+                    var currency = subscriptionEvent.Metadata.GetValueOrDefault("currency", "USD");
+
+                    await eventPublisher.PublishAsync(new SubscriptionRenewedEvent
+                    {
+                        SubscriptionId = existing.ProviderSubscriptionId,
+                        UserId = existing.UserId,
+                        Provider = PaymentProvider.PayPal,
+                        AmountCents = amount,
+                        Currency = currency,
+                        NewPeriodEnd = existing.ExpiresAt
+                    }, ct);
+                }
+                break;
+
+            case SubscriptionEventType.Canceled:
+            case SubscriptionEventType.Expired:
+                if (existing != null)
+                {
+                    existing.Cancel();
+                    if (subscriptionEvent.CurrentPeriodEnd.HasValue)
+                    {
+                        existing.SetExpiresAt(subscriptionEvent.CurrentPeriodEnd.Value);
+                    }
+
+                    await eventPublisher.PublishAsync(new SubscriptionCancelledEvent
+                    {
+                        SubscriptionId = existing.ProviderSubscriptionId,
+                        UserId = existing.UserId,
+                        Provider = PaymentProvider.PayPal,
+                        Reason = subscriptionEvent.Metadata.GetValueOrDefault("reason")
+                    }, ct);
+                }
+                break;
         }
+
         await paymentRepository.SaveChangesAsync(ct);
+    }
+
+    private static DomainSubscriptionStatus MapSubscriptionStatus(string? paypalStatus)
+    {
+        return paypalStatus?.ToUpperInvariant() switch
+        {
+            "ACTIVE" => DomainSubscriptionStatus.Active,
+            "CANCELLED" => DomainSubscriptionStatus.Canceled,
+            "SUSPENDED" => DomainSubscriptionStatus.PastDue, // PayPal suspended map to PastDue
+            "EXPIRED" => DomainSubscriptionStatus.Expired,
+            _ => DomainSubscriptionStatus.Unknown
+        };
+    }
+
+    private static SubscriptionStatusResult MapToStatusResult(DomainSubscription subscription)
+    {
+        return new SubscriptionStatusResult
+        {
+            IsActive = subscription.IsActive,
+            SubscriptionId = subscription.ProviderSubscriptionId,
+            PlanId = subscription.PlanId,
+            Status = subscription.Status,
+            CurrentPeriodEnd = subscription.ExpiresAt,
+            CanceledAt = subscription.CanceledAt,
+            Provider = PaymentProvider.PayPal
+        };
     }
 }

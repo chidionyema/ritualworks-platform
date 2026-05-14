@@ -34,8 +34,7 @@ builder.Services.AddMassTransit(cfg =>
     });
 });
 
-builder.Services.AddJwksAuthentication(builder.Configuration);
-builder.Services.AddHttpContextAccessor();
+builder.Services.AddPlatformAuthentication(builder.Configuration);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

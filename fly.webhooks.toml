@@ -1,0 +1,25 @@
+app            = "ritualworks-webhooks"
+primary_region = "iad"
+
+[build]
+  dockerfile = "src/Webhooks/Webhooks.Api/Dockerfile"
+
+[env]
+  ASPNETCORE_URLS = "http://+:8080"
+  Vault__Enabled  = "true"
+  Vault__Address  = "http://ritualworks-vault.internal:8200"
+  Vault__RoleIdPath = "/app/secrets/role_id"
+  Vault__SecretIdPath = "/app/secrets/secret_id"
+
+[http_service]
+  internal_port        = 8080
+  force_https          = false
+  auto_stop_machines   = "stop"
+  auto_start_machines  = true
+  min_machines_running = 1
+  processes            = ["app"]
+
+[[vm]]
+  memory   = "256mb"
+  cpu_kind = "shared"
+  cpus     = 1

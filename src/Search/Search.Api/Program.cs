@@ -14,8 +14,7 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 builder.AddServiceDefaults();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 
-builder.Services.AddJwksAuthentication(builder.Configuration);
-builder.Services.AddHttpContextAccessor();
+builder.Services.AddPlatformAuthentication(builder.Configuration);
 
 builder.Services.AddControllers();
 

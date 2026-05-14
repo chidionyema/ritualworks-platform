@@ -32,7 +32,7 @@ deploy_one() {
 
 deploy_one identity
 
-PARALLEL=(catalog orders payments checkout)
+PARALLEL=(catalog orders payments checkout audit search webhooks)
 [[ "$DEPLOY_CONTENT" == "true" ]] && PARALLEL+=(content)
 
 pids=()

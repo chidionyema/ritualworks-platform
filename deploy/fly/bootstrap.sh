@@ -153,6 +153,9 @@ INTERNAL_APPS=(
   ritualworks-elasticsearch
   ritualworks-notifications
   ritualworks-audit
+  ritualworks-webhooks
+  ritualworks-kafka
+  ritualworks-debezium
 )
 if [[ "$DEPLOY_CONTENT" == "true" ]]; then
   INTERNAL_APPS+=(ritualworks-content)

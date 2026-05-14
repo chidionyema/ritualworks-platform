@@ -6,4 +6,7 @@
   <ItemGroup>
     <ProjectReference Include="../../BuildingBlocks/Haworks.BuildingBlocks.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="MassTransit.Abstractions" Version="9.1.1" />
+  </ItemGroup>
 </Project>
