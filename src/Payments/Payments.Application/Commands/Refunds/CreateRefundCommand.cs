@@ -28,6 +28,16 @@ public sealed class CreateRefundCommandHandler(
             return Result.Failure<Guid>(Error.NotFound("Payment.NotFound", $"Payment {request.PaymentId} not found"));
         }
 
+        if (payment.Status != Domain.PaymentStatus.Completed)
+        {
+            return Result.Failure<Guid>(Error.Validation("Payment.NotCompleted", $"Payment must be completed before refund. Current status: {payment.Status}"));
+        }
+
+        if (request.Amount > payment.Amount)
+        {
+            return Result.Failure<Guid>(Error.Validation("Refund.ExceedsPayment", $"Refund amount {request.Amount} exceeds payment amount {payment.Amount}"));
+        }
+
         var refundId = Guid.NewGuid();
 
         await eventPublisher.PublishAsync(new RefundRequestedEvent

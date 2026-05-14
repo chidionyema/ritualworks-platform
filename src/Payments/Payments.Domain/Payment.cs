@@ -86,6 +86,11 @@ public class Payment : AuditableEntity
     /// <summary>Marks the payment as completed (called from the webhook consumer).</summary>
     public void MarkCompleted(string providerTransactionId, string paymentMethod)
     {
+        if (IsComplete)
+            throw new InvalidOperationException("Payment is already completed");
+        if (Status != PaymentStatus.Processing && Status != PaymentStatus.Pending)
+            throw new InvalidOperationException($"Cannot complete a payment with status {Status}");
+
         ArgumentException.ThrowIfNullOrWhiteSpace(providerTransactionId);
         ProviderTransactionId = providerTransactionId;
         PaymentMethod = paymentMethod ?? string.Empty;
@@ -117,6 +122,9 @@ public class Payment : AuditableEntity
     /// <summary>Marks the payment as refunded.</summary>
     public void MarkRefunded()
     {
+        if (Status != PaymentStatus.Completed)
+            throw new InvalidOperationException($"Cannot refund a payment with status {Status}");
+
         Status = PaymentStatus.Refunded;
         LastModifiedDate = DateTime.UtcNow;
     }
