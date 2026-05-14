@@ -1,0 +1,348 @@
+name: Post-Deploy Exploratory Scan
+
+on:
+  workflow_run:
+    workflows: [Deploy]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "Base URL to scan (e.g. https://ritualworks-bffweb.fly.dev)"
+        required: true
+        type: string
+
+concurrency:
+  group: post-deploy-scan
+  cancel-in-progress: true
+
+env:
+  # Default to Fly deployment URL; override via workflow_dispatch input
+  TARGET_URL: ${{ inputs.target_url || 'https://ritualworks-bffweb.fly.dev' }}
+
+jobs:
+  # ── 1. Smoke check — is the site actually up? ────────────────────────
+  smoke:
+    name: Smoke Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      site_up: ${{ steps.check.outputs.up }}
+
+    steps:
+      - name: Wait for deploy propagation
+        run: sleep 30
+
+      - name: Health check
+        id: check
+        run: |
+          for i in $(seq 1 10); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_URL/health" 2>/dev/null || echo "000")
+            echo "Attempt $i: $status"
+            if [ "$status" = "200" ]; then
+              echo "up=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "up=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::Site not reachable at $TARGET_URL"
+
+  # ── 2. OWASP ZAP — automated security scan ───────────────────────────
+  zap-scan:
+    name: OWASP ZAP Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: smoke
+    if: needs.smoke.outputs.site_up == 'true'
+    permissions:
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ZAP API Scan
+        uses: zaproxy/action-api-scan@v0.9.0
+        with:
+          target: ${{ env.TARGET_URL }}
+          cmd_options: >
+            -j
+            -f openapi
+            -z "-config api.addrs.addr.name=.* -config api.addrs.addr.regex=true"
+          allow_issue_writing: true
+        continue-on-error: true
+
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: ${{ env.TARGET_URL }}
+          rules_file_name: .github/zap-rules.tsv
+          allow_issue_writing: true
+        continue-on-error: true
+
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: report_html.html
+          retention-days: 14
+
+  # ── 3. Nuclei — CVE + misconfig scanner ───────────────────────────────
+  nuclei-scan:
+    name: Nuclei Vulnerability Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: smoke
+    if: needs.smoke.outputs.site_up == 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Nuclei
+        uses: projectdiscovery/nuclei-action@main
+        with:
+          target: ${{ env.TARGET_URL }}
+          templates: |
+            cves/
+            misconfiguration/
+            exposed-panels/
+            default-logins/
+            technologies/
+          flags: "-severity critical,high,medium -stats"
+          output: nuclei-results.txt
+
+      - name: Upload Nuclei results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuclei-results
+          path: nuclei-results.txt
+          retention-days: 14
+
+      - name: Fail on critical/high findings
+        run: |
+          if [ -f nuclei-results.txt ] && grep -qE "\[critical\]|\[high\]" nuclei-results.txt; then
+            echo "::error::Nuclei found critical/high vulnerabilities"
+            cat nuclei-results.txt
+            exit 1
+          fi
+
+  # ── 4. Auth & IDOR probing ───────────────────────────────────────────
+  auth-probe:
+    name: Auth & IDOR Probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: smoke
+    if: needs.smoke.outputs.site_up == 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Build auth probe tests
+        run: dotnet build tests/E2E/E2E.csproj
+
+      - name: Install Playwright
+        run: pwsh tests/E2E/bin/Debug/net9.0/playwright.ps1 install --with-deps
+
+      - name: Run auth & IDOR probes
+        env:
+          E2E_TARGET_URL: ${{ env.TARGET_URL }}
+          E2E_ENABLED: "1"
+        run: |
+          dotnet test tests/E2E/E2E.csproj --no-build \
+            --filter "Category=Security" \
+            --logger "console;verbosity=normal" || true
+
+  # ── 5. Claude exploratory attack scenarios ────────────────────────────
+  claude-exploratory:
+    name: Claude Exploratory Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: smoke
+    if: needs.smoke.outputs.site_up == 'true'
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Install Playwright
+        run: |
+          dotnet build tests/E2E/E2E.csproj
+          pwsh tests/E2E/bin/Debug/net9.0/playwright.ps1 install --with-deps
+
+      - name: Claude generates and runs exploratory tests
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          direct_prompt: |
+            You have access to a deployed .NET microservices platform at: ${{ env.TARGET_URL }}
+
+            Read CLAUDE.md for the project rules. Read the E2E test files in tests/E2E/
+            to understand the API surface and auth flow.
+
+            Your job: GENERATE AND EXECUTE exploratory test scenarios that probe for
+            real bugs against the live deployment. Use the Bash tool to run curl
+            commands and dotnet test commands.
+
+            ═══════════════════════════════════════════════════════════════
+            PHASE 1: RECONNAISSANCE
+            ═══════════════════════════════════════════════════════════════
+
+            1. Hit the health endpoint to confirm the site is up
+            2. Discover available endpoints by reading the E2E tests and controllers
+            3. Register a test user and get auth tokens (use the /api/Authentication flow)
+
+            ═══════════════════════════════════════════════════════════════
+            PHASE 2: SECURITY PROBES (use curl)
+            ═══════════════════════════════════════════════════════════════
+
+            Test each of these against the live site:
+
+            ## Auth bypass
+            - Hit every known endpoint WITHOUT a token → expect 401
+            - Hit endpoints with an expired/malformed JWT → expect 401
+            - Hit admin endpoints with a regular user token → expect 403
+
+            ## IDOR (Insecure Direct Object Reference)
+            - Register User A and User B
+            - Create a resource as User A
+            - Try to read/modify/delete it as User B → expect 403 or 404
+            - Try manipulating IDs in URLs (sequential, UUID of other users)
+
+            ## Input validation
+            - POST with missing required fields → expect 400 with validation errors
+            - POST with negative amounts, zero prices, huge strings (>10KB)
+            - POST with SQL injection payloads in string fields: ' OR 1=1 --
+            - POST with XSS payloads: <script>alert(1)</script>
+            - POST with path traversal in file fields: ../../etc/passwd
+            - PUT/PATCH with fields the user shouldn't be able to set (role, status)
+
+            ## Rate limiting & abuse
+            - Send 100 rapid requests to same endpoint → check for 429
+            - Send requests with huge Content-Length but small body
+            - Send duplicate checkout requests simultaneously
+
+            ═══════════════════════════════════════════════════════════════
+            PHASE 3: BUSINESS LOGIC PROBES (use curl)
+            ═══════════════════════════════════════════════════════════════
+
+            ## E-commerce edge cases
+            - Checkout with empty cart
+            - Checkout with item that has 0 stock
+            - Set product price to 0.001 (below minimum charge)
+            - Create order, then try to modify price before payment
+            - Apply same discount/coupon twice
+            - Refund more than the original payment amount
+
+            ## Concurrency
+            - Two simultaneous checkout requests for the same last-stock item
+            - Two simultaneous refund requests for the same payment
+
+            ## State machine abuse
+            - Try to ship an unpaid order
+            - Try to refund a pending (not completed) payment
+            - Cancel an already-completed order
+            - Re-open a closed privacy request
+
+            ═══════════════════════════════════════════════════════════════
+            PHASE 4: INFRASTRUCTURE PROBES (use curl)
+            ═══════════════════════════════════════════════════════════════
+
+            - Check security headers: X-Content-Type-Options, X-Frame-Options,
+              Strict-Transport-Security, Content-Security-Policy
+            - Check CORS: send Origin: https://evil.com, verify not reflected
+            - Check for exposed debug endpoints: /swagger, /hangfire, /elmah
+            - Check for information leakage in error responses (stack traces, SQL)
+            - Check cookie flags: HttpOnly, Secure, SameSite
+
+            ═══════════════════════════════════════════════════════════════
+            OUTPUT
+            ═══════════════════════════════════════════════════════════════
+
+            For each test, report:
+            - **Test**: what you did (curl command or test name)
+            - **Expected**: what should happen
+            - **Actual**: what actually happened
+            - **Status**: ✅ PASS / ❌ FAIL / ⚠️ WARNING
+            - **Severity**: CRITICAL / HIGH / MEDIUM / LOW (for failures only)
+            - **Evidence**: response status, headers, body snippet
+
+            Group results by phase. Count total PASS/FAIL/WARNING at the end.
+          output_file: /tmp/claude-exploratory.md
+
+      - name: Create issue with findings
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let body;
+            try {
+              body = fs.readFileSync('/tmp/claude-exploratory.md', 'utf8');
+            } catch {
+              body = 'Exploratory testing completed but no output was generated. Check workflow logs.';
+            }
+
+            const title = `🔬 Post-Deploy Exploratory Scan — ${new Date().toISOString().split('T')[0]}`;
+            const labels = ['exploratory-scan', 'automated', 'security'];
+
+            // Close previous exploratory scan issues
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'exploratory-scan',
+              state: 'open',
+            });
+            for (const issue of existing.data) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+                state_reason: 'not_planned',
+              });
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body: `## 🔬 Post-Deploy Exploratory Scan\n\nTarget: \`${{ env.TARGET_URL }}\`\nRun: [${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n\n---\n\n${body}`,
+              labels,
+            });
+
+  # ── 6. Summary ────────────────────────────────────────────────────────
+  notify:
+    name: Summary
+    runs-on: ubuntu-latest
+    needs: [smoke, zap-scan, nuclei-scan, auth-probe, claude-exploratory]
+    if: always()
+
+    steps:
+      - name: Build summary
+        run: |
+          echo "## 🔬 Post-Deploy Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Target:** \`$TARGET_URL\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Smoke Check | ${{ needs.smoke.outputs.site_up == 'true' && '✅ Up' || '❌ Down' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| OWASP ZAP | ${{ needs.zap-scan.result == 'success' && '✅' || '⚠️' }} ${{ needs.zap-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Nuclei CVE Scan | ${{ needs.nuclei-scan.result == 'success' && '✅' || '⚠️' }} ${{ needs.nuclei-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Auth & IDOR Probe | ${{ needs.auth-probe.result == 'success' && '✅' || '⚠️' }} ${{ needs.auth-probe.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Claude Exploratory | ${{ needs.claude-exploratory.result == 'success' && '✅' || '⚠️' }} ${{ needs.claude-exploratory.result }} |" >> $GITHUB_STEP_SUMMARY

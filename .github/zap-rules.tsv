@@ -1,0 +1,4 @@
+10003	WARN	(Vulnerable JS Library - may flag bundled libs)
+10015	IGNORE	(Incomplete or No Cache-control Header Set - API responses)
+10049	IGNORE	(Storable and Cacheable Content - API responses)
+10109	WARN	(Modern Web Application)
