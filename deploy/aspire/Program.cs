@@ -85,7 +85,8 @@ var clamav = builder.AddContainer("clamav", "clamav/clamav", "latest")
 
 var elasticsearch = builder.AddElasticsearch("elasticsearch")
     .WithLifetime(ContainerLifetime.Persistent)
-    .WithDataVolume("ritualworks-platform-elasticsearch-data");
+    .WithDataVolume("ritualworks-platform-elasticsearch-data")
+    .WithEnvironment("ES_JAVA_OPTS", "-Xms512m -Xmx512m");
 
 // Tempo needs a config file to start — without /etc/tempo.yaml it exits
 // with "failed to create store: unknown backend """. Reuse the same

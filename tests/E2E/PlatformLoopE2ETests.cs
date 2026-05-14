@@ -9,16 +9,16 @@ namespace Haworks.Tests.E2E;
 [Collection("E2E Tests")]
 public class PlatformLoopE2ETests(E2EEnvironmentFixture fixture, ITestOutputHelper output) : IAsyncLifetime
 {
-    private IAPIRequestContext _apiContext = null!;
+    private IAPIRequestContext _bffContext = null!;
 
     public async Task InitializeAsync()
     {
-        _apiContext = await fixture.CreateApiContextAsync();
+        _bffContext = await fixture.CreateApiContextAsync();
     }
 
     public async Task DisposeAsync()
     {
-        await _apiContext.DisposeAsync();
+        await _bffContext.DisposeAsync();
     }
 
     [Fact]
@@ -26,18 +26,25 @@ public class PlatformLoopE2ETests(E2EEnvironmentFixture fixture, ITestOutputHelp
     {
         output.WriteLine("--- STARTING SEARCH LOOP E2E ---");
 
+        var catalogEndpoint = fixture.GetServiceEndpoint("catalog-svc");
+        var catalogContext = await fixture.Playwright.APIRequest.NewContextAsync(new APIRequestNewContextOptions
+        {
+            BaseURL = catalogEndpoint.ToString(),
+            IgnoreHTTPSErrors = true
+        });
+
         // 1. Create a uniquely identifiable product in Catalog
         var productName = $"E2E_Sync_Check_{Guid.NewGuid():N}";
         
-        // Note: Catalog APIs are currently unauthenticated in dev for ease of testing.
-        var categoryResponse = await _apiContext.PostAsync("/api/Categories", new()
+        var categoryResponse = await catalogContext.PostAsync("/api/Categories", new()
         {
             DataObject = new { name = "E2E Sync Category", description = "For E2E tests" }
         });
+        categoryResponse.Ok.Should().BeTrue($"Category creation failed: {await categoryResponse.TextAsync()}");
         var category = await categoryResponse.JsonAsync();
         var categoryId = category?.GetProperty("id").GetGuid();
 
-        var productResponse = await _apiContext.PostAsync("/api/Products", new()
+        var productResponse = await catalogContext.PostAsync("/api/Products", new()
         {
             DataObject = new 
             { 
@@ -54,16 +61,18 @@ public class PlatformLoopE2ETests(E2EEnvironmentFixture fixture, ITestOutputHelp
 
         // 2. Poll the Search API via BFF until the product appears
         bool found = false;
-        for (int i = 0; i < 15; i++)
+        for (int i = 0; i < 20; i++)
         {
             await Task.Delay(1000);
-            var searchResponse = await _apiContext.GetAsync($"/api/search?q={productName}");
+            var searchResponse = await _bffContext.GetAsync($"/api/search?q={productName}");
             if (!searchResponse.Ok) continue;
 
             var results = await searchResponse.JsonAsync();
-            var hits = results?.GetProperty("hits").EnumerateArray();
+            if (results == null) continue;
+
+            var hits = results.Value.GetProperty("hits").EnumerateArray();
             
-            if (hits?.Any(h => h.GetProperty("name").GetString() == productName) == true)
+            if (hits.Any(h => h.GetProperty("name").GetString() == productName))
             {
                 found = true;
                 output.WriteLine($"Success: Product found in Elasticsearch after {i+1}s");
@@ -79,15 +88,22 @@ public class PlatformLoopE2ETests(E2EEnvironmentFixture fixture, ITestOutputHelp
     {
         output.WriteLine("--- STARTING AUDIT TRAIL E2E ---");
 
+        var identityEndpoint = fixture.GetServiceEndpoint("identity-svc");
+        var identityContext = await fixture.Playwright.APIRequest.NewContextAsync(new APIRequestNewContextOptions
+        {
+            BaseURL = identityEndpoint.ToString(),
+            IgnoreHTTPSErrors = true
+        });
+
         // 1. Register a new user in Identity service
         var username = $"audit_check_{Guid.NewGuid():N}";
         var email = $"{username}@example.com";
         
-        var registerResponse = await _apiContext.PostAsync("/api/Authentication/register", new()
+        var registerResponse = await identityContext.PostAsync("/api/Authentication/register", new()
         {
             DataObject = new { username, email, password = "Password123!" }
         });
-        registerResponse.Status.Should().Be(201);
+        registerResponse.Status.Should().Be(201, $"Registration failed: {await registerResponse.TextAsync()}");
         
         var authData = await registerResponse.JsonAsync();
         var userId = authData?.GetProperty("userId").GetString();
@@ -95,7 +111,6 @@ public class PlatformLoopE2ETests(E2EEnvironmentFixture fixture, ITestOutputHelp
         output.WriteLine($"User '{username}' (ID: {userId}) registered. Polling audit logs...");
 
         // 2. Call Audit service directly to verify the event was captured
-        // The Audit service uses the 'UserRegistered' event type.
         var auditEndpoint = fixture.GetServiceEndpoint("audit-svc");
         var auditContext = await fixture.Playwright.APIRequest.NewContextAsync(new APIRequestNewContextOptions
         {
@@ -104,18 +119,19 @@ public class PlatformLoopE2ETests(E2EEnvironmentFixture fixture, ITestOutputHelp
         });
 
         bool captured = false;
-        for (int i = 0; i < 15; i++)
+        for (int i = 0; i < 20; i++)
         {
             await Task.Delay(1000);
             
-            // Query audit logs for this specific entity (User)
             var auditResponse = await auditContext.GetAsync($"/audit/events?entityId={userId}");
             if (!auditResponse.Ok) continue;
 
             var auditPage = await auditResponse.JsonAsync();
-            var items = auditPage?.GetProperty("items").EnumerateArray();
+            if (auditPage == null) continue;
+
+            var items = auditPage.Value.GetProperty("items").EnumerateArray();
             
-            if (items?.Any(e => e.GetProperty("eventType").GetString() == "UserRegistered") == true)
+            if (items.Any(e => e.GetProperty("eventType").GetString() == "UserRegistered"))
             {
                 captured = true;
                 output.WriteLine($"Success: UserRegistration event captured in Audit DB after {i+1}s");
