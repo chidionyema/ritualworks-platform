@@ -62,7 +62,7 @@ jobs:
       bff: ${{ steps.filter.outputs.bff }}
       shared: ${{ steps.filter.outputs.shared }}
       audit: ${{ steps.filter.outputs.audit }}
-      cdc: ${{ steps.filter.outputs.cdc }}
+      webhooks: ${{ steps.filter.outputs.webhooks }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -113,9 +113,9 @@ jobs:
             audit:
               - 'src/Audit/**'
               - 'fly.audit.toml'
-            cdc:
-              - 'src/Cdc/**'
-              - 'fly.cdc.toml'
+            webhooks:
+              - 'src/Webhooks/**'
+              - 'fly.webhooks.toml'
             bff:
               - 'src/BffWeb/**'
               - 'fly.bffweb.toml'
@@ -145,7 +145,7 @@ jobs:
       C_NOTIFICATIONS: ${{ needs.changes.outputs.notifications }}
       C_BFF: ${{ needs.changes.outputs.bff }}
       C_AUDIT: ${{ needs.changes.outputs.audit }}
-      C_CDC: ${{ needs.changes.outputs.cdc }}
+      C_WEBHOOKS: ${{ needs.changes.outputs.webhooks }}
     steps:
       - id: set
         run: |
@@ -162,10 +162,10 @@ jobs:
           add_if search        "$C_SEARCH"        "$C_SHARED"
           add_if notifications "$C_NOTIFICATIONS" "$C_SHARED"
           add_if meilisearch   "$C_MEILISEARCH"   "false"  # no shared triggers meili
+          add_if audit        "$C_AUDIT" "$C_SHARED"
+          add_if webhooks    "$C_WEBHOOKS" "$C_SHARED"
           if [[ "${{ vars.DEPLOY_CONTENT }}" == "true" ]]; then
             add_if content "$C_CONTENT" "$C_SHARED"
-          add_if audit        "$C_AUDIT" "$C_SHARED"
-          add_if cdc          "$C_CDC" "$C_SHARED"
           fi
 
           if [[ ${#services[@]} -eq 0 ]]; then
