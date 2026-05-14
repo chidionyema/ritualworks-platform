@@ -14,7 +14,7 @@ public class ScheduleEventCommandValidator : AbstractValidator<ScheduleEventComm
 {
     public ScheduleEventCommandValidator()
     {
-        RuleFor(v => v.ScheduledTime).GreaterThan(DateTimeOffset.UtcNow);
+        RuleFor(v => v.ScheduledTime).Must(t => t > DateTimeOffset.UtcNow).WithMessage("ScheduledTime must be in the future");
         RuleFor(v => v.TargetExchange).NotEmpty();
         RuleFor(v => v.RoutingKey).NotEmpty();
         RuleFor(v => v.Payload).NotNull();
