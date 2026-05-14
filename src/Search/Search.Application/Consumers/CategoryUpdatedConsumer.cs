@@ -33,7 +33,7 @@ public sealed class CategoryUpdatedConsumer : IConsumer<CategoryUpdatedEvent>
             var hits = await _index.SearchAsync(new SearchQuery
             {
                 Query = "",
-                Filter = $"categoryId = \"{msg.CategoryId}\"",
+                CategoryFilter = msg.CategoryId,
                 Page = page,
                 PageSize = BatchSize,
             }, context.CancellationToken).ConfigureAwait(false);

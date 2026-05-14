@@ -4,6 +4,7 @@ using Haworks.Payments.Infrastructure.Options;
 using Haworks.Payments.Infrastructure;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
 
@@ -30,7 +31,7 @@ public class PaymentGatewayTests
             Active = provider
         });
 
-        return new PaymentGateway(_serviceProviderMock.Object, options);
+        return new PaymentGateway(_serviceProviderMock.Object, options, new Mock<ILogger<PaymentGateway>>().Object);
     }
 
     [Fact]

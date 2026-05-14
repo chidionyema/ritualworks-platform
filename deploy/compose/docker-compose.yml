@@ -106,19 +106,19 @@ services:
     ports:
       - "3310:3310"
 
-  meilisearch:
-    image: getmeili/meilisearch:v1.10
-    container_name: rw-meilisearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    container_name: rw-elasticsearch
     environment:
-      - MEILI_MASTER_KEY=dev_master_key_at_least_16_chars
-      - MEILI_NO_ANALYTICS=true
-      - MEILI_ENV=development
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     ports:
-      - "7700:7700"
+      - "9200:9200"
     volumes:
-      - meilisearch-data:/meili_data
+      - elasticsearch-data:/usr/share/elasticsearch/data
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7700/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:9200/"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -437,7 +437,7 @@ services:
       dockerfile: src/Search/Search.Api/Dockerfile
     container_name: rw-search-svc
     depends_on:
-      meilisearch:
+      elasticsearch:
         condition: service_healthy
       catalog-svc-1:
         condition: service_started
@@ -448,9 +448,8 @@ services:
       - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
       # search-svc has no Vault-backed secrets; AppRole + KV not needed.
       - Vault__Enabled=false
-      - Meilisearch__Url=http://meilisearch:7700
-      - Meilisearch__MasterKey=dev_master_key_at_least_16_chars
-      - Meilisearch__IndexName=products
+      - Elasticsearch__Url=http://elasticsearch:9200
+      - Elasticsearch__IndexName=products
       # search-svc is a read-side projection of catalog; calls catalog-svc
       # for category lookups via Refit.
       - Catalog__BaseAddress=http://catalog-svc-1:8080
@@ -525,4 +524,4 @@ volumes:
   rabbitmq-data:
   localstack-data:
   pact-db-data:
-  meilisearch-data:
+  elasticsearch-data:

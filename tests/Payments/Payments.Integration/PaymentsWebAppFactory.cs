@@ -13,6 +13,8 @@ using Haworks.BuildingBlocks.Testing.Authentication;
 using Haworks.BuildingBlocks.Testing.Containers;
 using Haworks.Payments.Application.Consumers;
 using Haworks.Payments.Api.Webhooks;
+using Haworks.Payments.Application.Sagas;
+using Haworks.Payments.Domain;
 using Haworks.Payments.Infrastructure;
 using Haworks.Payments.Infrastructure.Options;
 
@@ -98,6 +100,11 @@ public class PaymentsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
             services.AddMassTransitTestHarness(mt =>
             {
                 mt.AddConsumer<PaymentWebhookValidatedConsumer>();
+                mt.AddConsumer<PaymentSessionRequestedConsumer>();
+                mt.AddConsumer<ProviderRefundInitiationRequestedConsumer>();
+                mt.AddConsumer<SubscriptionRenewalRequestedConsumer>();
+                mt.AddSagaStateMachine<RefundSaga, RefundSagaState>();
+                mt.AddSagaStateMachine<SubscriptionSaga, SubscriptionSagaState>();
             });
 
             services.AddDomainEventPublisher();

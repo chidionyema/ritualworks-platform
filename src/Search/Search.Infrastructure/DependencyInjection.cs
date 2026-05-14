@@ -1,12 +1,12 @@
+using Elastic.Clients.Elasticsearch;
 using Haworks.BuildingBlocks.Resilience;
 using Haworks.Search.Application.Catalog;
 using Haworks.Search.Application.Consumers;
 using Haworks.Search.Application.Interfaces;
 using Haworks.Search.Infrastructure.Catalog;
-using Haworks.Search.Infrastructure.Meilisearch;
+using Haworks.Search.Infrastructure.Elasticsearch;
 using Haworks.Search.Infrastructure.Options;
 using MassTransit;
-using Meilisearch;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -21,18 +21,19 @@ public static class DependencyInjection
         IConfiguration configuration,
         IHostEnvironment env)
     {
-        services.AddOptions<MeilisearchOptions>()
-            .Bind(configuration.GetSection(MeilisearchOptions.SectionName))
+        services.AddOptions<ElasticsearchOptions>()
+            .Bind(configuration.GetSection(ElasticsearchOptions.SectionName))
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        services.AddSingleton<MeilisearchClient>(sp =>
+        services.AddSingleton<ElasticsearchClient>(sp =>
         {
-            var opt = sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value;
-            return new MeilisearchClient(opt.Url, opt.MasterKey);
+            var opt = sp.GetRequiredService<IOptions<ElasticsearchOptions>>().Value;
+            var settings = new ElasticsearchClientSettings(new Uri(opt.Url));
+            return new ElasticsearchClient(settings);
         });
 
-        services.AddScoped<ISearchIndex, MeilisearchIndex>();
+        services.AddScoped<ISearchIndex, ElasticsearchIndex>();
 
         // Catalog HTTP client. The resilience policy is constructed inside
         // CatalogProductsApiClient and wraps each call — matching the

@@ -16,11 +16,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.AppHost" Version="9.5.2" />
-    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="9.5.2" />
-    <PackageReference Include="Aspire.Hosting.Redis" Version="9.5.2" />
-    <PackageReference Include="Aspire.Hosting.RabbitMQ" Version="9.5.2" />
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="9.4.1" />
+    <PackageReference Include="Aspire.Hosting.Kafka" Version="9.0.0" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="9.0.0" />
+    <PackageReference Include="Aspire.Hosting.Redis" Version="9.0.0" />
+    <PackageReference Include="Aspire.Hosting.RabbitMQ" Version="9.0.0" />
+    <PackageReference Include="Aspire.Hosting.Elasticsearch" Version="9.0.0" NoWarn="NU1603" />
   </ItemGroup>
+
 
   <ItemGroup>
     <!-- Service project references — required for Aspire's Projects.* generated types -->
@@ -33,7 +36,13 @@
     <ProjectReference Include="../../src/Search/Search.Api/Search.Api.csproj" />
     <ProjectReference Include="../../src/Notifications/Notifications.Api/Notifications.Api.csproj" />
     <ProjectReference Include="../../src/Audit/Audit.Api/Audit.Api.csproj" />
+    <ProjectReference Include="../../src/Location/Location.Api/Location.Api.csproj" />
     <ProjectReference Include="../../src/BffWeb/BffWeb.Api/BffWeb.Api.csproj" />
+    <ProjectReference Include="..\..\src\Webhooks\Webhooks.Api\Webhooks.Api.csproj" />
+    <ProjectReference Include="..\..\src\Payouts\Payouts.Api\Payouts.Api.csproj" />
+    <ProjectReference Include="..\..\src\Scheduler\Scheduler.Api\Scheduler.Api.csproj" />
+    <ProjectReference Include="..\..\src\Privacy\Privacy.Api\Privacy.Api.csproj" />
+    <ProjectReference Include="..\..\src\Merchant\Merchant.Api\Merchant.Api.csproj" />
   </ItemGroup>
 
 </Project>

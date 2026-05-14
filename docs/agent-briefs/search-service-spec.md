@@ -1,6 +1,6 @@
 # Search Service — End-to-End Spec
 
-**Status:** signed off 2026-05-08 — engine = Meilisearch, topology = single machine, category events = yes, Gemini API = deferred to v2
+**Status:** signed off 2026-05-08 — engine = Elasticsearch, topology = single machine, category events = yes, Gemini API = deferred to v2
 **Implementer:** Gemini CLI agents working brief-by-brief from `docs/agent-briefs/search/`
 **Reviewer:** Claude / user, between phases
 **Target:** ship v1 behind the BFF, ready for Gemini-powered re-ranking in v2
@@ -9,10 +9,11 @@
 
 ## 1. Goal & non-goals
 
-**Goal.** A new `search-svc` microservice that indexes catalog products and serves low-latency, highly-available keyword search. Two query shapes for v1:
+**Goal.** A new `search-svc` microservice that indexes catalog products and serves low-latency, highly-available keyword search. Three query shapes for v1:
 
 - `GET /search?q=<text>&page=&pageSize=` — free-text across all listed products
 - `GET /search?q=<text>&categoryId=<guid>&page=&pageSize=` — same, scoped to a category
+- `POST /search/saved` — register a "percolator" query for reverse search (saved search alerts)
 
 The "for Gemini" framing means the result envelope is shaped to feed an LLM (stable JSON, `score`, snippet fields) so a future `assistant-svc` can pass results to Gemini as context without a translation layer. **Gemini calls themselves are out of scope for v1.**
 
@@ -36,16 +37,16 @@ The "for Gemini" framing means the result envelope is shaped to feed an LLM (sta
                                     │  • Search.Infrastructure  │
                                     │  • Search.Domain          │
                                     └────────────┬──────────────┘
-                                                 │ Meilisearch SDK
+                                                 │ Elasticsearch SDK
                                                  │ (HTTP, flycast)
                                                  ▼
                                     ┌───────────────────────────┐
-                                    │  ritualworks-meilisearch  │
-                                    │  (Fly, 1 vm + 1 GB volume)│
-                                    │  index = "products"       │
+                                    │ ritualworks-elasticsearch │
+                                    │ (Fly, 1 vm + data volume) │
+                                    │ index = "products"        │
+                                    │ index = "saved_searches"  │
                                     └────────────▲──────────────┘
-                                                 │ documents.add /
-                                                 │ documents.delete
+                                                 │ _bulk / _search
                                                  │
    catalog-svc ─ outbox ─ RabbitMQ ─►  ProductCacheInvalidatedEvent (existing)
                                        CategoryUpdatedEvent (NEW, see §6)

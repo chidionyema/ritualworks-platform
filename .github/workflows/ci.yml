@@ -52,19 +52,22 @@ jobs:
 
       - name: Unit tests
         run: |
-          for proj in tests/*/*.Unit/*.csproj; do
+          shopt -s nullglob
+          printf '%s\n' tests/*/*.Unit/*.csproj tests/*.Unit/*.csproj | awk -F/ '!seen[$NF]++' | while read -r proj; do
             dotnet test "$proj" --no-build --configuration Release --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=minimal"
           done
 
       - name: Architecture tests
         run: |
-          for proj in tests/*/*.Architecture/*.csproj; do
+          shopt -s nullglob
+          printf '%s\n' tests/*/*.Architecture/*.csproj tests/*.Architecture/*.csproj | awk -F/ '!seen[$NF]++' | while read -r proj; do
             dotnet test "$proj" --no-build --configuration Release --logger "console;verbosity=minimal"
           done
 
       - name: Contract (Pact) tests
         run: |
-          for proj in tests/*/*.Contract/*.csproj; do
+          shopt -s nullglob
+          printf '%s\n' tests/*/*.Contract/*.csproj tests/*.Contract/*.csproj | awk -F/ '!seen[$NF]++' | while read -r proj; do
             dotnet test "$proj" --no-build --configuration Release --logger "console;verbosity=minimal"
           done
 

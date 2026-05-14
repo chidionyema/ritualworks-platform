@@ -85,5 +85,24 @@ public sealed class ProductCacheInvalidatedConsumer : IConsumer<ProductCacheInva
 
         await _index.UpsertAsync(new[] { doc }, context.CancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Search index upserted {ProductId} at v{Version}", msg.ProductId, incomingVersion);
+
+        // Percolation (Reverse Search / Saved Searches)
+        var matches = await _index.PercolateAsync(doc, context.CancellationToken).ConfigureAwait(false);
+        if (matches.Count > 0)
+        {
+            _logger.LogInformation("Product {ProductId} matched {MatchCount} saved searches", msg.ProductId, matches.Count);
+            foreach (var match in matches)
+            {
+                await context.Publish(new Haworks.Contracts.Search.ProductMatchedSavedSearchEvent
+                {
+                    SavedSearchId = match.Id,
+                    UserId = match.UserId,
+                    ProductId = fetched.Id,
+                    ProductName = fetched.Name,
+                    UnitPrice = fetched.UnitPrice,
+                    MatchedAt = DateTimeOffset.UtcNow
+                }, context.CancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 }

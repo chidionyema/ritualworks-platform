@@ -83,7 +83,7 @@ public static class DependencyInjection
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        services.AddSingleton<IReservationMetrics, NullReservationMetrics>();
+        services.AddSingleton<IReservationMetrics, CatalogReservationMetrics>();
 
         if (!env.IsEnvironment("Test"))
         {

@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+option csharp_namespace = "LocationGrpc";
+
+package location;
+
+service LocationHydration {
+  rpc GetAddresses(AddressRequest) returns (AddressList);
+}
+
+message AddressRequest {
+  repeated string locationIds = 1;
+}
+
+message AddressList {
+  repeated AddressDetail locations = 1;
+}
+
+message AddressDetail {
+  string id = 1;
+  string street = 2;
+  string city = 3;
+  string postcode = 4;
+  string country = 5;
+  double latitude = 6;
+  double longitude = 7;
+}

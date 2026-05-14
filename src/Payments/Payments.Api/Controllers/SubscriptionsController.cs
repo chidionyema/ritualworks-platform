@@ -45,9 +45,40 @@ public sealed class SubscriptionsController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(command, ct);
         return result.ToActionResult();
     }
+
+    [HttpPost("cancel")]
+    public async Task<IActionResult> Cancel(
+        [FromBody] CancelSubscriptionRequest body, CancellationToken ct)
+    {
+        var userId = HttpContext.GetForwardedUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await mediator.Send(new CancelSubscriptionCommand(userId, body.SubscriptionId, body.Immediate), ct);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("resume")]
+    public async Task<IActionResult> Resume(
+        [FromBody] ResumeSubscriptionRequest body, CancellationToken ct)
+    {
+        var userId = HttpContext.GetForwardedUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await mediator.Send(new ResumeSubscriptionCommand(userId, body.SubscriptionId), ct);
+        return result.ToActionResult();
+    }
 }
 
 public sealed record CreateSubscriptionCheckoutRequest(
     string PriceId,
     decimal Amount,
     string? RedirectPath);
+
+public sealed record CancelSubscriptionRequest(string SubscriptionId, bool Immediate = false);
+public sealed record ResumeSubscriptionRequest(string SubscriptionId);

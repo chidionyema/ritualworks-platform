@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Haworks.Location.Application</RootNamespace>
+    <AssemblyName>Haworks.Location.Application</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Location.Domain/Location.Domain.csproj" />
+  </ItemGroup>
+</Project>

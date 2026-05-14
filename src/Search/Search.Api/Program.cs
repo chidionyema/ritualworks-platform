@@ -14,8 +14,7 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 builder.AddServiceDefaults();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 
-builder.Services.AddJwksAuthentication(builder.Configuration);
-builder.Services.AddHttpContextAccessor();
+builder.Services.AddPlatformAuthentication(builder.Configuration);
 
 builder.Services.AddControllers();
 
@@ -28,8 +27,8 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// One-shot bootstrap of the Meilisearch index settings. Wrapped in
-// try/catch + warning so a transiently down Meilisearch on first deploy
+// One-shot bootstrap of the Elasticsearch index settings. Wrapped in
+// try/catch + warning so a transiently down Elasticsearch on first deploy
 // doesn't crash app boot — both apps come up alongside each other on Fly.
 using (var scope = app.Services.CreateScope())
 {
@@ -41,7 +40,7 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        logger.LogWarning(ex, "Meilisearch settings bootstrap failed; will retry on next cold start");
+        logger.LogWarning(ex, "Elasticsearch settings bootstrap failed; will retry on next cold start");
     }
 }
 

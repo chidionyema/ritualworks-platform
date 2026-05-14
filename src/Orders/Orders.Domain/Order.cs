@@ -117,4 +117,22 @@ public class Order : AuditableEntity
         LastModifiedDate = DateTime.UtcNow;
         return true;
     }
+
+    /// <summary>Transitions to Refunded. Only allowed from Paid state.</summary>
+    public bool MarkRefunded()
+    {
+        if (Status != OrderStatus.Paid) return false;
+        Status = OrderStatus.Refunded;
+        LastModifiedDate = DateTime.UtcNow;
+        return true;
+    }
+
+    /// <summary>Reverts to Paid status. Usually after a failed or cancelled refund.</summary>
+    public bool RevertToPaid()
+    {
+        if (Status != OrderStatus.Refunded) return false;
+        Status = OrderStatus.Paid;
+        LastModifiedDate = DateTime.UtcNow;
+        return true;
+    }
 }
