@@ -19,6 +19,7 @@ public class StripeWebhookProcessorTests
 {
     private readonly Mock<IPaymentSessionProcessor> _paymentProcessorMock;
     private readonly Mock<ISubscriptionManager> _subscriptionManagerMock;
+    private readonly Mock<IRefundService> _refundServiceMock;
     private readonly Mock<IWebhookIdempotencyGuard> _idempotencyGuardMock;
     private readonly Mock<IPaymentRepository> _paymentRepositoryMock;
     private readonly Mock<IDomainEventPublisher> _eventPublisherMock;
@@ -31,6 +32,7 @@ public class StripeWebhookProcessorTests
     {
         _paymentProcessorMock = new Mock<IPaymentSessionProcessor>();
         _subscriptionManagerMock = new Mock<ISubscriptionManager>();
+        _refundServiceMock = new Mock<IRefundService>();
         _idempotencyGuardMock = new Mock<IWebhookIdempotencyGuard>();
         _paymentRepositoryMock = new Mock<IPaymentRepository>();
         _eventPublisherMock = new Mock<IDomainEventPublisher>();
@@ -50,6 +52,7 @@ public class StripeWebhookProcessorTests
         _processor = new StripeWebhookProcessor(
             _paymentProcessorMock.Object,
             _subscriptionManagerMock.Object,
+            _refundServiceMock.Object,
             _idempotencyGuardMock.Object,
             _paymentRepositoryMock.Object,
             _eventPublisherMock.Object,

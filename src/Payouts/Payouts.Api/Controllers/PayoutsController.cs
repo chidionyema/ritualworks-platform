@@ -1,10 +1,12 @@
 using Haworks.Payouts.Application.Disbursements.Queries.GetPayoutsBySeller;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.Payouts.Api.Controllers;
 
 [ApiController][Route("api/[controller]")]
+[Authorize]
 public class PayoutsController : ControllerBase
 {
     private readonly IMediator _mediator;

@@ -74,7 +74,7 @@ public sealed class RefundSaga : MassTransitStateMachine<RefundSagaState>
                     RefundId = ctx.Saga.CorrelationId,
                     OrderId = ctx.Saga.OrderId,
                     FailureCategory = "ProviderRefundFailed",
-                    FailureDetail = ctx.Saga.FailureDetail
+                    FailureDetail = ctx.Saga.FailureDetail ?? "Unknown provider error"
                 }))
                 .TransitionTo(RequiresReview));
 
@@ -108,7 +108,7 @@ public sealed class RefundSaga : MassTransitStateMachine<RefundSagaState>
                     RefundId = ctx.Saga.CorrelationId,
                     OrderId = ctx.Saga.OrderId,
                     FailureCategory = "ProviderRefundFailed",
-                    FailureDetail = ctx.Saga.FailureDetail
+                    FailureDetail = ctx.Saga.FailureDetail ?? "Unknown provider confirmation error"
                 }))
                 .TransitionTo(RequiresReview),
             When(RefundTimeoutSchedule.Received)

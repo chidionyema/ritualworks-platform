@@ -42,8 +42,7 @@ builder.Services.AddMassTransit(x =>
     });
 });
 
-builder.Services.AddJwksAuthentication(builder.Configuration);
-builder.Services.AddAuthorization();
+builder.Services.AddPlatformAuthentication(builder.Configuration);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

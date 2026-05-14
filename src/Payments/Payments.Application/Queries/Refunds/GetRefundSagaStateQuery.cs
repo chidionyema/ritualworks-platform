@@ -1,6 +1,6 @@
 using Haworks.BuildingBlocks.Common;
 using Haworks.Payments.Domain;
-using Haworks.Payments.Infrastructure;
+using Haworks.Payments.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,7 +23,7 @@ public sealed record RefundSagaDto(
     DateTime CreatedAt);
 
 internal sealed class GetRefundSagaStateQueryHandler(
-    PaymentDbContext db) : IRequestHandler<GetRefundSagaStateQuery, Result<RefundSagaDto>>
+    IPaymentDbContext db) : IRequestHandler<GetRefundSagaStateQuery, Result<RefundSagaDto>>
 {
     public async Task<Result<RefundSagaDto>> Handle(GetRefundSagaStateQuery request, CancellationToken ct)
     {

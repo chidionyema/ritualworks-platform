@@ -1,11 +1,13 @@
 using Haworks.Payouts.Application.Sellers.Commands.GetOnboardingLink;
 using Haworks.Payouts.Application.Sellers.Commands.RegisterSeller;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.Payouts.Api.Controllers;
 
 [ApiController][Route("api/[controller]")]
+[Authorize]
 public class SellersController : ControllerBase
 {
     private readonly IMediator _mediator;

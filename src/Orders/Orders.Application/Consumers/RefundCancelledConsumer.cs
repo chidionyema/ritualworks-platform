@@ -1,7 +1,7 @@
 using MassTransit;
 using Haworks.Contracts.Payments;
-using Haworks.Orders.Application.Interfaces;
-using Haworks.Orders.Domain.Enums;
+using Haworks.Orders.Domain.Interfaces;
+using Haworks.Orders.Domain;
 using Microsoft.Extensions.Logging;
 
 namespace Haworks.Orders.Application.Consumers;
@@ -26,11 +26,8 @@ public sealed class RefundCancelledConsumer(
             return;
         }
 
-        // If a refund is cancelled, it means the payment is still valid (or failed in a way that doesn't refund)
-        // We'll flip it back to Paid if it was in a transient state, but usually it's already Paid.
-        if (order.Status == OrderStatus.Refunded) // Should not happen if saga is authoritative
+        if (order.RevertToPaid())
         {
-            order.UpdateStatus(OrderStatus.Paid);
             await orderRepository.SaveChangesAsync(context.CancellationToken);
             logger.LogInformation("Order {OrderId} status reverted to Paid after refund cancellation", msg.OrderId);
         }

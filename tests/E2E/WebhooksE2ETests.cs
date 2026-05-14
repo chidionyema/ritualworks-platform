@@ -13,6 +13,8 @@ namespace Haworks.Tests.E2E;
 public class WebhooksE2ETests(E2EEnvironmentFixture fixture) : IAsyncLifetime
 {
     private WireMockServer? _wireMockServer;
+    private static readonly string[] OrderCreatedEvents = new[] { "order.created" };
+    private static readonly string[] ProductCreatedEvents = new[] { "products.created" };
 
     public Task InitializeAsync()
     {
@@ -66,7 +68,7 @@ public class WebhooksE2ETests(E2EEnvironmentFixture fixture) : IAsyncLifetime
             {
                 partnerId = Guid.NewGuid(),
                 url = webhookUrl,
-                events = new[] { "order.created" },
+                events = OrderCreatedEvents,
                 secret = "webhook-secret"
             }
         });
@@ -88,14 +90,17 @@ public class WebhooksE2ETests(E2EEnvironmentFixture fixture) : IAsyncLifetime
         // Create Product (will trigger product.created CDC event)
         // Wait, our subscription is for 'order.created'. Let's update it or create an order.
         
-        await apiContext.PutAsync($"/api/webhooks/subscriptions/{(await subResponse.JsonAsync())?.GetProperty("id").GetGuid()}", new()
+        var subData = await subResponse.JsonAsync();
+        var subId = subData?.GetProperty("id").GetGuid();
+
+        await apiContext.PutAsync($"/api/webhooks/subscriptions/{subId}", new()
         {
             Headers = headers,
             DataObject = new
             {
-                id = (await subResponse.JsonAsync())?.GetProperty("id").GetGuid(),
+                id = subId,
                 url = webhookUrl,
-                events = new[] { "products.created" },
+                events = ProductCreatedEvents,
                 isActive = true
             }
         });
@@ -120,7 +125,7 @@ public class WebhooksE2ETests(E2EEnvironmentFixture fixture) : IAsyncLifetime
         for (int i = 0; i < 20; i++)
         {
             var logs = _wireMockServer.LogEntries;
-            if (logs.Any(l => l.RequestMessage.Path == "/webhook-receiver"))
+            if (logs != null && logs.Any(l => l.RequestMessage is { Path: "/webhook-receiver" }))
             {
                 received = true;
                 break;

@@ -30,7 +30,7 @@ public class PaymentGatewayTests
             Active = provider
         });
 
-        return new PaymentGateway(_serviceProviderMock.Object, options);
+        return new PaymentGateway(_serviceProviderMock.Object, options, new Mock<ILogger<PaymentGateway>>().Object);
     }
 
     [Fact]

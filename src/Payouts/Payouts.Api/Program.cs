@@ -3,6 +3,7 @@ using Haworks.Payouts.Application.Disbursements.Services;
 using Haworks.Payouts.Application.Ledger.Commands.MatureFunds;
 using Haworks.Payouts.Infrastructure;
 using Haworks.Payouts.Infrastructure.Persistence;
+using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BuildingBlocks.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,10 @@ builder.AddServiceDefaults();
 builder.Host.UseSerilog((context, loggerConfiguration) => loggerConfiguration.ReadFrom.Configuration(context.Configuration));
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+builder.Services.AddJwksAuthentication(builder.Configuration);
+builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

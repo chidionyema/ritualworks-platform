@@ -1,11 +1,13 @@
 using Haworks.Payouts.Application.Ledger.Queries.GetBalance;
 using Haworks.Payouts.Domain.Enums;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.Payouts.Api.Controllers;
 
 [ApiController][Route("api/[controller]")]
+[Authorize]
 public class LedgerController : ControllerBase
 {
     private readonly IMediator _mediator;

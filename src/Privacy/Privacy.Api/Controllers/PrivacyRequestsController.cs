@@ -1,12 +1,14 @@
 using Haworks.Privacy.Application.Requests.Commands.InitiateRequest;
 using Haworks.Privacy.Domain.Enums;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.Privacy.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class PrivacyRequestsController : ControllerBase
 {
     private readonly IMediator _mediator;

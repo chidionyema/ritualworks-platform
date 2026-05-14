@@ -1,7 +1,7 @@
 using MassTransit;
 using Haworks.Contracts.Payments;
-using Haworks.Orders.Application.Interfaces;
-using Haworks.Orders.Domain.Enums;
+using Haworks.Orders.Domain.Interfaces;
+using Haworks.Orders.Domain;
 using Microsoft.Extensions.Logging;
 
 namespace Haworks.Orders.Application.Consumers;
@@ -26,9 +26,10 @@ public sealed class RefundCompletedConsumer(
             return;
         }
 
-        order.UpdateStatus(OrderStatus.Refunded);
-        await orderRepository.SaveChangesAsync(context.CancellationToken);
-        
-        logger.LogInformation("Order {OrderId} status updated to Refunded", msg.OrderId);
+        if (order.MarkRefunded())
+        {
+            await orderRepository.SaveChangesAsync(context.CancellationToken);
+            logger.LogInformation("Order {OrderId} status updated to Refunded", msg.OrderId);
+        }
     }
 }

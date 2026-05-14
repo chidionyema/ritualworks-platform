@@ -1,6 +1,7 @@
 using Haworks.Scheduler.Application;
 using Haworks.Scheduler.Infrastructure;
 using Haworks.Scheduler.Infrastructure.Persistence;
+using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BuildingBlocks.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,9 @@ builder.Host.UseSerilog((context, loggerConfiguration) => loggerConfiguration
 // Add layers
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+builder.Services.AddJwksAuthentication(builder.Configuration);
+builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

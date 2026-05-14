@@ -1,11 +1,13 @@
 using Haworks.Merchant.Application.Merchants.Commands.CreateMerchant;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.Merchant.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class MerchantsController : ControllerBase
 {
     private readonly IMediator _mediator;

@@ -55,6 +55,10 @@ var rabbitmq = builder.AddRabbitMQ("rabbitmq", port: 5672)
     .WithLifetime(ContainerLifetime.Persistent)
     .WithManagementPlugin();
 
+var kafka = builder.AddKafka("kafka")
+    .WithLifetime(ContainerLifetime.Persistent)
+    .WithDataVolume("ritualworks-platform-kafka-data");
+
 var pactDb = builder.AddPostgres("pact-db", port: null, password: null)
     .WithLifetime(ContainerLifetime.Persistent)
     .WithDataVolume("ritualworks-platform-pact-db-data");
@@ -63,9 +67,8 @@ var pactBroker = builder.AddContainer("pact-broker", "pactfoundation/pact-broker
     .WaitFor(pactDb)
     .WithEnvironment(ctx =>
     {
-        var pactDbEndpoint = pactDb.Resource.PrimaryEndpoint;
-        ctx.EnvironmentVariables["PACT_BROKER_DATABASE_HOST"]     = pactDbEndpoint.ContainerHost;
-        ctx.EnvironmentVariables["PACT_BROKER_DATABASE_PORT"]     = pactDbEndpoint.Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        ctx.EnvironmentVariables["PACT_BROKER_DATABASE_HOST"]     = "pact-db";
+        ctx.EnvironmentVariables["PACT_BROKER_DATABASE_PORT"]     = "5432";
         ctx.EnvironmentVariables["PACT_BROKER_DATABASE_NAME"]     = "postgres";
         ctx.EnvironmentVariables["PACT_BROKER_DATABASE_USERNAME"] = "postgres";
         // Pass the parameter directly to avoid obsolete .Value call.

@@ -39,8 +39,7 @@ builder.Services.AddNotificationsInfrastructure(builder.Configuration, builder.E
 builder.Services.AddNotificationsApplication(builder.Configuration);
 builder.Services.AddPostgresIdempotency<NotificationsDbContext>();
 
-builder.Services.AddJwksAuthentication(builder.Configuration);
-builder.Services.AddHttpContextAccessor();
+builder.Services.AddPlatformAuthentication(builder.Configuration);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

@@ -3,39 +3,56 @@ using FluentAssertions;
 using Haworks.Contracts.Payments;
 using Haworks.Payments.Api.Controllers;
 using Haworks.Payments.Application.Queries.Refunds;
+using Haworks.Payments.Application.Sagas;
 using Haworks.Payments.Domain;
 using Haworks.Payments.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
-using Haworks.BuildingBlocks.CurrentUser;
+using MassTransit.Testing;
+using Microsoft.Extensions.Logging;
 using Moq;
 
 namespace Haworks.Payments.Integration;
 
 [Collection("Payments Integration")]
-public class RefundSagaIntegrationTests(PaymentsWebAppFactory factory)
+public class RefundSagaIntegrationTests : IAsyncLifetime
 {
-    private readonly HttpClient _client = factory.CreateClient();
+    private readonly PaymentsWebAppFactory _factory;
+    private readonly HttpClient _client;
+
+    public RefundSagaIntegrationTests(PaymentsWebAppFactory factory)
+    {
+        _factory = factory;
+        _client = factory.CreateClient();
+    }
+
+    public async Task InitializeAsync()
+    {
+        await _factory.EnsureSchemaAsync();
+        var harness = _factory.Services.GetRequiredService<ITestHarness>();
+        await harness.Start();
+    }
+
+    public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
     public async Task CreateRefund_Should_StartSaga_And_ReachAwaitingProvider()
     {
-        // Arrange: Create a successful payment first
-        using var scope = factory.Services.CreateScope();
+        // Arrange
+        using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
+        var harness = _factory.Services.GetRequiredService<ITestHarness>();
         
-        var payment = new Payment(
+        var payment = Payment.Create(
             Guid.NewGuid(), 
             "user_123", 
-            Guid.NewGuid(), 
             100.00m, 
             0, 
             "USD", 
-            PaymentProvider.Stripe);
+            PaymentProvider.Stripe,
+            Guid.NewGuid());
         
-        // Use reflection to set private fields needed for test
-        typeof(Payment).GetProperty("ProviderTransactionId")?.SetValue(payment, "pi_test_123");
-        payment.MarkVerified("pi_test_123");
+        payment.MarkCompleted("pi_test_123", "card");
         
         db.Payments.Add(payment);
         await db.SaveChangesAsync();
@@ -48,29 +65,27 @@ public class RefundSagaIntegrationTests(PaymentsWebAppFactory factory)
             RequestedBy: "TestRunner"
         );
 
-        // Act
+        // Act: Call API
         var response = await _client.PostAsJsonAsync("/api/refunds", request);
-
-        // Assert
         response.EnsureSuccessStatusCode();
         var refundId = await response.Content.ReadFromJsonAsync<Guid>();
-        refundId.Should().NotBeEmpty();
 
-        // Poll for saga state
-        RefundSagaDto? status = null;
-        for (int i = 0; i < 10; i++)
-        {
-            await Task.Delay(500);
-            var statusResponse = await _client.GetAsync($"/api/refunds/{refundId}");
-            if (statusResponse.IsSuccessStatusCode)
-            {
-                status = await statusResponse.Content.ReadFromJsonAsync<RefundSagaDto>();
-                if (status?.Status == "AwaitingProviderConfirmation" || status?.Status == "Requested") break;
-            }
-        }
+        // Assert
+        // Give MassTransit time to process
+        await Task.Delay(2000);
 
-        status.Should().NotBeNull();
-        status!.Amount.Should().Be(50.00m);
-        status.Status.Should().BeOneOf("Requested", "AwaitingProviderConfirmation");
+        (await harness.Published.Any<RefundRequestedEvent>(x => x.Context.Message.RefundId == refundId))
+            .Should().BeTrue("RefundRequestedEvent should have been published by the API handler");
+
+        var sagaHarness = harness.GetSagaStateMachineHarness<RefundSaga, RefundSagaState>();
+        
+        (await sagaHarness.Consumed.Any<RefundRequestedEvent>(x => x.Context.Message.RefundId == refundId))
+            .Should().BeTrue("Saga should have consumed RefundRequestedEvent");
+
+        (await sagaHarness.Created.Any(x => x.CorrelationId == refundId))
+            .Should().BeTrue("Saga instance should have been created");
+
+        (await harness.Published.Any<ProviderRefundInitiationRequestedEvent>(x => x.Context.Message.RefundId == refundId))
+            .Should().BeTrue("Saga should have published ProviderRefundInitiationRequestedEvent");
     }
 }

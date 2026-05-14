@@ -1,6 +1,7 @@
 using Haworks.Merchant.Application;
 using Haworks.Merchant.Infrastructure;
 using Haworks.Merchant.Infrastructure.Persistence;
+using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BuildingBlocks.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,9 @@ builder.Host.UseSerilog((context, loggerConfiguration) => loggerConfiguration
 // Add layers
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+builder.Services.AddJwksAuthentication(builder.Configuration);
+builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
