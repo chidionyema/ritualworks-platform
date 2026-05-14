@@ -15,6 +15,11 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ../aspire/init-postgres.sql:/docker-entrypoint-initdb.d/init.sql
+    command: >
+      postgres
+        -c wal_level=logical
+        -c max_replication_slots=10
+        -c max_wal_senders=10
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -443,16 +448,17 @@ services:
         condition: service_started
       identity-svc:
         condition: service_started
+      kafka:
+        condition: service_healthy
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      # search-svc has no Vault-backed secrets; AppRole + KV not needed.
       - Vault__Enabled=false
       - Elasticsearch__Url=http://elasticsearch:9200
       - Elasticsearch__IndexName=products
-      # search-svc is a read-side projection of catalog; calls catalog-svc
-      # for category lookups via Refit.
       - Catalog__BaseAddress=http://catalog-svc-1:8080
+      - Kafka__BootstrapServers=kafka:9092
+      - Kafka__GroupId=search-svc-cdc
       - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
       - Authentication__Jwks__Issuer=http://localhost
       - Authentication__Jwks__Audience=ritualworks-dev
@@ -477,6 +483,101 @@ services:
       # If L1.D's S3 export needs credentials, switch Vault__Enabled to
       # true and follow the orders-svc pattern.
       - Vault__Enabled=false
+      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
+      - Authentication__Jwks__Issuer=http://localhost
+      - Authentication__Jwks__Audience=ritualworks-dev
+
+  # ===========================================================================
+  # CDC PIPELINE (Kafka + Debezium)
+  # ===========================================================================
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: rw-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+    volumes:
+      - kafka-data:/bitnami/kafka
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  debezium-connect:
+    image: debezium/connect:3.0
+    container_name: rw-debezium-connect
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    environment:
+      - BOOTSTRAP_SERVERS=kafka:9092
+      - GROUP_ID=debezium-connect
+      - CONFIG_STORAGE_TOPIC=debezium_configs
+      - OFFSET_STORAGE_TOPIC=debezium_offsets
+      - STATUS_STORAGE_TOPIC=debezium_statuses
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8083/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  debezium-init:
+    image: curlimages/curl:latest
+    container_name: rw-debezium-init
+    depends_on:
+      debezium-connect:
+        condition: service_healthy
+    volumes:
+      - ../aspire/debezium:/connectors:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Registering Debezium connectors..."
+        for f in /connectors/*.json; do
+          name=$$(basename "$$f" .json)
+          echo "Registering connector: $$name"
+          curl -sf -X PUT "http://debezium-connect:8083/connectors/$$name/config" \
+               -H 'Content-Type: application/json' \
+               -d @"$$f" || echo "WARN: failed to register $$name"
+        done
+        echo "All connectors registered."
+
+  webhooks-svc:
+    build:
+      context: ../..
+      dockerfile: src/Webhooks/Webhooks.Api/Dockerfile
+    container_name: rw-webhooks-svc
+    depends_on:
+      vault-seed:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__webhooks=Host=postgres;Port=5432;Database=webhooks;Username=postgres;Password=postgres
+      - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
+      - Vault__Enabled=false
+      - Kafka__BootstrapServers=kafka:9092
+      - Kafka__GroupId=webhooks-svc-cdc
       - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
       - Authentication__Jwks__Issuer=http://localhost
       - Authentication__Jwks__Audience=ritualworks-dev
@@ -508,6 +609,9 @@ services:
       - Services__checkout-svc__http__0=http://checkout-svc:8080
       - Services__content-svc__http__0=http://content-svc:8080
       - Services__search-svc__http__0=http://search-svc:8080
+      - Services__webhooks-svc__http__0=http://webhooks-svc:8080
+      - Kafka__BootstrapServers=kafka:9092
+      - Kafka__GroupId=bff-web-cdc
       - Vault__Enabled=true
       - Vault__Address=http://vault:8200
       - Vault__RoleIdPath=/creds/bff-web/role_id
@@ -525,3 +629,4 @@ volumes:
   localstack-data:
   pact-db-data:
   elasticsearch-data:
+  kafka-data:

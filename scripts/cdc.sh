@@ -1,47 +1,75 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CDC_URL="${CDC_URL:-http://localhost:5106/api/cdc}"
+CONNECT_URL="${CONNECT_URL:-http://localhost:8083}"
 
 usage() {
-    echo "cdc — CLI for Change Data Capture service"
+    echo "cdc — CLI for Debezium Connect CDC pipeline"
     echo "Usage: cdc <command> [args]"
     echo ""
     echo "Commands:"
-    echo "  status                  show all sources and their states"
-    echo "  pause <service>         disable a source"
-    echo "  resume <service>        enable a source"
-    echo "  add <service> <conn> <slot>  register a new source"
+    echo "  status                      show all connectors and their states"
+    echo "  pause <connector>           pause a connector"
+    echo "  resume <connector>          resume a connector"
+    echo "  register <connector.json>   register or update a connector from JSON file"
+    echo "  delete <connector>          delete a connector"
+    echo "  topics                      list Kafka topics via connector offsets"
 }
 
 cmd_status() {
-    curl -s "$CDC_URL/status" | jq -r '
-        ["SERVICE", "ENABLED", "RUNNING", "SLOT"],
-        ["-------", "-------", "-------", "----"],
-        (.[] | [.serviceName, .enabled, .isRunning, .slotName]) | @tsv' | column -t
+    local connectors
+    connectors=$(curl -sf "$CONNECT_URL/connectors?expand=status" 2>/dev/null) || {
+        echo "ERROR: Cannot reach Debezium Connect at $CONNECT_URL" >&2
+        exit 1
+    }
+    echo "$connectors" | jq -r '
+        to_entries[] |
+        [.key, .value.status.connector.state, .value.status.connector.worker_id,
+         (.value.status.tasks | length | tostring),
+         (.value.status.tasks | map(.state) | join(","))] |
+        @tsv' | column -t -N "CONNECTOR,STATE,WORKER,TASKS,TASK_STATES"
 }
 
 cmd_pause() {
-    local svc=$1
-    curl -s -X POST "$CDC_URL/sources/$svc/pause" && echo "Paused $svc"
+    local name=$1
+    curl -sf -X PUT "$CONNECT_URL/connectors/$name/pause" && echo "Paused $name"
 }
 
 cmd_resume() {
-    local svc=$1
-    curl -s -X POST "$CDC_URL/sources/$svc/resume" && echo "Resumed $svc"
+    local name=$1
+    curl -sf -X PUT "$CONNECT_URL/connectors/$name/resume" && echo "Resumed $name"
 }
 
-cmd_add() {
-    local svc=$1 conn=$2 slot=$3
-    curl -s -X POST "$CDC_URL/sources" -H "Content-Type: application/json" \
-        -d "{\"serviceName\": \"$svc\", \"connectionString\": \"$conn\", \"slotName\": \"$slot\"}"
+cmd_register() {
+    local file=$1
+    local name
+    name=$(basename "$file" .json | sed 's/-connector$//')
+    echo "Registering connector: $name"
+    curl -sf -X PUT "$CONNECT_URL/connectors/$name/config" \
+        -H 'Content-Type: application/json' \
+        -d @"$file" | jq .
+}
+
+cmd_delete() {
+    local name=$1
+    curl -sf -X DELETE "$CONNECT_URL/connectors/$name" && echo "Deleted $name"
+}
+
+cmd_topics() {
+    curl -sf "$CONNECT_URL/connectors?expand=info" | jq -r '
+        to_entries[] |
+        .value.info.config |
+        [.name // "unknown", ."topic.prefix" // "unknown", ."database.dbname" // "unknown"] |
+        @tsv' | column -t -N "CONNECTOR,TOPIC_PREFIX,DATABASE"
 }
 
 cmd=${1:-help}
 case "$cmd" in
-    status) cmd_status ;;
-    pause)  cmd_pause "${2:-}" ;;
-    resume) cmd_resume "${2:-}" ;;
-    add)    cmd_add "${2:-}" "${3:-}" "${4:-}" ;;
-    *)      usage ;;
+    status)   cmd_status ;;
+    pause)    cmd_pause "${2:?connector name required}" ;;
+    resume)   cmd_resume "${2:?connector name required}" ;;
+    register) cmd_register "${2:?path to connector JSON required}" ;;
+    delete)   cmd_delete "${2:?connector name required}" ;;
+    topics)   cmd_topics ;;
+    *)        usage ;;
 esac

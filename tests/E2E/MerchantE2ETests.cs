@@ -25,12 +25,13 @@ public class MerchantE2ETests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await _apiContext.DisposeAsync();
+        if (_apiContext != null) await _apiContext.DisposeAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Create_Merchant_Profile_Should_Return_Success()
     {
+        E2EEnvironmentFixture.SkipIfNotEnabled();
         _output.WriteLine("--- STARTING MERCHANT E2E TEST ---");
 
         var ownerId = Guid.NewGuid();

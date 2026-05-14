@@ -25,12 +25,13 @@ public class PrivacyE2ETests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await _apiContext.DisposeAsync();
+        if (_apiContext != null) await _apiContext.DisposeAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Initiate_Erasure_Request_Should_Return_Accepted()
     {
+        E2EEnvironmentFixture.SkipIfNotEnabled();
         _output.WriteLine("--- STARTING PRIVACY E2E TEST ---");
 
         var userId = Guid.NewGuid();

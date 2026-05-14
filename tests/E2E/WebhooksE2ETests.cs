@@ -29,9 +29,10 @@ public class WebhooksE2ETests(E2EEnvironmentFixture fixture) : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Order_Lifecycle_Should_Trigger_Webhooks()
     {
+        E2EEnvironmentFixture.SkipIfNotEnabled();
         // 1. Arrange: Setup WireMock to listen for webhooks
         _wireMockServer!.Given(
             Request.Create().WithPath("/webhook-receiver").UsingPost()

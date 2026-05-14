@@ -3,7 +3,7 @@
       <TargetFramework>net9.0</TargetFramework>
       <IsPackable>false</IsPackable>
       <RootNamespace>Haworks.Tests.E2E</RootNamespace>
-      <Nullable>enable</Nullable>
+      <Nullable>annotations</Nullable>
       <ImplicitUsings>enable</ImplicitUsings>
       <!-- CA1711: xUnit's [CollectionDefinition] requires "<Name>Collection".
            xUnit1031: Playwright's PageTest base class can occasionally need

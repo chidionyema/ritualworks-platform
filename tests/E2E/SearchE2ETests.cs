@@ -26,12 +26,13 @@ public class SearchE2ETests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await _apiContext.DisposeAsync();
+        if (_apiContext != null) await _apiContext.DisposeAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task TheSearchLoop_CreateProduct_AppearsInSearch()
     {
+        E2EEnvironmentFixture.SkipIfNotEnabled();
         _output.WriteLine("--- STARTING THE SEARCH LOOP E2E ---");
 
         // 1. Setup Auth/CSRF

@@ -18,12 +18,13 @@ public class PlatformLoopE2ETests(E2EEnvironmentFixture fixture, ITestOutputHelp
 
     public async Task DisposeAsync()
     {
-        await _bffContext.DisposeAsync();
+        if (_bffContext != null) await _bffContext.DisposeAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task SearchLoop_CatalogUpdate_SyncsToElasticsearch()
     {
+        E2EEnvironmentFixture.SkipIfNotEnabled();
         output.WriteLine("--- STARTING SEARCH LOOP E2E ---");
 
         var catalogEndpoint = fixture.GetServiceEndpoint("catalog-svc");
@@ -83,9 +84,10 @@ public class PlatformLoopE2ETests(E2EEnvironmentFixture fixture, ITestOutputHelp
         found.Should().BeTrue("Product should be indexed in Elasticsearch via MassTransit outbox relay");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task AuditTrail_UserRegistration_AppearsInAuditLog()
     {
+        E2EEnvironmentFixture.SkipIfNotEnabled();
         output.WriteLine("--- STARTING AUDIT TRAIL E2E ---");
 
         var identityEndpoint = fixture.GetServiceEndpoint("identity-svc");

@@ -76,7 +76,10 @@ public sealed class CdcSearchIndexWorker(
     {
         if (changeType == "deleted")
         {
-            var before = envelope.Before?.GetProperty("id").GetString();
+            var beforeRaw = envelope.Before?.GetProperty("id").GetString();
+            var before = beforeRaw != null && Guid.TryParse(beforeRaw, out var parsedId)
+                ? parsedId.ToString("N")
+                : beforeRaw;
             if (before != null)
             {
                 await index.DeleteAsync(before, ct);

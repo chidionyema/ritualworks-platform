@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 using Haworks.BuildingBlocks.Testing.Authentication;
@@ -7,6 +8,7 @@ using Haworks.BuildingBlocks.Testing.Containers;
 using Microsoft.Extensions.DependencyInjection;
 using Haworks.Audit.Application.Extraction;
 using Haworks.Audit.Application.Redaction;
+using Haworks.Audit.Infrastructure.Persistence;
 using MassTransit;
 using System.Text.Json;
 
@@ -27,6 +29,17 @@ public class AuditWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Environment.SetEnvironmentVariable("ConnectionStrings__audit", ConnectionString);
         Environment.SetEnvironmentVariable("ConnectionStrings__rabbitmq", RabbitMqConnectionString);
         Environment.SetEnvironmentVariable("Vault__Enabled", "false");
+
+        // Force the host to build so Services are available for migration
+        _ = Services;
+        await EnsureSchemaAsync();
+    }
+
+    public async Task EnsureSchemaAsync()
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
+        await db.Database.MigrateAsync();
     }
 
     async Task IAsyncLifetime.DisposeAsync()

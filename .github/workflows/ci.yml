@@ -90,15 +90,33 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite:
-          - Catalog
-          - Orders
-          - Payments
-          - Identity
-          - BffWeb
-          - CheckoutOrchestrator
-          - Content
-          - Search
+        include:
+          - suite: Catalog
+            path: tests/Catalog/Catalog.Integration
+          - suite: Orders
+            path: tests/Orders/Orders.Integration
+          - suite: Payments
+            path: tests/Payments/Payments.Integration
+          - suite: Identity
+            path: tests/Identity/Identity.Integration
+          - suite: BffWeb
+            path: tests/BffWeb/BffWeb.Integration
+          - suite: CheckoutOrchestrator
+            path: tests/CheckoutOrchestrator/CheckoutOrchestrator.Integration
+          - suite: Content
+            path: tests/Content/Content.Integration
+          - suite: Search
+            path: tests/Search/Search.Integration
+          - suite: Audit
+            path: tests/Audit/Audit.Integration
+          - suite: Notifications
+            path: tests/Notifications/Notifications.Integration
+          - suite: Webhooks
+            path: tests/Webhooks/Webhooks.Integration
+          - suite: Payouts
+            path: tests/Payouts.Integration
+          - suite: Scheduler
+            path: tests/Scheduler.Integration
 
     steps:
       - uses: actions/checkout@v4
@@ -134,31 +152,36 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/docker-images
-          key: docker-images-${{ runner.os }}-postgres16alpine-meili1.10
+          key: docker-images-${{ runner.os }}-pg16-es8.17-kafka7.6-rabbit3
 
       - name: Load cached Docker images
         if: steps.docker-image-cache.outputs.cache-hit == 'true'
         run: |
-          docker load -i /tmp/docker-images/postgres-16-alpine.tar
-          docker load -i /tmp/docker-images/meilisearch-v1.10.tar
+          for f in /tmp/docker-images/*.tar; do docker load -i "$f"; done
 
       - name: Pull and save images for cache
         if: steps.docker-image-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p /tmp/docker-images
-          docker pull postgres:16-alpine
-          docker pull getmeili/meilisearch:v1.10
-          docker save postgres:16-alpine -o /tmp/docker-images/postgres-16-alpine.tar
-          docker save getmeili/meilisearch:v1.10 -o /tmp/docker-images/meilisearch-v1.10.tar
+          images=(
+            postgres:16-alpine
+            docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+            confluentinc/cp-kafka:7.6.1
+            rabbitmq:3-management
+          )
+          for img in "${images[@]}"; do
+            docker pull "$img"
+            docker save "$img" -o "/tmp/docker-images/$(echo "$img" | tr '/:' '-').tar"
+          done
 
       - name: Restore + build ${{ matrix.suite }}.Integration
         run: |
-          dotnet restore tests/${{ matrix.suite }}/${{ matrix.suite }}.Integration/${{ matrix.suite }}.Integration.csproj
-          dotnet build tests/${{ matrix.suite }}/${{ matrix.suite }}.Integration/${{ matrix.suite }}.Integration.csproj --no-restore --configuration Release
+          dotnet restore ${{ matrix.path }}/${{ matrix.suite }}.Integration.csproj
+          dotnet build ${{ matrix.path }}/${{ matrix.suite }}.Integration.csproj --no-restore --configuration Release
 
       - name: Run ${{ matrix.suite }}.Integration
         run: |
-          dotnet test tests/${{ matrix.suite }}/${{ matrix.suite }}.Integration/${{ matrix.suite }}.Integration.csproj \
+          dotnet test ${{ matrix.path }}/${{ matrix.suite }}.Integration.csproj \
             --no-build --configuration Release \
             --logger "trx;LogFileName=test-results.trx" \
             --logger "console;verbosity=normal"
@@ -214,6 +237,8 @@ jobs:
           dotnet test tests/Smoke/Smoke.csproj --configuration Release
 
       - name: Run E2E tests
+        env:
+          E2E_ENABLED: "1"
         run: |
           dotnet test tests/E2E/E2E.csproj --configuration Release
 

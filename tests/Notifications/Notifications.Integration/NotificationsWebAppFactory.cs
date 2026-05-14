@@ -53,6 +53,15 @@ public class NotificationsWebAppFactory : WebApplicationFactory<Program>, IAsync
         Environment.SetEnvironmentVariable("Notifications__Providers__Ses__SecretKey", "test-secret-key");
         Environment.SetEnvironmentVariable("Notifications__Providers__Ses__Region", "us-east-1");
         Environment.SetEnvironmentVariable("Notifications__Providers__Ses__FromAddress", "noreply@test.invalid");
+
+        // SendGrid, Twilio, FCM options have [Required] + ValidateOnStart
+        Environment.SetEnvironmentVariable("Notifications__Providers__SendGrid__ApiKey", "SG.test-key");
+        Environment.SetEnvironmentVariable("Notifications__Providers__SendGrid__FromAddress", "noreply@test.invalid");
+        Environment.SetEnvironmentVariable("Notifications__Providers__Twilio__AccountSid", "AC-test");
+        Environment.SetEnvironmentVariable("Notifications__Providers__Twilio__AuthToken", "test-auth-token");
+        Environment.SetEnvironmentVariable("Notifications__Providers__Twilio__FromNumber", "+15005550006");
+        Environment.SetEnvironmentVariable("Notifications__Providers__Fcm__ProjectId", "test-project");
+        Environment.SetEnvironmentVariable("Notifications__Providers__Fcm__ServiceAccountJson", "{}");
     }
 
     async Task IAsyncLifetime.DisposeAsync()
@@ -76,6 +85,13 @@ public class NotificationsWebAppFactory : WebApplicationFactory<Program>, IAsync
                 ["Notifications:Providers:Ses:SecretKey"] = "test-secret-key",
                 ["Notifications:Providers:Ses:Region"] = "us-east-1",
                 ["Notifications:Providers:Ses:FromAddress"] = "noreply@test.invalid",
+                ["Notifications:Providers:SendGrid:ApiKey"] = "SG.test-key",
+                ["Notifications:Providers:SendGrid:FromAddress"] = "noreply@test.invalid",
+                ["Notifications:Providers:Twilio:AccountSid"] = "AC-test",
+                ["Notifications:Providers:Twilio:AuthToken"] = "test-auth-token",
+                ["Notifications:Providers:Twilio:FromNumber"] = "+15005550006",
+                ["Notifications:Providers:Fcm:ProjectId"] = "test-project",
+                ["Notifications:Providers:Fcm:ServiceAccountJson"] = "{}",
             });
         });
 

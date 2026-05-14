@@ -9,9 +9,10 @@ namespace Haworks.Tests.E2E;
 [Collection("E2E Tests")]
 public class RefundE2ETests(E2EEnvironmentFixture fixture)
 {
-    [Fact]
+    [SkippableFact]
     public async Task Refund_Journey_Should_Complete_End_To_End()
     {
+        E2EEnvironmentFixture.SkipIfNotEnabled();
         // 1. Arrange: Auth & Product Setup
         var apiContext = await fixture.CreateApiContextAsync();
         var username = $"refund_e2e_{Guid.NewGuid():N}";

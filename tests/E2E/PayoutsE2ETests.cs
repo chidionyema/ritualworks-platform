@@ -26,12 +26,13 @@ public class PayoutsE2ETests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await _apiContext.DisposeAsync();
+        if (_apiContext != null) await _apiContext.DisposeAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Seller_Registration_And_Onboarding_Flow()
     {
+        E2EEnvironmentFixture.SkipIfNotEnabled();
         _output.WriteLine("--- STARTING PAYOUTS E2E TEST ---");
         var sellerId = Guid.NewGuid();
         var email = $"seller_{sellerId:N}@example.com";

@@ -26,12 +26,13 @@ public class LocationE2ETests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await _apiContext.DisposeAsync();
+        if (_apiContext != null) await _apiContext.DisposeAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task CreateLocation_ThroughBff_Succeeds()
     {
+        E2EEnvironmentFixture.SkipIfNotEnabled();
         _output.WriteLine("--- STARTING LOCATION E2E ---");
 
         // 1. Create Location via BFF

@@ -23,12 +23,15 @@ builder.Services.AddWebhooksApplication();
 builder.Services.AddWebhooksInfrastructure(builder.Configuration, builder.Environment);
 
 // Kafka Consumer for CDC (Industry Standard) - Webhook Fan-out
-builder.AddKafkaConsumer<string, string>("kafka", consumerBuilder =>
+if (!builder.Environment.IsEnvironment("Test"))
 {
-    consumerBuilder.Config.GroupId = "webhooks-svc-cdc";
-    consumerBuilder.Config.AutoOffsetReset = Confluent.Kafka.AutoOffsetReset.Earliest;
-});
-builder.Services.AddHostedService<CdcFanOutWorker>();
+    builder.AddKafkaConsumer<string, string>("kafka", consumerBuilder =>
+    {
+        consumerBuilder.Config.GroupId = "webhooks-svc-cdc";
+        consumerBuilder.Config.AutoOffsetReset = Confluent.Kafka.AutoOffsetReset.Earliest;
+    });
+    builder.Services.AddHostedService<CdcFanOutWorker>();
+}
 
 // MassTransit for Domain Events
 builder.Services.AddMassTransit(x =>
