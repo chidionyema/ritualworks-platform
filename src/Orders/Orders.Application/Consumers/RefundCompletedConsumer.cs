@@ -19,7 +19,7 @@ public sealed class RefundCompletedConsumer(
             ["RefundId"] = msg.RefundId
         });
 
-        var order = await orderRepository.GetByIdAsync(msg.OrderId, context.CancellationToken);
+        var order = await orderRepository.GetByIdTrackedAsync(msg.OrderId, context.CancellationToken);
         if (order == null)
         {
             logger.LogWarning("Order {OrderId} not found for refund {RefundId}", msg.OrderId, msg.RefundId);

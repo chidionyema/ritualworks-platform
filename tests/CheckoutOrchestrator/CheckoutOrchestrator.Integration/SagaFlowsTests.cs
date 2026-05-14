@@ -235,6 +235,16 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
 
         var sagaState = await ReadSagaAsync(sagaId);
         sagaState!.FailureReason.Should().Contain("PaymentAmountMismatch");
+
+        // PaymentAmountMismatch must also publish StockReleaseRequested to
+        // compensate the reservation — stock was reserved and the payment
+        // amount doesn't match, so reserved items must be released.
+        var harness = _factory.Services.GetRequiredService<ITestHarness>();
+        var release = harness.Published.Select<StockReleaseRequestedEvent>()
+            .FirstOrDefault(p => p.Context.Message.SagaId == sagaId);
+        release.Should().NotBeNull(
+            "PaymentAmountMismatch must compensate by publishing StockReleaseRequested");
+        release!.Context.Message.Reason.Should().Be("payment_amount_mismatch");
     }
 
     [Fact]

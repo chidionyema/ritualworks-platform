@@ -9,7 +9,7 @@ public sealed class CreateOrderCommandValidator : AbstractValidator<CreateOrderC
     {
         RuleFor(x => x.UserId).NotEmpty();
         RuleFor(x => x.CustomerEmail).NotEmpty().EmailAddress();
-        RuleFor(x => x.TotalAmount).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.TotalAmount).GreaterThan(0);
         RuleFor(x => x.Currency).NotEmpty().Length(3);
         RuleFor(x => x.SagaId).NotEqual(Guid.Empty);
         RuleFor(x => x.IdempotencyKey).NotEmpty();

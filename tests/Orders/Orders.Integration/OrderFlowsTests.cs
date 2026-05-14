@@ -255,6 +255,77 @@ public sealed class OrderFlowsTests(OrdersWebAppFactory factory) : IAsyncLifetim
             "in tests without the EF outbox, publish-before-save can race; production outbox dedupes");
     }
 
+    [Fact]
+    public async Task RefundCompletedEvent_transitions_order_to_Refunded()
+    {
+        // Create order and drive it to Paid first via PaymentCompleted.
+        var (orderId, _) = await CreateOrderAsync();
+        var harness = _factory.Services.GetRequiredService<ITestHarness>();
+
+        var paymentId = Guid.NewGuid();
+        await harness.Bus.Publish(new PaymentCompletedEvent
+        {
+            PaymentId = paymentId,
+            OrderId = orderId,
+            SagaId = Guid.NewGuid(),
+            Amount = 25.50m,
+            Currency = "USD",
+            Provider = "Stripe",
+            TransactionReference = "pi_refund_test",
+        });
+
+        await PollUntilAsync(() =>
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Haworks.Orders.Infrastructure.OrderDbContext>();
+            var o = db.Orders.AsNoTracking().FirstOrDefault(x => x.Id == orderId);
+            return o?.Status == OrderStatus.Paid;
+        }, TimeSpan.FromSeconds(30));
+
+        // Now publish RefundCompleted — order should transition to Refunded.
+        var refundId = Guid.NewGuid();
+        await harness.Bus.Publish(new RefundCompletedEvent
+        {
+            RefundId = refundId,
+            OrderId = orderId,
+            PaymentId = paymentId,
+            Amount = 25.50m,
+            Currency = "USD",
+        });
+
+        await PollUntilAsync(() =>
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Haworks.Orders.Infrastructure.OrderDbContext>();
+            var o = db.Orders.AsNoTracking().FirstOrDefault(x => x.Id == orderId);
+            return o?.Status == OrderStatus.Refunded;
+        }, TimeSpan.FromSeconds(30));
+
+        await using var verifyScope = _factory.Services.CreateAsyncScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<Haworks.Orders.Infrastructure.OrderDbContext>();
+        var stored = await verifyDb.Orders.AsNoTracking().FirstAsync(o => o.Id == orderId);
+        stored.Status.Should().Be(OrderStatus.Refunded);
+    }
+
+    [Fact]
+    public async Task Zero_amount_order_rejected()
+    {
+        var resp = await _client.PostAsJsonAsync("/api/orders", new
+        {
+            userId = Guid.NewGuid().ToString(),
+            customerEmail = "buyer@example.com",
+            totalAmount = 0m,
+            currency = "USD",
+            sagaId = Guid.NewGuid(),
+            idempotencyKey = "key-" + Guid.NewGuid().ToString("N"),
+            items = new[]
+            {
+                new { productId = Guid.NewGuid(), productName = "Widget", quantity = 1, unitPrice = 0m },
+            }
+        });
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
     /// <summary>
     /// Polls the predicate every 250ms up to the timeout. Used instead of
     /// harness.Consumed.Any() because Consumed.Any can return a stale "true"

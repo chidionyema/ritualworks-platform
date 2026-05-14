@@ -230,6 +230,13 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                 .Then(ctx => ctx.Saga.FailureReason =
                     $"PaymentAmountMismatch: expected={ctx.Message.ExpectedTotal}, actual={ctx.Message.ActualPaid}")
                 .Unschedule(PaymentExpirySchedule)
+                .PublishAsync(ctx => ctx.Init<StockReleaseRequestedEvent>(new StockReleaseRequestedEvent
+                {
+                    OrderId = ctx.Saga.OrderId,
+                    SagaId = ctx.Saga.CorrelationId,
+                    Items = DeserializeItems(ctx.Saga.ReservedItemsJson),
+                    Reason = "payment_amount_mismatch",
+                }))
                 .TransitionTo(RequiresReview));
 
         // Idempotency: late-arriving duplicate events on a finalized saga

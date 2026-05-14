@@ -18,8 +18,8 @@ internal sealed class StartCheckoutCommandValidator : AbstractValidator<StartChe
             .WithMessage("Invalid email format");
 
         RuleFor(x => x.TotalAmount)
-            .GreaterThanOrEqualTo(0)
-            .WithMessage("Total amount cannot be negative");
+            .GreaterThan(0)
+            .WithMessage("Total amount must be greater than zero");
 
         RuleFor(x => x.Items)
             .NotEmpty()

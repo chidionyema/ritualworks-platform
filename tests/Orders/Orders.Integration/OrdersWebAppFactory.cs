@@ -61,6 +61,8 @@ public sealed class OrdersWebAppFactory : WebApplicationFactory<Program>, IAsync
                 mt.AddConsumer<PaymentSessionFailedConsumer>();
                 mt.AddConsumer<StockReservationFailedConsumer>();
                 mt.AddConsumer<CheckoutSessionExpiredConsumer>();
+                mt.AddConsumer<RefundCompletedConsumer>();
+                mt.AddConsumer<RefundCancelledConsumer>();
             });
             services.AddDomainEventPublisher();
 
