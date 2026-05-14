@@ -137,9 +137,9 @@ foreach (var name in new[]
 {
     BackendClients.Identity, BackendClients.Catalog, BackendClients.Orders,
     BackendClients.Payments, BackendClients.Checkout, BackendClients.Search,
-    BackendClients.Webhooks, BackendClients.Payouts, BackendClients.Scheduler,
-    BackendClients.Privacy, BackendClients.Merchant, BackendClients.Notifications,
-    BackendClients.Content, BackendClients.Audit,
+    BackendClients.Location, BackendClients.Webhooks, BackendClients.Payouts,
+    BackendClients.Scheduler, BackendClients.Privacy, BackendClients.Merchant,
+    BackendClients.Notifications, BackendClients.Content, BackendClients.Audit,
 })
 {
     var serviceName = name; // capture for handlers

@@ -21,7 +21,9 @@
     <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.3.1" />
     <PackageReference Include="Aspire.Hosting.Redis" Version="13.3.1" />
     <PackageReference Include="Aspire.Hosting.RabbitMQ" Version="13.3.1" />
+    <PackageReference Include="Aspire.Hosting.Elasticsearch" Version="9.0.0" NoWarn="NU1603" />
   </ItemGroup>
+
 
   <ItemGroup>
     <!-- Service project references — required for Aspire's Projects.* generated types -->
@@ -34,6 +36,7 @@
     <ProjectReference Include="../../src/Search/Search.Api/Search.Api.csproj" />
     <ProjectReference Include="../../src/Notifications/Notifications.Api/Notifications.Api.csproj" />
     <ProjectReference Include="../../src/Audit/Audit.Api/Audit.Api.csproj" />
+    <ProjectReference Include="../../src/Location/Location.Api/Location.Api.csproj" />
     <ProjectReference Include="../../src/BffWeb/BffWeb.Api/BffWeb.Api.csproj" />
     <ProjectReference Include="..\..\src\Webhooks\Webhooks.Api\Webhooks.Api.csproj" />
     <ProjectReference Include="..\..\src\Payouts\Payouts.Api\Payouts.Api.csproj" />

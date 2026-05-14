@@ -38,4 +38,22 @@ public sealed class SearchController : ControllerBase
             Content     = body,
         };
     }
+
+    [HttpPost("saved")]
+    public async Task<IActionResult> SaveSearch([FromBody] object query, CancellationToken ct)
+    {
+        var http = _httpFactory.CreateClient(BackendClients.Search);
+        var path = "/search/saved";
+
+        using var upstream = await http.PostAsJsonAsync(path, query, ct);
+        var body = await upstream.Content.ReadAsStringAsync(ct);
+
+        var contentType = upstream.Content.Headers.ContentType?.ToString() ?? "application/json";
+        return new ContentResult
+        {
+            StatusCode  = (int)upstream.StatusCode,
+            ContentType = contentType,
+            Content     = body,
+        };
+    }
 }

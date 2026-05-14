@@ -14,6 +14,7 @@ public static class BackendClients
     public const string Payments = "payments-svc";
     public const string Checkout = "checkout-svc";
     public const string Search = "search-svc";
+    public const string Location = "location-svc";
     public const string Webhooks = "webhooks-svc";
     public const string Payouts = "payouts-svc";
     public const string Scheduler = "scheduler-svc";

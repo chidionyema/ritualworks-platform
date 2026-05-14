@@ -34,6 +34,7 @@ public class PaymentDbContext : DbContext, IPaymentDbContext
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
     public DbSet<WebhookEvent> WebhookEvents => Set<WebhookEvent>();
     public DbSet<RefundSagaState> RefundSagas => Set<RefundSagaState>();
+    public DbSet<SubscriptionSagaState> SubscriptionSagas => Set<SubscriptionSagaState>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -123,6 +124,22 @@ public class PaymentDbContext : DbContext, IPaymentDbContext
             entity.HasIndex(s => s.OrderId);
             entity.HasIndex(s => s.PaymentId);
             entity.HasIndex(s => s.ProviderRefundId);
+        });
+
+        modelBuilder.Entity<SubscriptionSagaState>(entity =>
+        {
+            entity.ToTable("SubscriptionSagas");
+            entity.HasKey(s => s.CorrelationId);
+
+            entity.Property(s => s.ProviderSubscriptionId).HasMaxLength(255).IsRequired();
+            entity.Property(s => s.UserId).HasMaxLength(100).IsRequired();
+            entity.Property(s => s.PlanId).HasMaxLength(100).IsRequired();
+            entity.Property(s => s.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(s => s.Amount).HasColumnType("numeric(18,2)").IsRequired();
+            entity.Property(s => s.CurrentState).HasMaxLength(100);
+
+            entity.HasIndex(s => s.ProviderSubscriptionId);
+            entity.HasIndex(s => s.UserId);
         });
 
         modelBuilder.AddInboxStateEntity();

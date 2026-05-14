@@ -179,6 +179,7 @@ public static class DependencyInjection
             mt.AddConsumer<PaymentWebhookValidatedConsumer, PaymentsConsumerDefinition<PaymentWebhookValidatedConsumer>>();
             mt.AddConsumer<PaymentSessionRequestedConsumer, PaymentsConsumerDefinition<PaymentSessionRequestedConsumer>>();
             mt.AddConsumer<ProviderRefundInitiationRequestedConsumer, PaymentsConsumerDefinition<ProviderRefundInitiationRequestedConsumer>>();
+            mt.AddConsumer<SubscriptionRenewalRequestedConsumer, PaymentsConsumerDefinition<SubscriptionRenewalRequestedConsumer>>();
 
             mt.UsingRabbitMq((context, cfg) =>
             {

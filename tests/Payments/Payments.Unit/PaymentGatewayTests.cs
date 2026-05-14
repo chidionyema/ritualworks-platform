@@ -4,6 +4,7 @@ using Haworks.Payments.Infrastructure.Options;
 using Haworks.Payments.Infrastructure;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
 

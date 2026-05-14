@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
+using Aspire.Hosting.Elasticsearch;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -91,13 +92,10 @@ var clamav = builder.AddContainer("clamav", "clamav/clamav", "latest")
     .WithLifetime(ContainerLifetime.Persistent)
     .WithEndpoint(port: 3310, targetPort: 3310, name: "clamd");
 
-var meilisearch = builder.AddContainer("meilisearch", "getmeili/meilisearch", "v1.10")
+var elasticsearch = builder.AddElasticsearch("elasticsearch")
     .WithLifetime(ContainerLifetime.Persistent)
-    .WithEnvironment("MEILI_MASTER_KEY", "dev_master_key_at_least_16_chars")
-    .WithEnvironment("MEILI_NO_ANALYTICS", "true")
-    .WithEnvironment("MEILI_ENV", "development")
-    .WithVolume("ritualworks-platform-meilisearch-data", "/meili_data")
-    .WithHttpEndpoint(targetPort: 7700, name: "http");
+    .WithDataVolume("ritualworks-platform-elasticsearch-data")
+    .WithEnvironment("ES_JAVA_OPTS", "-Xms512m -Xmx512m");
 
 // Tempo needs a config file to start — without /etc/tempo.yaml it exits
 // with "failed to create store: unknown backend """. Reuse the same
@@ -158,9 +156,11 @@ var identity = builder.AddProject<Projects.Identity_Api>("identity-svc")
 // (JwksOptions has [Required] + ValidateOnStart). The URI is interpolated
 // from identity-svc's runtime endpoint via a callback so it picks up
 // whatever port Aspire's reverse-proxy assigns.
-static IResourceBuilder<T> AddJwksConfig<T>(
+static IResourceBuilder<T> AddJwksConfig<T, U>(
     IResourceBuilder<T> svc,
-    IResourceBuilder<ProjectResource> identitySvc) where T : IResourceWithEnvironment
+    IResourceBuilder<U> identitySvc) 
+    where T : IResourceWithEnvironment 
+    where U : IResourceWithEndpoints
     => svc.WithEnvironment(ctx =>
     {
         var url = identitySvc.GetEndpoint("http").Url;
@@ -262,17 +262,16 @@ var content = AddJwksConfig(builder.AddProject<Projects.Content_Api>("content-sv
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
 // --- search-svc ------------------------------------------------------------
-// Read-side projection of catalog. No DB, no Vault — just Meilisearch and
+// Read-side projection of catalog. No DB, no Vault — just Elasticsearch and
 // HTTP back to catalog-svc for category lookups.
 var search = AddJwksConfig(builder.AddProject<Projects.Search_Api>("search-svc")
-    .WaitFor(meilisearch)
+    .WaitFor(elasticsearch)
     .WaitFor(catalog)
     .WaitFor(identity)
     .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
     .WithEnvironment("Vault__Enabled",        "false")
-    .WithEnvironment("Meilisearch__Url",      meilisearch.GetEndpoint("http"))
-    .WithEnvironment("Meilisearch__MasterKey", "dev_master_key_at_least_16_chars")
-    .WithEnvironment("Meilisearch__IndexName", "products")
+    .WithEnvironment("Elasticsearch__Url",      elasticsearch.GetEndpoint("http"))
+    .WithEnvironment("Elasticsearch__IndexName", "products")
     .WithEnvironment(ctx =>
     {
         ctx.EnvironmentVariables["Catalog__BaseAddress"] = catalog.GetEndpoint("http").Url;
@@ -343,6 +342,21 @@ var payouts = AddJwksConfig(builder.AddProject<Projects.Payouts_Api>("payouts-sv
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("payouts"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
+// --- location-svc ----------------------------------------------------------
+var location = AddJwksConfig(builder.AddProject<Projects.Location_Api>("location-svc")
+    .WaitFor(vault)
+    .WaitFor(locationDb)
+    .WithReference(locationDb)
+    .WaitFor(rabbitmq)
+    .WithReference(rabbitmq)
+    .WaitFor(identity)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("location"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("location"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
+
 // --- scheduler-svc -----------------------------------------------------------
 var scheduler = AddJwksConfig(builder.AddProject<Projects.Scheduler_Api>("scheduler-svc")
     .WaitFor(vault)
@@ -408,8 +422,8 @@ var bffWeb = AddJwksConfig(builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WithReference(content)
     .WaitFor(search)
     .WithReference(search)
-    .WaitFor(notifications)
-    .WithReference(notifications)
+    .WaitFor(webhooks)
+    .WithReference(webhooks)
     .WaitFor(payouts)
     .WithReference(payouts)
     .WaitFor(scheduler)
@@ -418,6 +432,12 @@ var bffWeb = AddJwksConfig(builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WithReference(privacy)
     .WaitFor(merchant)
     .WithReference(merchant)
+    .WaitFor(notifications)
+    .WithReference(notifications)
+    .WaitFor(payouts)
+    .WithReference(payouts)
+    .WaitFor(location)
+    .WithReference(location)
     .WithEndpoint("http",  e => e.Port = 5050)
     .WithEndpoint("https", e => e.Port = 5051)
     .WithExternalHttpEndpoints()

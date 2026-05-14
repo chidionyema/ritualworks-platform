@@ -102,7 +102,9 @@ public class PaymentsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
                 mt.AddConsumer<PaymentWebhookValidatedConsumer>();
                 mt.AddConsumer<PaymentSessionRequestedConsumer>();
                 mt.AddConsumer<ProviderRefundInitiationRequestedConsumer>();
+                mt.AddConsumer<SubscriptionRenewalRequestedConsumer>();
                 mt.AddSagaStateMachine<RefundSaga, RefundSagaState>();
+                mt.AddSagaStateMachine<SubscriptionSaga, SubscriptionSagaState>();
             });
 
             services.AddDomainEventPublisher();

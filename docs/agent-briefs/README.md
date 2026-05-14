@@ -38,3 +38,4 @@ If any of these fail, the feature is not yet ready for a wave — do an L0 scaff
 |---|---|---|
 | [`test-port-from-monolith.md`](./test-port-from-monolith.md) | open — Gemini in flight on T1.1-T1.4 | [`test-port-gap-report.md`](./test-port-gap-report.md) |
 | [`portfolio-bffweb-phase2.md`](./portfolio-bffweb-phase2.md) | open — depends on `feat/portfolio-bffweb-demos` (Phase 1) being merged first | none |
+| [`location-service-spec.md`](./location-service-spec.md) | draft — pending architectural review | none |
