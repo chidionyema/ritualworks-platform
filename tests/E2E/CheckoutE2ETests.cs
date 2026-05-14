@@ -38,14 +38,15 @@ public class CheckoutE2ETests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await _apiContext.DisposeAsync();
+        if (_apiContext != null) await _apiContext.DisposeAsync();
         _wireMock.Stop();
         _wireMock.Dispose();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task HappyPath_Checkout_Completes()
     {
+        E2EEnvironmentFixture.SkipIfNotEnabled();
         _output.WriteLine("--- STARTING E2E HAPPY PATH ---");
 
         // 1. Register

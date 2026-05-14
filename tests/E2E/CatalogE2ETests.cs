@@ -40,14 +40,15 @@ public class CatalogE2ETests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await _apiContext.DisposeAsync();
+        if (_apiContext != null) await _apiContext.DisposeAsync();
         _wireMock.Stop();
         _wireMock.Dispose();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Synchronous_Reservation_And_Confirm_Flow()
     {
+        E2EEnvironmentFixture.SkipIfNotEnabled();
         _output.WriteLine("--- STARTING E2E SYNC RESERVATION FLOW ---");
 
         // 1. Setup: Create Product

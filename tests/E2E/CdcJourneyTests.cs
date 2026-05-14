@@ -30,12 +30,13 @@ public class CdcJourneyTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await _apiContext.DisposeAsync();
+        if (_apiContext != null) await _apiContext.DisposeAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Update_Product_Via_Catalog_Propagates_To_Search_Via_CDC()
     {
+        E2EEnvironmentFixture.SkipIfNotEnabled();
         _output.WriteLine("--- CDC JOURNEY: Create → Update → Verify Search Index ---");
 
         // 1. Auth setup

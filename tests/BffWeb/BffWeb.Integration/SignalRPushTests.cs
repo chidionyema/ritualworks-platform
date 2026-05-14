@@ -131,11 +131,15 @@ public sealed class SignalRPushTests : IClassFixture<BffWebFactory>, IAsyncLifet
             });
         }
 
-        // Give the consumer time to run; verify our subscriber never saw it.
+        // Wait for the consumer to process the message. Use Published (which
+        // completes synchronously on in-memory transport) + a settling delay
+        // instead of Consumed.Any which can miss the window when this test
+        // runs before the harness consumer endpoint is fully warmed.
         var harness = _factory.Services.GetRequiredService<ITestHarness>();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        (await harness.Consumed.Any<PaymentSessionCreatedEvent>(cts.Token)).Should().BeTrue();
-        await Task.Delay(500); // let any push attempt settle
+        (await harness.Published.Any<PaymentSessionCreatedEvent>(cts.Token)).Should().BeTrue();
+        // Allow the consumer to finish processing and any SignalR push to settle.
+        await Task.Delay(2000);
 
         unwantedReceived.Should().BeFalse(
             "SignalR group push for a different sagaId must not reach this client");

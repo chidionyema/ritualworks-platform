@@ -25,12 +25,13 @@ public class SchedulerE2ETests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await _apiContext.DisposeAsync();
+        if (_apiContext != null) await _apiContext.DisposeAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Schedule_Event_Should_Return_Accepted()
     {
+        E2EEnvironmentFixture.SkipIfNotEnabled();
         _output.WriteLine("--- STARTING SCHEDULER E2E TEST ---");
 
         var payload = new { OrderId = Guid.NewGuid(), Reason = "E2E Test" };
