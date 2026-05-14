@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.BffWeb.Api.Controllers;
@@ -7,6 +8,7 @@ namespace Haworks.BffWeb.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/locations")]
+[Authorize]
 public sealed class LocationsController(IHttpClientFactory httpFactory) : ControllerBase
 {
     [HttpPost]

@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using Haworks.BffWeb.Application.Telemetry;
 using Haworks.BuildingBlocks.Idempotency;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.BffWeb.Api.Controllers;
@@ -23,6 +25,7 @@ namespace Haworks.BffWeb.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public sealed class CheckoutController(
     IHttpClientFactory httpClientFactory,
     ILogger<CheckoutController> logger) : ControllerBase
@@ -30,13 +33,19 @@ public sealed class CheckoutController(
     [HttpPost]
     public async Task<IActionResult> Start([FromBody] CheckoutRequest body, CancellationToken ct)
     {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
         var sagaId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
 
         using var activity = BffWebActivities.Source.StartActivity("bff.checkout.start");
         activity?.SetTag("saga.id", sagaId);
         activity?.SetTag("order.id", orderId);
-        activity?.SetTag("customer.id", body.UserId);
+        activity?.SetTag("customer.id", userId);
         activity?.SetTag("checkout.total_amount_cents", (long)(body.TotalAmount * 100m));
         activity?.SetTag("checkout.item_count", body.Items.Count);
 
@@ -51,7 +60,7 @@ public sealed class CheckoutController(
                 .OrderBy(i => i.ProductId)
                 .Select(i => $"{i.ProductId}:{i.Quantity}:{i.UnitPrice.ToString("F2", CultureInfo.InvariantCulture)}"));
         var idempotencyKey = IdempotencyKey.Derive(
-            userId: body.UserId,
+            userId: userId,
             operation: "checkout.start",
             body.TotalAmount.ToString("F2", CultureInfo.InvariantCulture),
             cartShape,
@@ -62,7 +71,7 @@ public sealed class CheckoutController(
         {
             sagaId,
             orderId,
-            userId = body.UserId,
+            userId = userId,
             customerEmail = body.CustomerEmail,
             totalAmount = body.TotalAmount,
             idempotencyKey,
@@ -82,7 +91,6 @@ public sealed class CheckoutController(
 }
 
 public sealed record CheckoutRequest(
-    string UserId,
     string CustomerEmail,
     decimal TotalAmount,
     string? IdempotencyKey,

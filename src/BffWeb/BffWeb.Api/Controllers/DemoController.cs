@@ -31,7 +31,6 @@ namespace Haworks.BffWeb.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/demo")]
-[AllowAnonymous]
 public class DemoController : ControllerBase
 {
     private readonly IDemoHubNotifier _notifier;
@@ -82,6 +81,7 @@ public class DemoController : ControllerBase
     // docs/agent-briefs/portfolio-bffweb-phase2.md.
 
     [HttpPost("saga/start")]
+    [AllowAnonymous]
     public async Task<IActionResult> StartSaga([FromBody] SagaStartRequest request, CancellationToken ct)
     {
         var sagaId = Guid.NewGuid();
@@ -159,6 +159,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpGet("saga/{sessionId}")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetSagaStatus(Guid sessionId, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient(BackendClients.Checkout);
@@ -271,6 +272,7 @@ public class DemoController : ControllerBase
     // (BuildingBlocks/Messaging plumbing). Tracked as follow-up.
 
     [HttpPost("events/trigger")]
+    [AllowAnonymous]
     public async Task<IActionResult> TriggerEvent(
         [FromBody] EventTriggerRequest request,
         [FromHeader(Name = "X-Demo-Session")] Guid? demoSession,
@@ -323,6 +325,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpGet("events/relay-status")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetRelayStatus(CancellationToken ct)
     {
         // Reads real RelayPauseGate flag + live OutboxMessage row count
@@ -350,6 +353,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpPost("events/relay-pause")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> SetRelayPause([FromBody] RelayPauseRequest request, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient(BackendClients.Payments);
@@ -404,6 +408,7 @@ public class DemoController : ControllerBase
     private static int s_circuitRejected;
 
     [HttpPost("circuit/request")]
+    [AllowAnonymous]
     public async Task<IActionResult> CircuitRequest([FromBody] CircuitRequest request)
     {
         var sessionId = request.SessionId ?? Guid.NewGuid();
@@ -495,6 +500,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpPost("circuit/toggle-failure")]
+    [AllowAnonymous]
     public async Task<IActionResult> ToggleCircuitFailure([FromBody] ToggleFailureRequest request, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient(BackendClients.CatalogDemo);
@@ -520,6 +526,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpPost("circuit/reset")]
+    [AllowAnonymous]
     public async Task<IActionResult> ResetCircuit([FromBody] ResetRequest request)
     {
         // Polly's manual Reset() returns the circuit to Closed regardless of
@@ -559,6 +566,7 @@ public class DemoController : ControllerBase
     // ========================================================================
 
     [HttpGet("vault/status")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetVaultStatus(CancellationToken ct)
     {
         // Honest passthrough — no static fallback. If identity (or its
@@ -588,6 +596,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpPost("vault/rotate")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> RotateVault(
         [FromHeader(Name = "X-Demo-Session")] Guid? demoSession,
         CancellationToken ct)
@@ -625,6 +634,7 @@ public class DemoController : ControllerBase
     // 503s from the orders-svc -> postgres failure cascade.
 
     [HttpPost("idempotency/process")]
+    [AllowAnonymous]
     public async Task<IActionResult> ProcessIdempotent(
         [FromHeader(Name = "X-Idempotency-Key")] string key,
         [FromHeader(Name = "X-Idempotency-Ttl-Seconds")] int? ttlSeconds,
@@ -691,6 +701,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpGet("idempotency/key/{key}")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetIdempotencyStatus(string key, CancellationToken ct)
     {
         // GET status hits the same upstream mechanism by attempting a no-op
@@ -731,6 +742,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpPost("idempotency/race")]
+    [AllowAnonymous]
     public async Task<IActionResult> ProcessIdempotencyRace(
         [FromBody] IdempotencyRaceRequest request,
         CancellationToken ct)
@@ -762,6 +774,7 @@ public class DemoController : ControllerBase
     // ========================================================================
 
     [HttpPost("cache/stampede")]
+    [AllowAnonymous]
     public async Task<IActionResult> SimulateStampede([FromBody] StampedeRequest request, CancellationToken ct)
     {
         // T2.6: real cache-stampede demo via catalog-svc HybridCache.
@@ -809,6 +822,7 @@ public class DemoController : ControllerBase
     // Wire shape (CachedProductResponse) matches portfolio-site demo-client.ts.
 
     [HttpGet("cache/product/demo")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetDemoProduct(CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient(BackendClients.Catalog);
@@ -827,6 +841,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpGet("cache/product/{productId:guid}")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetCachedProduct(Guid productId, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient(BackendClients.Catalog);
@@ -849,6 +864,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpPut("cache/product/{productId:guid}")]
+    [AllowAnonymous]
     public async Task<IActionResult> UpdateProduct(
         Guid productId,
         [FromBody] UpdateProductRequest request,
@@ -912,6 +928,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpDelete("cache/product/{productId:guid}")]
+    [AllowAnonymous]
     public async Task<IActionResult> InvalidateCache(
         Guid productId,
         [FromQuery] Guid sessionId,
@@ -982,6 +999,7 @@ public class DemoController : ControllerBase
     // ========================================================================
 
     [HttpGet("inventory/{inventoryId:guid}")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetInventory(Guid inventoryId, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient(BackendClients.Catalog);
@@ -1004,6 +1022,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpPut("inventory/{inventoryId:guid}")]
+    [AllowAnonymous]
     public async Task<IActionResult> UpdateInventory(
         Guid inventoryId,
         [FromBody] InventoryUpdate update,
@@ -1066,6 +1085,7 @@ public class DemoController : ControllerBase
     // ========================================================================
 
     [HttpPost("ratelimit/configure")]
+    [AllowAnonymous]
     public IActionResult ConfigureRateLimit([FromBody] RateLimitConfig config)
     {
         var sessionId = config.SessionId ?? Guid.NewGuid();
@@ -1074,6 +1094,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpPost("ratelimit/request")]
+    [AllowAnonymous]
     public async Task<IActionResult> RateLimitRequest(
         [FromBody] SessionRequest request,
         [FromHeader(Name = "X-Demo-Session")] Guid? demoSession)
@@ -1109,6 +1130,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpPost("ratelimit/burst")]
+    [AllowAnonymous]
     public async Task<IActionResult> RateLimitBurst(
         [FromBody] BurstRequest request,
         [FromHeader(Name = "X-Demo-Session")] Guid? demoSession)
@@ -1165,6 +1187,7 @@ public class DemoController : ControllerBase
     // ========================================================================
 
     [HttpPost("chaos/trigger")]
+    [AllowAnonymous]
     public async Task<IActionResult> TriggerChaos([FromBody] ChaosRequest request, CancellationToken ct)
     {
         // T2.7: route through catalog-svc's /demo/chaos/trigger which sets

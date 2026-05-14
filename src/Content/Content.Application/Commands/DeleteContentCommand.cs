@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Haworks.Content.Application.Commands;
 
-public sealed record DeleteContentCommand(Guid ContentId) : IRequest<Result>;
+public sealed record DeleteContentCommand(Guid ContentId, string OwnerUserId) : IRequest<Result>;
 
 internal sealed class DeleteContentCommandHandler(
     IContentStorageService storageService,
@@ -19,6 +19,11 @@ internal sealed class DeleteContentCommandHandler(
         if (content is null)
         {
             return Result.Failure(Error.Content.NotFound);
+        }
+
+        if (content.OwnerUserId != request.OwnerUserId)
+        {
+            return Result.Failure(Error.Content.Forbidden);
         }
 
         // Soft-delete the row first; storage delete is best-effort and

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.BffWeb.Api.Controllers;
@@ -40,6 +41,7 @@ public sealed class SearchController : ControllerBase
     }
 
     [HttpPost("saved")]
+    [Authorize]
     public async Task<IActionResult> SaveSearch([FromBody] object query, CancellationToken ct)
     {
         var http = _httpFactory.CreateClient(BackendClients.Search);

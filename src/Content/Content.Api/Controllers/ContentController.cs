@@ -129,10 +129,17 @@ public sealed class ContentController(IMediator mediator) : ControllerBase
 
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteContent(Guid id, CancellationToken ct)
     {
-        var result = await mediator.Send(new DeleteContentCommand(id), ct);
+        var ownerId = HttpContext.GetForwardedUserId();
+        if (string.IsNullOrEmpty(ownerId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await mediator.Send(new DeleteContentCommand(id, ownerId), ct);
         return result.ToNoContentActionResult();
     }
 }

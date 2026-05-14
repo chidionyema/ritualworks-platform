@@ -51,6 +51,8 @@ public sealed class BffWebFactory : WebApplicationFactory<Program>, IAsyncLifeti
 
         builder.ConfigureServices(services =>
         {
+            services.AddAuthentication(TestAuthenticationHandler.SchemeName).AddTestAuth();
+
             services.AddMassTransitTestHarness(mt =>
             {
                 mt.AddConsumer<PaymentSessionCreatedConsumer>();

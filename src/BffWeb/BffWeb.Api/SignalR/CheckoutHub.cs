@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Haworks.BffWeb.Api.SignalR;
@@ -18,6 +19,7 @@ namespace Haworks.BffWeb.Api.SignalR;
 /// between the consumer and the hub — keeps the consumer free of
 /// connection-tracking state.
 /// </summary>
+[Authorize]
 public sealed class CheckoutHub : Hub
 {
     /// <summary>Browser calls this with the sagaId returned from POST /api/checkout.</summary>
