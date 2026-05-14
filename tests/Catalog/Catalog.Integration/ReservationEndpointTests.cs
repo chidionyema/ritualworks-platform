@@ -190,6 +190,21 @@ public sealed class ReservationEndpointTests : IAsyncLifetime
         resp.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task ConfirmReservation_returns_403_when_user_does_not_own_reservation()
+    {
+        // Seed a reservation owned by a different user.
+        var reservation = await SeedReservationAsync(ttl: TimeSpan.FromMinutes(15), userId: "other-user");
+
+        var client = CreateAuthedClient(includeEmail: true);
+
+        var resp = await client.PostAsJsonAsync(
+            $"/api/checkout/reservations/{reservation.Id}/confirm",
+            new { totalAmount = 30m, currency = "USD" });
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
     // ---------- helpers ----------
 
     private async Task<(Guid categoryId, Guid productId)> CreateProductAsync(int initialStock)
@@ -218,13 +233,13 @@ public sealed class ReservationEndpointTests : IAsyncLifetime
     /// EF, bypassing the HTTP endpoint so the test can pick a TTL (positive
     /// for the happy-path case, negative for the expired case).
     /// </summary>
-    private async Task<StockReservation> SeedReservationAsync(TimeSpan ttl)
+    private async Task<StockReservation> SeedReservationAsync(TimeSpan ttl, string? userId = null)
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
 
         var reservation = StockReservation.Create(
-            userId: TestAuthenticationHandler.TestUserId,
+            userId: userId ?? TestAuthenticationHandler.TestUserId,
             itemsJson: "[]",
             ttl: ttl);
 

@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Haworks.Catalog.Application.Commands;
 using Haworks.Catalog.Application.Queries;
@@ -14,6 +15,7 @@ public sealed class CategoriesController(IMediator mediator) : ControllerBase
         => (await mediator.Send(new ListCategoriesQuery(), ct)).ToActionResult();
 
     [HttpPost]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Create([FromBody] CreateCategoryCommand command, CancellationToken ct)
     {
         var result = await mediator.Send(command, ct);

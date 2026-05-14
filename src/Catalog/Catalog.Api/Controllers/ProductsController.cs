@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Haworks.Catalog.Application.Commands;
 using Haworks.Catalog.Application.Interfaces;
@@ -8,11 +9,13 @@ namespace Haworks.Catalog.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public sealed class ProductsController(
     IMediator mediator,
     IProductCacheReader productCache) : ControllerBase
 {
     [HttpGet]
+    [AllowAnonymous]
     public async Task<IActionResult> List(
         [FromQuery] int skip = 0,
         [FromQuery] int take = 20,
@@ -21,6 +24,7 @@ public sealed class ProductsController(
         => (await mediator.Send(new ListProductsQuery(skip, take, categoryId), ct)).ToActionResult();
 
     [HttpGet("{id:guid}")]
+    [AllowAnonymous]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
         => (await mediator.Send(new GetProductByIdQuery(id), ct)).ToActionResult();
 
@@ -33,6 +37,7 @@ public sealed class ProductsController(
     /// underlying call hits real Postgres on cache miss.
     /// </summary>
     [HttpGet("{id:guid}/cached")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetCached(Guid id, CancellationToken ct)
     {
         var result = await productCache.GetAsync(id, ct);

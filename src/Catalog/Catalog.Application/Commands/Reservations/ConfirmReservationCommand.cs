@@ -47,6 +47,16 @@ internal sealed class ConfirmReservationCommandHandler(
                 $"Reservation {request.ReservationId} not found."));
         }
 
+        if (reservation.UserId != request.UserId)
+        {
+            logger.LogWarning(
+                "Reservation {ReservationId} ownership mismatch: expected={OwnerId} actual={CallerId}",
+                reservation.Id, reservation.UserId, request.UserId);
+            return Result.Failure<ConfirmReservationResultDto>(Error.Forbidden(
+                "Reservation.Forbidden",
+                "You do not own this reservation."));
+        }
+
         // Server-issued — ADR-004 phase 4 says the confirm step allocates
         // both ids so the caller's request body cannot poison either.
         var orderId = Guid.NewGuid();
