@@ -35,7 +35,7 @@ public class WebhooksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
         _ = Services;
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<WebhooksDbContext>();
-        await db.Database.MigrateAsync();
+        await db.Database.EnsureCreatedAsync();
     }
 
     async Task IAsyncLifetime.DisposeAsync()
