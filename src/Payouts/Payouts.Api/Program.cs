@@ -34,10 +34,11 @@ if (!app.Environment.IsEnvironment("Test"))
 }
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 app.UseHttpsRedirection();
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapDefaultEndpoints();
-app.UseHangfireDashboard();
+if (app.Environment.IsDevelopment()) { app.UseHangfireDashboard(); }
 
 using (var scope = app.Services.CreateScope())
 {
