@@ -34,6 +34,7 @@
     <ProjectReference Include="../../src/Notifications/Notifications.Api/Notifications.Api.csproj" />
     <ProjectReference Include="../../src/Audit/Audit.Api/Audit.Api.csproj" />
     <ProjectReference Include="../../src/BffWeb/BffWeb.Api/BffWeb.Api.csproj" />
+    <ProjectReference Include="../../src/Cdc/Cdc.Api/Cdc.Api.csproj" />
   </ItemGroup>
 
 </Project>
