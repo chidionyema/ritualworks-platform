@@ -4,7 +4,6 @@ using Microsoft.Extensions.Configuration;
 using Xunit;
 using Haworks.BuildingBlocks.Testing.Authentication;
 using Haworks.BuildingBlocks.Testing.Containers;
-using Testcontainers.RabbitMq;
 using Microsoft.Extensions.DependencyInjection;
 using Haworks.Audit.Application.Extraction;
 using Haworks.Audit.Application.Redaction;
@@ -15,19 +14,13 @@ namespace Haworks.Audit.Integration;
 
 public class AuditWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly RabbitMqContainer _rabbitMqContainer = new RabbitMqBuilder()
-        .WithImage("rabbitmq:3-management")
-        .Build();
-
     public string ConnectionString { get; private set; } = string.Empty;
     public string RabbitMqConnectionString { get; private set; } = string.Empty;
 
     public async Task InitializeAsync()
     {
-        await _rabbitMqContainer.StartAsync();
-        RabbitMqConnectionString = _rabbitMqContainer.GetConnectionString();
-
         ConnectionString = await SharedTestPostgres.CreateDatabaseAsync("audit");
+        RabbitMqConnectionString = await SharedTestRabbitMq.GetConnectionStringAsync();
         JwtTestDefaults.SetTestEnvironmentVariables();
 
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Test");
@@ -38,7 +31,6 @@ public class AuditWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     async Task IAsyncLifetime.DisposeAsync()
     {
-        await _rabbitMqContainer.DisposeAsync();
         await base.DisposeAsync();
     }
 

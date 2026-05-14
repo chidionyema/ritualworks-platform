@@ -1,7 +1,5 @@
 using Amazon.S3;
 using Amazon.S3.Model;
-using DotNet.Testcontainers.Builders;
-using DotNet.Testcontainers.Containers;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -34,17 +32,6 @@ public sealed class ContentWebAppFactory : WebApplicationFactory<Program>, IAsyn
     private const string BucketName = "content-test";
 
     private string _connectionString = string.Empty;
-
-    private readonly IContainer _localstack = new ContainerBuilder()
-        .WithImage("localstack/localstack:3")
-        .WithEnvironment("SERVICES", "s3")
-        .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1")
-        .WithPortBinding(4566, assignRandomHostPort: true)
-        .WithWaitStrategy(Wait.ForUnixContainer()
-            .UntilHttpRequestIsSucceeded(r => r.ForPath("/_localstack/health").ForPort(4566)))
-        .WithReuse(true)
-        .Build();
-
     private string _localstackUrl = string.Empty;
 
     /// <summary>
@@ -72,9 +59,7 @@ public sealed class ContentWebAppFactory : WebApplicationFactory<Program>, IAsyn
         // backend integration projects). Each fixture gets its own
         // database name, so tests don't collide.
         _connectionString = await SharedTestPostgres.CreateDatabaseAsync("content");
-        await _localstack.StartAsync();
-
-        _localstackUrl = $"http://{_localstack.Hostname}:{_localstack.GetMappedPublicPort(4566)}";
+        _localstackUrl = await SharedTestS3.GetEndpointAsync();
 
         // Jwks:* required by AddJwksAuthentication's ValidateOnStart;
         // tests bypass JWT validation via TestAuthenticationHandler but

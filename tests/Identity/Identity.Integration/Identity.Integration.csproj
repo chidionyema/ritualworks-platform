@@ -15,16 +15,11 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageReference Include="FluentAssertions" Version="7.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.0.0" />
-    <PackageReference Include="Testcontainers.PostgreSql" Version="4.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../../src/Identity/Identity.Api/Identity.Api.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Include="../../../src/BuildingBlocks.Testing/TestModuleInitializer.cs"
-             Link="TestModuleInitializer.cs" />
+    <ProjectReference Include="../../../src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj" />
   </ItemGroup>
 
 </Project>

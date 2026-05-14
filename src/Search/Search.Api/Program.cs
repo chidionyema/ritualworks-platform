@@ -1,5 +1,6 @@
 using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
+using Haworks.Search.Application;
 using Haworks.Search.Application.Interfaces;
 using Haworks.Search.Infrastructure;
 using Serilog;
@@ -13,6 +14,17 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 
 builder.AddServiceDefaults();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
+
+// Kafka Consumer for Debezium CDC — search index updates
+if (!builder.Environment.IsEnvironment("Test"))
+{
+    builder.AddKafkaConsumer<string, string>("kafka", consumerBuilder =>
+    {
+        consumerBuilder.Config.GroupId = "search-svc-cdc";
+        consumerBuilder.Config.AutoOffsetReset = Confluent.Kafka.AutoOffsetReset.Earliest;
+    });
+    builder.Services.AddCdcSearchIndexing();
+}
 
 builder.Services.AddPlatformAuthentication(builder.Configuration);
 

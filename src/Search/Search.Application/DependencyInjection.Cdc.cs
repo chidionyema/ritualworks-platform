@@ -1,12 +1,13 @@
 using Haworks.Search.Application.Consumers;
-using MassTransit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Haworks.Search.Application;
 
 public static class CdcRegistration
 {
-    public static void RegisterCdcConsumers(IRegistrationConfigurator cfg)
+    public static IServiceCollection AddCdcSearchIndexing(this IServiceCollection services)
     {
-        cfg.AddConsumer<IndexableEntityChangedConsumer>();
+        services.AddHostedService<CdcSearchIndexWorker>();
+        return services;
     }
 }

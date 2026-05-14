@@ -7,5 +7,6 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../Search.Domain/Search.Domain.csproj" />
     <ProjectReference Include="../../Contracts/Haworks.Contracts.csproj" />
+    <PackageReference Include="Confluent.Kafka" Version="2.14.0" />
   </ItemGroup>
 </Project>

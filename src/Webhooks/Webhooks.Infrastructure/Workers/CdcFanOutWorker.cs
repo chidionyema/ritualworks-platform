@@ -1,9 +1,9 @@
 using Confluent.Kafka;
+using Haworks.Contracts.Cdc;
 using Haworks.Webhooks.Domain;
 using Haworks.Webhooks.Application.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Hangfire;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,7 +17,7 @@ public class CdcFanOutWorker(
     IBackgroundJobClient jobClient,
     ILogger<CdcFanOutWorker> logger) : BackgroundService
 {
-    private static readonly string[] Topics = 
+    private static readonly string[] Topics =
     [
         "db.catalog.public.products",
         "db.catalog.public.product_categories",
@@ -103,11 +103,4 @@ public class CdcFanOutWorker(
         "d" => "deleted",
         _ => "changed"
     };
-
-    public record DebeziumEnvelope(
-        [property: JsonPropertyName("before")] JsonElement? Before,
-        [property: JsonPropertyName("after")] JsonElement? After,
-        [property: JsonPropertyName("op")] string Op,
-        [property: JsonPropertyName("ts_ms")] long TsMs
-    );
 }

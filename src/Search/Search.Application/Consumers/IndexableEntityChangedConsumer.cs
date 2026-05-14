@@ -1,66 +1,99 @@
+using Confluent.Kafka;
 using Haworks.Contracts.Cdc;
 using Haworks.Search.Application.Indexing;
 using Haworks.Search.Application.Interfaces;
 using Haworks.Search.Application.Models;
-using MassTransit;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace Haworks.Search.Application.Consumers;
 
-public sealed class IndexableEntityChangedConsumer : IConsumer<EntityChangedEvent>
+/// <summary>
+/// Kafka consumer that reads Debezium CDC events from catalog topics
+/// and updates the Elasticsearch search index accordingly.
+/// </summary>
+public sealed class CdcSearchIndexWorker(
+    IConsumer<string, string> consumer,
+    IServiceProvider serviceProvider,
+    ILogger<CdcSearchIndexWorker> logger) : BackgroundService
 {
-    private readonly ISearchIndex _index;
-    private readonly ILogger<IndexableEntityChangedConsumer> _logger;
+    private static readonly string[] Topics =
+    [
+        "db.catalog.public.products",
+        "db.catalog.public.categories"
+    ];
 
-    public IndexableEntityChangedConsumer(ISearchIndex index, ILogger<IndexableEntityChangedConsumer> logger)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _index = index;
-        _logger = logger;
+        consumer.Subscribe(Topics);
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                var result = consumer.Consume(stoppingToken);
+                if (result?.Message?.Value == null) continue;
+
+                await ProcessMessageAsync(result, stoppingToken);
+                consumer.Commit(result);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error processing CDC search index update");
+            }
+        }
     }
 
-    public async Task Consume(ConsumeContext<EntityChangedEvent> context)
+    private async Task ProcessMessageAsync(ConsumeResult<string, string> result, CancellationToken ct)
     {
-        var msg = context.Message;
+        var envelope = JsonSerializer.Deserialize<DebeziumEnvelope>(result.Message.Value);
+        if (envelope == null) return;
 
-        // Only handle catalog service changes for now
-        if (!string.Equals(msg.SourceService, "catalog", StringComparison.OrdinalIgnoreCase))
-            return;
+        var table = result.Topic.Split('.').Last();
+        var changeType = MapOp(envelope.Op);
 
-        if (string.Equals(msg.EntityType, "Products", StringComparison.OrdinalIgnoreCase))
+        using var scope = serviceProvider.CreateScope();
+        var index = scope.ServiceProvider.GetRequiredService<ISearchIndex>();
+
+        if (string.Equals(table, "products", StringComparison.OrdinalIgnoreCase))
         {
-            await HandleProductChangeAsync(msg, context.CancellationToken);
+            await HandleProductChangeAsync(envelope, changeType, index, ct);
         }
-        else if (string.Equals(msg.EntityType, "Categories", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(table, "categories", StringComparison.OrdinalIgnoreCase))
         {
-            await HandleCategoryChangeAsync(msg, context.CancellationToken);
+            await HandleCategoryChangeAsync(envelope, changeType, index, ct);
         }
     }
 
-    private async Task HandleProductChangeAsync(EntityChangedEvent msg, CancellationToken ct)
+    private async Task HandleProductChangeAsync(
+        DebeziumEnvelope envelope, string changeType, ISearchIndex index, CancellationToken ct)
     {
-        var payload = msg.PayloadAfter;
-        if (msg.ChangeType == "deleted")
+        if (changeType == "deleted")
         {
-            await _index.DeleteAsync(msg.EntityId, ct);
-            _logger.LogInformation("CDC: Search index deleted product {ProductId}", msg.EntityId);
+            var before = envelope.Before?.GetProperty("id").GetString();
+            if (before != null)
+            {
+                await index.DeleteAsync(before, ct);
+                logger.LogInformation("CDC: Search index deleted product {ProductId}", before);
+            }
             return;
         }
 
-        if (payload == null) return;
+        if (envelope.After == null) return;
+        var after = envelope.After.Value;
 
-        // Map CDC payload to Search Document
-        // NOTE: categoryName might be missing in raw Product table; 
-        // we might need to fetch or use a denormalized view in the WAL.
-        // For T4, we'll implement the basic mapping.
-        
-        var id = Guid.Parse(msg.EntityId);
-        var name = payload["Name"]?.ToString() ?? "";
-        var description = payload["Description"]?.ToString() ?? "";
-        var price = payload["UnitPrice"]?.GetValue<decimal>() ?? 0;
-        var categoryId = payload["CategoryId"]?.ToString() ?? "";
-        
+        var id = Guid.Parse(after.GetProperty("id").GetString()!);
+        var name = after.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+        var description = after.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "";
+        var price = after.TryGetProperty("unit_price", out var p) ? p.GetDecimal() : 0;
+        var categoryId = after.TryGetProperty("category_id", out var c) ? c.GetString() ?? "" : "";
+
         var doc = ProductSearchDocumentProjector.From(
             id: id,
             name: name,
@@ -69,27 +102,35 @@ public sealed class IndexableEntityChangedConsumer : IConsumer<EntityChangedEven
             isInStock: true,
             isListed: true,
             categoryId: string.IsNullOrEmpty(categoryId) ? Guid.Empty : Guid.Parse(categoryId),
-            categoryName: "Unknown (CDC)", // Denormalization handled by Category change or T4 followup
-            sourceVersion: msg.SchemaVersion);
+            categoryName: "Unknown (CDC)",
+            sourceVersion: 1);
 
-        await _index.UpsertAsync(new[] { doc }, ct);
-        _logger.LogInformation("CDC: Search index updated product {ProductId}", id);
+        await index.UpsertAsync(new[] { doc }, ct);
+        logger.LogInformation("CDC: Search index updated product {ProductId}", id);
     }
 
-    private async Task HandleCategoryChangeAsync(EntityChangedEvent msg, CancellationToken ct)
+    private async Task HandleCategoryChangeAsync(
+        DebeziumEnvelope envelope, string changeType, ISearchIndex index, CancellationToken ct)
     {
-        if (msg.ChangeType != "updated") return;
-        
-        var payload = msg.PayloadAfter;
-        if (payload == null) return;
+        if (changeType != "updated") return;
+        if (envelope.After == null) return;
 
-        var categoryId = Guid.Parse(msg.EntityId);
-        var newName = payload["Name"]?.ToString() ?? "";
+        var after = envelope.After.Value;
+        var categoryId = after.GetProperty("id").GetString();
+        var newName = after.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
 
-        // Re-denormalize all products in this category
-        // Similar logic to CategoryUpdatedConsumer
-        _logger.LogInformation("CDC: Category {CategoryId} renamed to {NewName}. Re-denormalizing...", categoryId, newName);
-        
+        logger.LogInformation("CDC: Category {CategoryId} renamed to {NewName}. Re-denormalizing...",
+            categoryId, newName);
+
         await Task.CompletedTask;
     }
+
+    private static string MapOp(string op) => op switch
+    {
+        "c" => "created",
+        "r" => "created", // snapshot read
+        "u" => "updated",
+        "d" => "deleted",
+        _ => "changed"
+    };
 }

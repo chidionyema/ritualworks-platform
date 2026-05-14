@@ -47,8 +47,6 @@ var payoutsDb       = postgres.AddDatabase("payouts");
 var schedulerDb     = postgres.AddDatabase("scheduler");
 var privacyDb       = postgres.AddDatabase("privacy");
 var merchantDb      = postgres.AddDatabase("merchant");
-var cdcDb           = postgres.AddDatabase("cdc");
-
 var redis = builder.AddRedis("redis")
     .WithLifetime(ContainerLifetime.Persistent)
     .WithDataVolume("ritualworks-platform-redis-data")
@@ -61,6 +59,40 @@ var rabbitmq = builder.AddRabbitMQ("rabbitmq", port: 5672)
 var kafka = builder.AddKafka("kafka")
     .WithLifetime(ContainerLifetime.Persistent)
     .WithDataVolume("ritualworks-platform-kafka-data");
+
+// Debezium Connect — watches Postgres WAL and writes change events to Kafka.
+// Connector configs are registered via the init script on first boot.
+var debeziumConfigDir = Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "debezium"));
+var debeziumConnect = builder.AddContainer("debezium-connect", "debezium/connect", "3.0")
+    .WithLifetime(ContainerLifetime.Persistent)
+    .WaitFor(kafka)
+    .WaitFor(postgres)
+    .WithEnvironment("BOOTSTRAP_SERVERS", "kafka:9092")
+    .WithEnvironment("GROUP_ID", "debezium-connect")
+    .WithEnvironment("CONFIG_STORAGE_TOPIC", "debezium_configs")
+    .WithEnvironment("OFFSET_STORAGE_TOPIC", "debezium_offsets")
+    .WithEnvironment("STATUS_STORAGE_TOPIC", "debezium_statuses")
+    .WithHttpEndpoint(targetPort: 8083, name: "rest");
+
+// Debezium connector registration — runs after Connect is healthy.
+var debeziumInit = builder.AddContainer("debezium-init", "curlimages/curl", "latest")
+    .WithLifetime(ContainerLifetime.Session)
+    .WaitFor(debeziumConnect)
+    .WithBindMount(debeziumConfigDir, "/connectors", isReadOnly: true)
+    .WithEntrypoint("/bin/sh")
+    .WithArgs("-c", """
+        echo "Waiting for Debezium Connect REST API..."
+        until curl -sf http://debezium-connect:8083/connectors > /dev/null 2>&1; do sleep 2; done
+        echo "Debezium Connect is ready. Registering connectors..."
+        for f in /connectors/*.json; do
+            name=$(basename "$f" .json)
+            echo "Registering connector: $name"
+            curl -sf -X PUT "http://debezium-connect:8083/connectors/$name/config" \
+                 -H 'Content-Type: application/json' \
+                 -d @"$f" || echo "WARN: failed to register $name"
+        done
+        echo "All connectors registered."
+    """);
 
 var pactDb = builder.AddPostgres("pact-db", port: null, password: null)
     .WithLifetime(ContainerLifetime.Persistent)
@@ -269,6 +301,8 @@ var content = AddJwksConfig(builder.AddProject<Projects.Content_Api>("content-sv
 var search = AddJwksConfig(builder.AddProject<Projects.Search_Api>("search-svc")
     .WaitFor(elasticsearch)
     .WaitFor(catalog)
+    .WaitFor(kafka)
+    .WithReference(kafka)
     .WaitFor(identity)
     .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
     .WithEnvironment("Vault__Enabled",        "false")
@@ -404,26 +438,13 @@ var merchant = AddJwksConfig(builder.AddProject<Projects.Merchant_Api>("merchant
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("merchant"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
-// --- cdc-svc -----------------------------------------------------------
-var cdc = AddJwksConfig(builder.AddProject<Projects.Cdc_Api>("cdc-svc")
-    .WaitFor(vault)
-    .WaitFor(cdcDb)
-    .WithReference(cdcDb)
-    .WaitFor(rabbitmq)
-    .WithReference(rabbitmq)
-    .WaitFor(identity)
-    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
-    .WithEnvironment("Vault__Enabled",      "false")
-    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
-    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("cdc"))
-    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("cdc"))
-    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
-
 // --- bff-web ---------------------------------------------------------------
 var bffWeb = AddJwksConfig(builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WaitFor(vault)
     .WaitFor(rabbitmq)
     .WithReference(rabbitmq)
+    .WaitFor(kafka)
+    .WithReference(kafka)
     .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
     .WaitFor(identity)
     .WithReference(identity)

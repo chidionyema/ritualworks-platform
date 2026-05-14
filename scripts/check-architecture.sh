@@ -90,6 +90,28 @@ for svc in "${CROSS_CUTTING[@]}"; do
 done
 [ "$warnings" -eq 0 ] && echo "  ✓ all cross-cutting services consume only abstract / own-namespace contracts"
 
+# ── RULE 3: no raw Testcontainers in integration tests ──────────────────
+# All integration tests must use SharedTestPostgres / SharedTestElasticsearch /
+# SharedTestPostGIS from BuildingBlocks.Testing.Containers instead of spinning
+# up their own containers. Raw container usage wastes CI time and resources.
+echo ""
+echo "[3/3] Shared Testcontainers enforcement (hard)"
+# Exclude BuildingBlocks.Testing itself (it defines the shared containers)
+# and Vault-specific tests (they test Vault container integration directly).
+raw_containers=$(grep -rn "new PostgreSqlBuilder\|new ContainerBuilder\|new RabbitMqBuilder\|new ElasticsearchBuilder" \
+  tests/ --include="*.cs" \
+  --exclude-dir=bin --exclude-dir=obj \
+  2>/dev/null \
+  | grep -v "BuildingBlocks.Testing\|BuildingBlocks.Tests/Vault" \
+  || true)
+if [ -n "$raw_containers" ]; then
+  echo "  ✗ FAIL: raw Testcontainers usage found — use SharedTest* from BuildingBlocks.Testing.Containers:"
+  echo "$raw_containers" | sed 's|^|      |'
+  errors=$((errors + $(echo "$raw_containers" | wc -l)))
+else
+  echo "  ✓ all integration tests use shared Testcontainers"
+fi
+
 echo ""
 echo "summary: $errors hard violations, $warnings soft warnings"
 # Hard violations fail CI. Warnings are tracked but don't block — they

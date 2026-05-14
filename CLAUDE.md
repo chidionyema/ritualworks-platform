@@ -10,3 +10,12 @@
 # Project
 - .NET 9.0 microservices platform (Clean Architecture)
 - See `.claude/projects/*/memory/` for full architecture reference
+
+# Integration Test Rules (ENFORCED BY CI)
+- NEVER create raw Testcontainers (PostgreSqlBuilder, ContainerBuilder, etc.) in test projects
+- ALWAYS use shared singletons from `BuildingBlocks.Testing.Containers`:
+  - `SharedTestPostgres.CreateDatabaseAsync("svc")` — standard Postgres
+  - `SharedTestPostGIS.CreateDatabaseAsync("svc")` — PostGIS (geospatial)
+  - `SharedTestElasticsearch.GetConnectionAsync("svc")` — Elasticsearch
+- Containers use `WithReuse(true)` — one container per type across all test runs
+- CI architecture check (`scripts/check-architecture.sh`) will FAIL on raw container usage

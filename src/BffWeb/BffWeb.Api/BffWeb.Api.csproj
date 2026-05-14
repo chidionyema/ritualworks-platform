@@ -6,6 +6,7 @@
   <ItemGroup>
     <ProjectReference Include="../BffWeb.Infrastructure/BffWeb.Infrastructure.csproj" />
     <ProjectReference Include="../../BuildingBlocks/Haworks.BuildingBlocks.csproj" />
+    <PackageReference Include="Aspire.Confluent.Kafka" Version="9.2.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
     <!-- SignalR ships as part of AspNetCore.App; no extra package reference. -->
   </ItemGroup>

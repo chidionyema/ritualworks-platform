@@ -6,10 +6,10 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Testcontainers.PostgreSql;
 using Xunit;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.BuildingBlocks.Testing.Authentication;
+using Haworks.BuildingBlocks.Testing.Containers;
 using Haworks.Catalog.Application.Consumers;
 using Haworks.Catalog.Domain;
 using Haworks.Catalog.Domain.Interfaces;
@@ -253,20 +253,13 @@ public sealed class SagaCompensationChaosTests : IClassFixture<SagaCompensationF
 /// </summary>
 public sealed class SagaCompensationFixture : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _checkoutPostgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine").WithDatabase("checkout")
-        .WithUsername("postgres").WithPassword("postgres").Build();
-
-    private readonly PostgreSqlContainer _catalogPostgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine").WithDatabase("catalog")
-        .WithUsername("postgres").WithPassword("postgres").Build();
-
-    public string CheckoutConnectionString => _checkoutPostgres.GetConnectionString();
-    public string CatalogConnectionString => _catalogPostgres.GetConnectionString();
+    public string CheckoutConnectionString { get; private set; } = string.Empty;
+    public string CatalogConnectionString { get; private set; } = string.Empty;
 
     public async Task InitializeAsync()
     {
-        await Task.WhenAll(_checkoutPostgres.StartAsync(), _catalogPostgres.StartAsync());
+        CheckoutConnectionString = await SharedTestPostgres.CreateDatabaseAsync("checkout_chaos");
+        CatalogConnectionString = await SharedTestPostgres.CreateDatabaseAsync("catalog_chaos");
 
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Test");
         Environment.SetEnvironmentVariable("ConnectionStrings__checkout", CheckoutConnectionString);
@@ -280,7 +273,6 @@ public sealed class SagaCompensationFixture : WebApplicationFactory<Program>, IA
 
     async Task IAsyncLifetime.DisposeAsync()
     {
-        await Task.WhenAll(_checkoutPostgres.DisposeAsync().AsTask(), _catalogPostgres.DisposeAsync().AsTask());
         await base.DisposeAsync();
     }
 
