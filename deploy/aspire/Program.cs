@@ -41,6 +41,11 @@ var checkoutDb = postgres.AddDatabase("checkout");
 var notificationsDb = postgres.AddDatabase("notifications");
 var auditDb         = postgres.AddDatabase("audit");
 var locationDb      = postgres.AddDatabase("location");
+var webhooksDb      = postgres.AddDatabase("webhooks");
+var payoutsDb       = postgres.AddDatabase("payouts");
+var schedulerDb     = postgres.AddDatabase("scheduler");
+var privacyDb       = postgres.AddDatabase("privacy");
+var merchantDb      = postgres.AddDatabase("merchant");
 
 var redis = builder.AddRedis("redis")
     .WithLifetime(ContainerLifetime.Persistent)
@@ -50,6 +55,10 @@ var redis = builder.AddRedis("redis")
 var rabbitmq = builder.AddRabbitMQ("rabbitmq", port: 5672)
     .WithLifetime(ContainerLifetime.Persistent)
     .WithManagementPlugin();
+
+var kafka = builder.AddKafka("kafka")
+    .WithLifetime(ContainerLifetime.Persistent)
+    .WithDataVolume("ritualworks-platform-kafka-data");
 
 var pactDb = builder.AddPostgres("pact-db", port: null, password: null)
     .WithLifetime(ContainerLifetime.Persistent)
@@ -252,66 +261,6 @@ var content = AddJwksConfig(builder.AddProject<Projects.Content_Api>("content-sv
     .WithEnvironment("Storage__ForcePathStyle", "true")
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
-// --- webhooks-svc ----------------------------------------------------------
-var webhooks = AddJwksConfig(builder.AddProject<Projects.Webhooks_Api>("webhooks-svc")
-    .WaitFor(vault)
-    .WithReference(rabbitmq)
-    .WaitFor(identity)
-    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
-    .WithEnvironment("Vault__Enabled",      "false")
-    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
-    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("webhooks"))
-    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("webhooks"))
-    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
-
-// --- payouts-svc -----------------------------------------------------------
-var payouts = AddJwksConfig(builder.AddProject<Projects.Payouts_Api>("payouts-svc")
-    .WaitFor(vault)
-    .WithReference(rabbitmq)
-    .WaitFor(identity)
-    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
-    .WithEnvironment("Vault__Enabled",      "false")
-    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
-    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("payouts"))
-    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("payouts"))
-    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
-
-// --- scheduler-svc -----------------------------------------------------------
-var scheduler = AddJwksConfig(builder.AddProject<Projects.Scheduler_Api>("scheduler-svc")
-    .WaitFor(vault)
-    .WithReference(rabbitmq)
-    .WaitFor(identity)
-    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
-    .WithEnvironment("Vault__Enabled",      "false")
-    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
-    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("scheduler"))
-    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("scheduler"))
-    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
-
-// --- privacy-svc -----------------------------------------------------------
-var privacy = AddJwksConfig(builder.AddProject<Projects.Privacy_Api>("privacy-svc")
-    .WaitFor(vault)
-    .WithReference(rabbitmq)
-    .WaitFor(identity)
-    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
-    .WithEnvironment("Vault__Enabled",      "false")
-    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
-    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("privacy"))
-    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("privacy"))
-    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
-
-// --- merchant-svc -----------------------------------------------------------
-var merchant = AddJwksConfig(builder.AddProject<Projects.Merchant_Api>("merchant-svc")
-    .WaitFor(vault)
-    .WithReference(rabbitmq)
-    .WaitFor(identity)
-    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
-    .WithEnvironment("Vault__Enabled",      "false")
-    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
-    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("merchant"))
-    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("merchant"))
-    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
-
 // --- search-svc ------------------------------------------------------------
 // Read-side projection of catalog. No DB, no Vault — just Elasticsearch and
 // HTTP back to catalog-svc for category lookups.
@@ -361,6 +310,38 @@ var audit = AddJwksConfig(builder.AddProject<Projects.Audit_Api>("audit-svc")
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("audit"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
+// --- webhooks-svc ----------------------------------------------------------
+var webhooks = AddJwksConfig(builder.AddProject<Projects.Webhooks_Api>("webhooks-svc")
+    .WaitFor(vault)
+    .WaitFor(webhooksDb)
+    .WithReference(webhooksDb)
+    .WaitFor(rabbitmq)
+    .WithReference(rabbitmq)
+    .WaitFor(kafka)
+    .WithReference(kafka)
+    .WaitFor(identity)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("webhooks"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("webhooks"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
+
+// --- payouts-svc -----------------------------------------------------------
+var payouts = AddJwksConfig(builder.AddProject<Projects.Payouts_Api>("payouts-svc")
+    .WaitFor(vault)
+    .WaitFor(payoutsDb)
+    .WithReference(payoutsDb)
+    .WaitFor(rabbitmq)
+    .WithReference(rabbitmq)
+    .WaitFor(identity)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("payouts"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("payouts"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
+
 // --- location-svc ----------------------------------------------------------
 var location = AddJwksConfig(builder.AddProject<Projects.Location_Api>("location-svc")
     .WaitFor(vault)
@@ -374,6 +355,51 @@ var location = AddJwksConfig(builder.AddProject<Projects.Location_Api>("location
     .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
     .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("location"))
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("location"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
+
+// --- scheduler-svc -----------------------------------------------------------
+var scheduler = AddJwksConfig(builder.AddProject<Projects.Scheduler_Api>("scheduler-svc")
+    .WaitFor(vault)
+    .WaitFor(schedulerDb)
+    .WithReference(schedulerDb)
+    .WaitFor(rabbitmq)
+    .WithReference(rabbitmq)
+    .WaitFor(identity)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("scheduler"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("scheduler"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
+
+// --- privacy-svc -----------------------------------------------------------
+var privacy = AddJwksConfig(builder.AddProject<Projects.Privacy_Api>("privacy-svc")
+    .WaitFor(vault)
+    .WaitFor(privacyDb)
+    .WithReference(privacyDb)
+    .WaitFor(rabbitmq)
+    .WithReference(rabbitmq)
+    .WaitFor(identity)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("privacy"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("privacy"))
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
+
+// --- merchant-svc -----------------------------------------------------------
+var merchant = AddJwksConfig(builder.AddProject<Projects.Merchant_Api>("merchant-svc")
+    .WaitFor(vault)
+    .WaitFor(merchantDb)
+    .WithReference(merchantDb)
+    .WaitFor(rabbitmq)
+    .WithReference(rabbitmq)
+    .WaitFor(identity)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
+    .WithEnvironment("Vault__Enabled",      "false")
+    .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("merchant"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("merchant"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
 // --- bff-web ---------------------------------------------------------------
@@ -408,6 +434,8 @@ var bffWeb = AddJwksConfig(builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WithReference(merchant)
     .WaitFor(notifications)
     .WithReference(notifications)
+    .WaitFor(payouts)
+    .WithReference(payouts)
     .WaitFor(location)
     .WithReference(location)
     .WithEndpoint("http",  e => e.Port = 5050)
