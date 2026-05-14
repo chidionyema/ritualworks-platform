@@ -15,7 +15,11 @@ public sealed class LedgerAccount : AuditableEntity
         if (entryType == EntryType.Credit)
             Balance += amount;
         else
+        {
+            if (Type is AccountType.SellerPending or AccountType.SellerPayable && Balance < amount)
+                throw new InvalidOperationException("Insufficient balance");
             Balance -= amount;
+        }
     }
 
     public static LedgerAccount Create(Guid ownerId, AccountType type, string currency)

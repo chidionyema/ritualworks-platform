@@ -35,6 +35,9 @@ public sealed class Payout : AuditableEntity
 
     public static Payout Create(Guid sellerId, decimal amount, string currency, DateTimeOffset? scheduledFor = null)
     {
+        if (amount <= 0)
+            throw new ArgumentException("Payout amount must be positive");
+
         return new Payout
         {
             Id = Guid.NewGuid(),

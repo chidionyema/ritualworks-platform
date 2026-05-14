@@ -15,7 +15,7 @@ public class SubscriptionIntegrationTests(WebhooksWebAppFactory factory) : IClas
     {
         // Arrange
         var request = new CreateWebhookSubscriptionRequest(
-            PartnerId: Guid.NewGuid(),
+            PartnerId: WebhooksTestAuthHandler.TestPartnerId,
             Url: "https://partner.com/webhook",
             Events: ["order.created"],
             Secret: "super-secret"
@@ -34,7 +34,7 @@ public class SubscriptionIntegrationTests(WebhooksWebAppFactory factory) : IClas
         var sub = await getResponse.Content.ReadFromJsonAsync<WebhookSubscriptionDto>();
         
         sub.Should().NotBeNull();
-        sub!.PartnerId.Should().Be(request.PartnerId);
+        sub!.PartnerId.Should().Be(WebhooksTestAuthHandler.TestPartnerId);
         sub.Url.Should().Be(request.Url);
         sub.Events.Should().BeEquivalentTo(request.Events);
         sub.SecretPreview.Should().Be("cret"); // last 4 chars of super-secret

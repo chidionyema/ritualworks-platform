@@ -15,12 +15,14 @@ public sealed record UpdateWebhookSubscriptionCommand(
     Guid Id,
     string Url,
     string[] Events,
-    bool IsActive) : IRequest<Result<WebhookSubscriptionDto>>;
+    bool IsActive,
+    Guid CallerPartnerId = default) : IRequest<Result<WebhookSubscriptionDto>>;
 
-public sealed record DeleteWebhookSubscriptionCommand(Guid Id) : IRequest<Result>;
+public sealed record DeleteWebhookSubscriptionCommand(Guid Id, Guid CallerPartnerId = default) : IRequest<Result>;
 
 public sealed record RotateWebhookSubscriptionSecretCommand(
     Guid Id,
-    string? Secret) : IRequest<Result<string>>;
+    string? Secret,
+    Guid CallerPartnerId = default) : IRequest<Result<string>>;
 
-public sealed record GetWebhookSubscriptionQuery(Guid Id) : IRequest<Result<WebhookSubscriptionDto>>;
+public sealed record GetWebhookSubscriptionQuery(Guid Id, Guid CallerPartnerId = default) : IRequest<Result<WebhookSubscriptionDto>>;

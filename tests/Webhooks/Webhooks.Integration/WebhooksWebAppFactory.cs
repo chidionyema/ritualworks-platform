@@ -6,13 +6,44 @@ using Xunit;
 using Haworks.BuildingBlocks.Testing.Authentication;
 using Haworks.BuildingBlocks.Testing.Containers;
 using Haworks.Webhooks.Infrastructure.Persistence;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Moq.Protected;
 using System.Net;
+using System.Security.Claims;
+using System.Text.Encodings.Web;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Haworks.Webhooks.Integration;
+
+/// <summary>
+/// Auth handler that provides a valid GUID partner_id claim for webhook ownership tests.
+/// </summary>
+internal sealed class WebhooksTestAuthHandler(
+    IOptionsMonitor<AuthenticationSchemeOptions> options,
+    ILoggerFactory logger,
+    UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+{
+    public static readonly Guid TestPartnerId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+
+    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+    {
+        var claims = new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, TestPartnerId.ToString()),
+            new Claim("partner_id", TestPartnerId.ToString()),
+            new Claim(ClaimTypes.Name, "test-partner"),
+            new Claim(ClaimTypes.Role, "User"),
+            new Claim(ClaimTypes.Role, "Admin"),
+        };
+        var identity = new ClaimsIdentity(claims, TestAuthenticationHandler.SchemeName);
+        var principal = new ClaimsPrincipal(identity);
+        var ticket = new AuthenticationTicket(principal, TestAuthenticationHandler.SchemeName);
+        return Task.FromResult(AuthenticateResult.Success(ticket));
+    }
+}
 
 public class WebhooksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
@@ -79,7 +110,9 @@ public class WebhooksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
                 options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
             });
 
-            services.AddAuthentication(TestAuthenticationHandler.SchemeName).AddTestAuth();
+            services.AddAuthentication(TestAuthenticationHandler.SchemeName)
+                .AddScheme<AuthenticationSchemeOptions, WebhooksTestAuthHandler>(
+                    TestAuthenticationHandler.SchemeName, _ => { });
 
             // Mock HttpClient for WebhookValidator
             var mockHandler = new Mock<HttpMessageHandler>();

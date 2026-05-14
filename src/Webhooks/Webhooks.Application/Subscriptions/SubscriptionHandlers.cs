@@ -49,7 +49,7 @@ internal sealed class SubscriptionHandlers(
 
     public async Task<Result<WebhookSubscriptionDto>> Handle(UpdateWebhookSubscriptionCommand request, CancellationToken ct)
     {
-        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == request.Id && s.DeletedAt == null, ct);
+        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == request.Id && s.PartnerId == request.CallerPartnerId && s.DeletedAt == null, ct);
         if (sub == null) return Result.Failure<WebhookSubscriptionDto>(SubscriptionNotFound);
 
         sub.Update(request.Url, request.Events, request.IsActive);
@@ -60,7 +60,7 @@ internal sealed class SubscriptionHandlers(
 
     public async Task<Result> Handle(DeleteWebhookSubscriptionCommand request, CancellationToken ct)
     {
-        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == request.Id && s.DeletedAt == null, ct);
+        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == request.Id && s.PartnerId == request.CallerPartnerId && s.DeletedAt == null, ct);
         if (sub == null) return Result.Failure(SubscriptionNotFound);
 
         sub.SoftDelete();
@@ -71,7 +71,7 @@ internal sealed class SubscriptionHandlers(
 
     public async Task<Result<string>> Handle(RotateWebhookSubscriptionSecretCommand request, CancellationToken ct)
     {
-        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == request.Id && s.DeletedAt == null, ct);
+        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == request.Id && s.PartnerId == request.CallerPartnerId && s.DeletedAt == null, ct);
         if (sub == null) return Result.Failure<string>(SubscriptionNotFound);
 
         var secret = request.Secret ?? Guid.NewGuid().ToString("N");
@@ -86,7 +86,7 @@ internal sealed class SubscriptionHandlers(
 
     public async Task<Result<WebhookSubscriptionDto>> Handle(GetWebhookSubscriptionQuery request, CancellationToken ct)
     {
-        var sub = await db.Subscriptions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == request.Id && s.DeletedAt == null, ct);
+        var sub = await db.Subscriptions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == request.Id && s.PartnerId == request.CallerPartnerId && s.DeletedAt == null, ct);
         if (sub == null) return Result.Failure<WebhookSubscriptionDto>(SubscriptionNotFound);
 
         return Result.Success(Map(sub));
