@@ -22,8 +22,8 @@ public class LocationUpdatedConsumer(
         {
             LocationId = msg.LocationId.ToString(),
             Location = new GeoPoint(msg.Latitude, msg.Longitude),
-            Postcode = msg.Address.Postcode,
-            Metadata = msg.Metadata
+            Postcode = msg.Address.Postcode ?? string.Empty,
+            Metadata = msg.Metadata ?? new Dictionary<string, string>()
         };
 
         await locationIndex.UpsertAsync(doc, context.CancellationToken);
