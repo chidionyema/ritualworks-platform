@@ -60,6 +60,7 @@ public static partial class DependencyInjection
             // owns the consumer type; Infrastructure owns the bus.
             x.AddConsumer<Notifications.Application.Consumers.NotificationRequestConsumer>();
             x.AddConsumer<Haworks.Notifications.Application.Webhooks.NotificationWebhookValidatedConsumer>();
+            x.AddConsumer<Notifications.Application.Consumers.RefundEmailConsumer>();
             
             x.AddEntityFrameworkOutbox<NotificationsDbContext>(o =>
             {

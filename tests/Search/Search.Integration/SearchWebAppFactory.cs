@@ -14,7 +14,7 @@ using Xunit;
 namespace Haworks.Search.Integration;
 
 /// <summary>
-/// Test fixture for Search.Integration. Spins a Meilisearch container +
+/// Test fixture for Search.Integration. Spins an Elasticsearch container +
 /// a WireMock server (the catalog stub), sets configuration env vars
 /// before the host builds (Program.cs reads <c>builder.Configuration</c>
 /// before <c>ConfigureAppConfiguration</c> fires), and registers an
@@ -24,32 +24,30 @@ namespace Haworks.Search.Integration;
 /// </summary>
 public sealed class SearchWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    public const string TestMasterKey = "test_master_key_at_least_16_chars";
-
-    private readonly IContainer _meili = new ContainerBuilder()
-        .WithImage("getmeili/meilisearch:v1.10")
-        .WithEnvironment("MEILI_MASTER_KEY", TestMasterKey)
-        .WithEnvironment("MEILI_NO_ANALYTICS", "true")
-        .WithPortBinding(7700, assignRandomHostPort: true)
-        .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPath("/health").ForPort(7700)))
+    private readonly IContainer _es = new ContainerBuilder()
+        .WithImage("docker.elastic.co/elasticsearch/elasticsearch:8.17.0")
+        .WithEnvironment("discovery.type", "single-node")
+        .WithEnvironment("xpack.security.enabled", "false")
+        .WithEnvironment("ES_JAVA_OPTS", "-Xms512m -Xmx512m")
+        .WithPortBinding(9200, assignRandomHostPort: true)
+        .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPath("/").ForPort(9200)))
         .WithReuse(true)
         .Build();
 
     public WireMockServer Catalog { get; } = WireMockServer.Start();
 
-    public string MeiliUrl => $"http://{_meili.Hostname}:{_meili.GetMappedPublicPort(7700)}";
+    public string EsUrl => $"http://{_es.Hostname}:{_es.GetMappedPublicPort(9200)}";
 
     public async Task InitializeAsync()
     {
-        await _meili.StartAsync();
+        await _es.StartAsync();
         JwtTestDefaults.SetTestEnvironmentVariables();
 
         // Program.cs reads builder.Configuration before WAF's ConfigureAppConfiguration
         // hook runs, so configuration must be present as env vars by then.
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Test");
-        Environment.SetEnvironmentVariable("Meilisearch__Url", MeiliUrl);
-        Environment.SetEnvironmentVariable("Meilisearch__MasterKey", TestMasterKey);
-        Environment.SetEnvironmentVariable("Meilisearch__IndexName", $"products_test_{Guid.NewGuid():N}");
+        Environment.SetEnvironmentVariable("Elasticsearch__Url", EsUrl);
+        Environment.SetEnvironmentVariable("Elasticsearch__IndexName", $"products_test_{Guid.NewGuid():N}");
         Environment.SetEnvironmentVariable("Catalog__BaseAddress", Catalog.Url);
     }
 
@@ -57,7 +55,7 @@ public sealed class SearchWebAppFactory : WebApplicationFactory<Program>, IAsync
     {
         Catalog.Stop();
         Catalog.Dispose();
-        // Reused Meilisearch container outlives the fixture intentionally.
+        // Reused Elasticsearch container outlives the fixture intentionally.
         return Task.CompletedTask;
     }
 
@@ -69,9 +67,8 @@ public sealed class SearchWebAppFactory : WebApplicationFactory<Program>, IAsync
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Meilisearch:Url"] = MeiliUrl,
-                ["Meilisearch:MasterKey"] = TestMasterKey,
-                ["Meilisearch:IndexName"] = Environment.GetEnvironmentVariable("Meilisearch__IndexName"),
+                ["Elasticsearch:Url"] = EsUrl,
+                ["Elasticsearch:IndexName"] = Environment.GetEnvironmentVariable("Elasticsearch__IndexName"),
                 ["Catalog:BaseAddress"] = Catalog.Url,
             });
         });

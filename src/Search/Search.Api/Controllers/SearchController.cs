@@ -70,4 +70,19 @@ public sealed class SearchController : ControllerBase
             Hits      = hits,
         });
     }
+
+    [HttpPost("saved")]
+    public async Task<IActionResult> SaveSearch(
+        [FromBody] SearchQuery query,
+        CancellationToken ct = default)
+    {
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+            ?? User.FindFirst("sub")?.Value 
+            ?? "anonymous";
+
+        var id = Guid.NewGuid().ToString("N");
+        await _index.RegisterSavedSearchAsync(id, userId, query, ct);
+        
+        return Created($"/search/saved/{id}", new { id });
+    }
 }

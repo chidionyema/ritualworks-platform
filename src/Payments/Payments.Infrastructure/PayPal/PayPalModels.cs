@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Haworks.Payments.Infrastructure.PayPal;
 
@@ -7,6 +6,9 @@ namespace Haworks.Payments.Infrastructure.PayPal;
 // PayPal Order API Models
 // ============================================================================
 
+/// <summary>
+/// Request to create a PayPal checkout order.
+/// </summary>
 internal sealed class PayPalOrderRequest
 {
     public string Intent { get; set; } = "CAPTURE";
@@ -14,6 +16,9 @@ internal sealed class PayPalOrderRequest
     public PayPalApplicationContext? ApplicationContext { get; set; }
 }
 
+/// <summary>
+/// Purchase unit in a PayPal order.
+/// </summary>
 internal sealed class PayPalPurchaseUnit
 {
     public string? ReferenceId { get; set; }
@@ -23,12 +28,18 @@ internal sealed class PayPalPurchaseUnit
     public PayPalPayments? Payments { get; set; }
 }
 
+/// <summary>
+/// Amount in a PayPal transaction.
+/// </summary>
 internal sealed class PayPalAmount
 {
     public string CurrencyCode { get; set; } = "USD";
     public string Value { get; set; } = "0.00";
 }
 
+/// <summary>
+/// Application context for PayPal checkout experience.
+/// </summary>
 internal sealed class PayPalApplicationContext
 {
     public string? ReturnUrl { get; set; }
@@ -37,6 +48,9 @@ internal sealed class PayPalApplicationContext
     public string? UserAction { get; set; }
 }
 
+/// <summary>
+/// PayPal order response.
+/// </summary>
 internal sealed class PayPalOrder
 {
     public string? Id { get; set; }
@@ -46,24 +60,55 @@ internal sealed class PayPalOrder
     public List<PayPalLink>? Links { get; set; }
 }
 
-internal sealed class PayPalPayer
+/// <summary>
+/// PayPal order response with detailed payment info.
+/// </summary>
+internal sealed class PayPalOrderResponse
 {
-    public string? PayerId { get; set; }
-    public string? EmailAddress { get; set; }
+    public string? Id { get; set; }
+    public string? Status { get; set; }
+    public List<PayPalPurchaseUnitResponse>? PurchaseUnits { get; set; }
 }
 
-internal sealed class PayPalLink
+/// <summary>
+/// Purchase unit response with payment details.
+/// </summary>
+internal sealed class PayPalPurchaseUnitResponse
 {
-    public string? Href { get; set; }
-    public string? Rel { get; set; }
-    public string? Method { get; set; }
+    public string? ReferenceId { get; set; }
+    public string? CustomId { get; set; }
+    public PayPalAmountResponse? Amount { get; set; }
+    public PayPalPaymentsResponse? Payments { get; set; }
 }
 
+/// <summary>
+/// Amount response from PayPal.
+/// </summary>
+internal sealed class PayPalAmountResponse
+{
+    public string? CurrencyCode { get; set; }
+    public string? Value { get; set; }
+}
+
+/// <summary>
+/// Payments collection in a purchase unit.
+/// </summary>
 internal sealed class PayPalPayments
 {
     public List<PayPalCapture>? Captures { get; set; }
 }
 
+/// <summary>
+/// Payments response with captures.
+/// </summary>
+internal sealed class PayPalPaymentsResponse
+{
+    public List<PayPalCaptureResponse>? Captures { get; set; }
+}
+
+/// <summary>
+/// Capture details.
+/// </summary>
 internal sealed class PayPalCapture
 {
     public string? Id { get; set; }
@@ -71,10 +116,42 @@ internal sealed class PayPalCapture
     public PayPalAmount? Amount { get; set; }
 }
 
+/// <summary>
+/// Capture response from PayPal.
+/// </summary>
+internal sealed class PayPalCaptureResponse
+{
+    public string? Id { get; set; }
+    public string? Status { get; set; }
+    public PayPalAmountResponse? Amount { get; set; }
+}
+
+/// <summary>
+/// PayPal payer information.
+/// </summary>
+internal sealed class PayPalPayer
+{
+    public string? PayerId { get; set; }
+    public string? EmailAddress { get; set; }
+}
+
+/// <summary>
+/// HATEOAS link from PayPal responses.
+/// </summary>
+internal sealed class PayPalLink
+{
+    public string? Href { get; set; }
+    public string? Rel { get; set; }
+    public string? Method { get; set; }
+}
+
 // ============================================================================
 // PayPal Subscription API Models
 // ============================================================================
 
+/// <summary>
+/// Request to create a PayPal subscription.
+/// </summary>
 internal sealed class PayPalSubscriptionRequest
 {
     public string? PlanId { get; set; }
@@ -82,11 +159,17 @@ internal sealed class PayPalSubscriptionRequest
     public PayPalSubscriber? Subscriber { get; set; }
 }
 
+/// <summary>
+/// Subscriber information for subscriptions.
+/// </summary>
 internal sealed class PayPalSubscriber
 {
     public string? EmailAddress { get; set; }
 }
 
+/// <summary>
+/// PayPal subscription response.
+/// </summary>
 internal sealed class PayPalSubscription
 {
     public string? Id { get; set; }
@@ -99,18 +182,28 @@ internal sealed class PayPalSubscription
 // PayPal Refund API Models
 // ============================================================================
 
+/// <summary>
+/// Request to refund a PayPal capture.
+/// </summary>
 internal sealed class PayPalRefundRequest
 {
     public PayPalRefundAmount? Amount { get; set; }
     public string? NoteToPayer { get; set; }
+    public string? CustomId { get; set; }
 }
 
+/// <summary>
+/// Amount for a refund request.
+/// </summary>
 internal sealed class PayPalRefundAmount
 {
     public string CurrencyCode { get; set; } = "USD";
     public string Value { get; set; } = "0.00";
 }
 
+/// <summary>
+/// PayPal refund response.
+/// </summary>
 internal sealed class PayPalRefundResponse
 {
     public string? Id { get; set; }
@@ -119,6 +212,9 @@ internal sealed class PayPalRefundResponse
     public PayPalStatusDetails? StatusDetails { get; set; }
 }
 
+/// <summary>
+/// Status details for refunds.
+/// </summary>
 internal sealed class PayPalStatusDetails
 {
     public string? Reason { get; set; }
@@ -128,6 +224,9 @@ internal sealed class PayPalStatusDetails
 // PayPal Error Models
 // ============================================================================
 
+/// <summary>
+/// PayPal API error response.
+/// </summary>
 internal sealed class PayPalErrorResponse
 {
     public string? Name { get; set; }
@@ -135,6 +234,9 @@ internal sealed class PayPalErrorResponse
     public List<PayPalErrorDetail>? Details { get; set; }
 }
 
+/// <summary>
+/// Detail of a PayPal error.
+/// </summary>
 internal sealed class PayPalErrorDetail
 {
     public string? Field { get; set; }
@@ -145,6 +247,9 @@ internal sealed class PayPalErrorDetail
 // PayPal Webhook Models
 // ============================================================================
 
+/// <summary>
+/// Request to verify a PayPal webhook signature.
+/// </summary>
 internal sealed class PayPalVerifySignatureRequest
 {
     public string? WebhookId { get; set; }
@@ -156,11 +261,17 @@ internal sealed class PayPalVerifySignatureRequest
     public JsonDocument? WebhookEvent { get; set; }
 }
 
+/// <summary>
+/// Response from PayPal webhook signature verification.
+/// </summary>
 internal sealed class PayPalVerifySignatureResponse
 {
     public string? VerificationStatus { get; set; }
 }
 
+/// <summary>
+/// Parsed PayPal signature headers from webhook request.
+/// </summary>
 internal sealed class PayPalSignatureHeaders
 {
     public string TransmissionId { get; set; } = string.Empty;
@@ -170,6 +281,9 @@ internal sealed class PayPalSignatureHeaders
     public string AuthAlgo { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// PayPal webhook event payload.
+/// </summary>
 internal sealed class PayPalWebhookEvent
 {
     public string? Id { get; set; }
@@ -184,21 +298,15 @@ internal sealed class PayPalWebhookEvent
 // PayPal OAuth Models
 // ============================================================================
 
+/// <summary>
+/// PayPal OAuth2 token response.
+/// </summary>
 internal sealed class PayPalTokenResponse
 {
-    [JsonPropertyName("access_token")]
     public string AccessToken { get; set; } = string.Empty;
-
-    [JsonPropertyName("token_type")]
     public string TokenType { get; set; } = string.Empty;
-
-    [JsonPropertyName("expires_in")]
     public int ExpiresIn { get; set; }
-
-    [JsonPropertyName("scope")]
     public string Scope { get; set; } = string.Empty;
-
-    [JsonPropertyName("nonce")]
     public string Nonce { get; set; } = string.Empty;
 }
 
@@ -206,11 +314,17 @@ internal sealed class PayPalTokenResponse
 // PayPal Subscription Management Models
 // ============================================================================
 
+/// <summary>
+/// Request to cancel a PayPal subscription.
+/// </summary>
 internal sealed class PayPalCancelSubscriptionRequest
 {
     public string? Reason { get; set; }
 }
 
+/// <summary>
+/// PayPal subscription response from the API.
+/// </summary>
 internal sealed class PayPalSubscriptionResponse
 {
     public string? Id { get; set; }
@@ -220,6 +334,9 @@ internal sealed class PayPalSubscriptionResponse
     public PayPalSubscriber? Subscriber { get; set; }
 }
 
+/// <summary>
+/// Billing information for a subscription.
+/// </summary>
 internal sealed class PayPalBillingInfo
 {
     public string? NextBillingTime { get; set; }
@@ -227,24 +344,11 @@ internal sealed class PayPalBillingInfo
     public PayPalLastPayment? LastPayment { get; set; }
 }
 
+/// <summary>
+/// Last payment information for a subscription.
+/// </summary>
 internal sealed class PayPalLastPayment
 {
     public PayPalAmountResponse? Amount { get; set; }
     public string? Time { get; set; }
-}
-
-internal sealed class PayPalAmountResponse
-{
-    public string? CurrencyCode { get; set; }
-    public string? Value { get; set; }
-}
-
-internal static class PayPalJsonOptions
-{
-    public static readonly JsonSerializerOptions Default = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
 }

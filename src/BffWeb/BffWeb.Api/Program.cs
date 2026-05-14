@@ -16,8 +16,7 @@ builder.AddServiceDefaults();
 // Phase A: JWT validation + user-id propagation. Every backend service
 // validates the bearer token (AddPlatformAuthentication), and the BFF
 // forwards the user identity as X-User-Id (UserIdentityForwardingHandler).
-builder.Services.AddJwksAuthentication(builder.Configuration);
-builder.Services.AddHttpContextAccessor();
+builder.Services.AddPlatformAuthentication(builder.Configuration);
 builder.Services.AddTransient<Haworks.BuildingBlocks.Authentication.UserIdentityForwardingHandler>();
 
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
@@ -138,6 +137,9 @@ foreach (var name in new[]
 {
     BackendClients.Identity, BackendClients.Catalog, BackendClients.Orders,
     BackendClients.Payments, BackendClients.Checkout, BackendClients.Search,
+    BackendClients.Location, BackendClients.Webhooks, BackendClients.Payouts,
+    BackendClients.Scheduler, BackendClients.Privacy, BackendClients.Merchant,
+    BackendClients.Notifications, BackendClients.Content, BackendClients.Audit,
 })
 {
     var serviceName = name; // capture for handlers

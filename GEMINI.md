@@ -22,6 +22,11 @@ This document defines the foundation rules for the RitualWorks microservices pla
 ### 2. Transactional Integrity (Outbox)
 - **Rule:** All side effects (event publishing) MUST use the **Outbox Pattern**. Commit domain state and outbox messages in a single atomic transaction.
 
+### 3. Geospatial Integrity (Location Service)
+- **Rule:** All coordinates MUST be stored as `GEOGRAPHY(POINT, 4326)` in PostgreSQL.
+- **Geohashing:** Every location record MUST have a corresponding 12-char Geohash for efficient grid-based indexing.
+- **Search:** Proximity searches MUST be performed against the Elasticsearch `geo_point` projection, followed by gRPC hydration for rich metadata.
+
 ## 🧠 Institutional Memory
 
 ### The "Validation Gap" Remediation (May 2026)

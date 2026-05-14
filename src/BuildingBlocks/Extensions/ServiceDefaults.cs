@@ -91,7 +91,8 @@ public static class ServiceDefaults
             {
                 metrics.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
-                    .AddRuntimeInstrumentation();
+                    .AddRuntimeInstrumentation()
+                    .AddMeter("Haworks.Catalog");
             })
             .WithTracing(tracing =>
             {

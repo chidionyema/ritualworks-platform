@@ -17,7 +17,7 @@
 
 | | |
 |---|---|
-| **Services** | catalog · orders · payments · identity · content · bff-web · checkout-orchestrator |
+| **Services** | catalog · orders · payments · identity · content · bff-web · checkout-orchestrator · location |
 | **Per-service guarantees** | own database, own outbox, own consumer endpoints, own migrations |
 | **Cross-service comms** | MassTransit + RabbitMQ; events typed in `src/Contracts/`; producer-side Pact contracts |
 | **Saga** | MassTransit state machine (`CheckoutOrchestrator`) — choreographs `OrderCreated → StockReserved → PaymentSession → PaymentCompleted` with compensation on any failure |
@@ -90,6 +90,7 @@ This is the difference between "we have a saga" and "we have a saga that actuall
 | **identity** | Login, refresh, profile, JWT issuance + revocation | `identity` | `UserRegistered`, `UserProfileUpdated` |
 | **orders** | Cart, order placement, guest checkout | `orders` | `OrderCreated`, `OrderCompleted`, `OrderCancelled` |
 | **payments** | Stripe + PayPal sessions, webhook ingest, idempotent dedup | `payments` | `PaymentSessionRequested`, `PaymentCompleted`, `PaymentSessionFailed`, `PaymentAmountMismatch` |
+| **location** | Geospatial MDM, geocoding, geohashing, radius search | `location` | `LocationUpdated` |
 | **content** | File upload, MinIO storage, image variants | `content` | (chunked upload pipeline pending) |
 | **bff-web** | SPA aggregator, no business logic | n/a | n/a |
 | **checkout-orchestrator** | Saga state machine | `checkout` | `CheckoutCompleted`, `CheckoutFailed`, `StockReleaseRequested` |
@@ -102,6 +103,7 @@ This is the difference between "we have a saga" and "we have a saga that actuall
 Unit + Architecture + Contract:    218 tests, all green
 Integration (Testcontainers):
   catalog                            7/7
+  location                           2/2
   orders                             9/9
   payments                           7/7  (idempotency proven via DB-level WebhookEvent unique index)
   identity                          14/14
@@ -189,6 +191,7 @@ src/
 ├── Identity/                 identity-svc
 ├── Orders/                   orders-svc
 ├── Payments/                 payments-svc
+├── Location/                 location-svc
 ├── Content/                  content-svc
 ├── BffWeb/                   bff-web
 └── CheckoutOrchestrator/     checkout-orchestrator (saga)

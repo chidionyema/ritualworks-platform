@@ -19,18 +19,13 @@ internal sealed class StripeWebhookProcessor : IWebhookProcessor
 {
     private readonly IPaymentSessionProcessor _paymentProcessor;
     private readonly ISubscriptionManager _subscriptionManager;
+    private readonly IRefundService _refundService;
     private readonly IWebhookIdempotencyGuard _idempotencyGuard;
     private readonly IPaymentRepository _paymentRepository;
     private readonly IDomainEventPublisher _eventPublisher;
     private readonly ILogger<StripeWebhookProcessor> _logger;
     private readonly ITelemetryService _telemetry;
 
-    // PropertyNameCaseInsensitive triggers a collision when the snake_case
-    // naming policy and an explicit [JsonPropertyName] resolve to the same
-    // logical key (e.g. SubscriptionId → "subscription_id" plus JsonPropertyName
-    // "subscription" both reduce when matched case-insensitively against
-    // "subscription"). The webhook payload uses snake_case verbatim, so the
-    // policy alone is enough.
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
@@ -41,6 +36,7 @@ internal sealed class StripeWebhookProcessor : IWebhookProcessor
     public StripeWebhookProcessor(
         IPaymentSessionProcessor paymentProcessor,
         ISubscriptionManager subscriptionManager,
+        IRefundService refundService,
         IWebhookIdempotencyGuard idempotencyGuard,
         IPaymentRepository paymentRepository,
         IDomainEventPublisher eventPublisher,
@@ -50,6 +46,7 @@ internal sealed class StripeWebhookProcessor : IWebhookProcessor
     {
         _paymentProcessor = paymentProcessor ?? throw new ArgumentNullException(nameof(paymentProcessor));
         _subscriptionManager = subscriptionManager ?? throw new ArgumentNullException(nameof(subscriptionManager));
+        _refundService = refundService ?? throw new ArgumentNullException(nameof(refundService));
         _idempotencyGuard = idempotencyGuard ?? throw new ArgumentNullException(nameof(idempotencyGuard));
         _paymentRepository = paymentRepository ?? throw new ArgumentNullException(nameof(paymentRepository));
         _eventPublisher = eventPublisher ?? throw new ArgumentNullException(nameof(eventPublisher));
@@ -123,6 +120,7 @@ internal sealed class StripeWebhookProcessor : IWebhookProcessor
                 StripeConstants.EventTypes.CustomerSubscriptionUpdated => await HandleSubscriptionEventAsync(webhookEvent, SubscriptionEventType.Updated, ct),
                 StripeConstants.EventTypes.CustomerSubscriptionDeleted => await HandleSubscriptionEventAsync(webhookEvent, SubscriptionEventType.Canceled, ct),
                 StripeConstants.EventTypes.InvoicePaymentFailed => await HandleInvoicePaymentFailedAsync(webhookEvent, ct),
+                "charge.refunded" => await HandleChargeRefundedAsync(webhookEvent, ct),
                 _ => WebhookProcessingResult.Skipped($"Unhandled event type: {webhookEvent.EventType}")
             };
 
@@ -234,6 +232,50 @@ internal sealed class StripeWebhookProcessor : IWebhookProcessor
         return WebhookProcessingResult.Success(webhookEvent.EventType, "Expired handled");
     }
 
+    private async Task<WebhookProcessingResult> HandleChargeRefundedAsync(PaymentWebhookEvent webhookEvent, CancellationToken ct)
+    {
+        var charge = ParseDataObject<StripeChargeDto>(webhookEvent.RawPayload);
+        if (charge == null) return WebhookProcessingResult.Failed("Failed to parse Charge data");
+        if (string.IsNullOrEmpty(charge.PaymentIntent)) return WebhookProcessingResult.Skipped("Missing PaymentIntent reference");
+
+        // Stripe sends charge.refunded even for partial refunds.
+        // The business logic for domain event publishing is already in StripeRefundService.CreateRefundAsync,
+        // but this handles refunds triggered from the Stripe Dashboard.
+        var payment = await _paymentRepository.GetByProviderTransactionIdAsync(charge.PaymentIntent, ct);
+        if (payment == null) return WebhookProcessingResult.Skipped("No payment record for intent");
+
+        // We check if it's already processed or if we need to emit a system-wide event.
+        // For Dashboard refunds, we want to ensure Orders etc are notified.
+        foreach (var refund in charge.Refunds.Data.Where(r => r.Status == "succeeded"))
+        {
+            // 1. Legacy/Dashboard event for broad consumption
+            await _eventPublisher.PublishAsync(new RefundIssuedEvent
+            {
+                PaymentId = payment.Id,
+                OrderId = payment.OrderId,
+                RefundId = refund.Id,
+                AmountCents = refund.Amount,
+                Currency = charge.Currency,
+                Provider = Provider,
+                Reason = "Refunded via Stripe"
+            }, ct);
+
+            // 2. Saga-specific correlation event
+            if (refund.Metadata.TryGetValue("refund_id", out var sagaIdStr) && Guid.TryParse(sagaIdStr, out var sagaId))
+            {
+                await _eventPublisher.PublishAsync(new ProviderRefundSucceededEvent
+                {
+                    RefundId = sagaId,
+                    ProviderRefundId = refund.Id,
+                    AmountRefunded = refund.Amount / 100m,
+                    CompletedAt = DateTime.UtcNow
+                }, ct);
+            }
+        }
+
+        return WebhookProcessingResult.Success(webhookEvent.EventType, "Refund processed");
+    }
+
     private T? ParseDataObject<T>(string rawPayload) where T : class
     {
         try
@@ -249,26 +291,18 @@ internal sealed class StripeWebhookProcessor : IWebhookProcessor
         }
     }
 
-    private WebhookProcessingResult HandleUnknownEvent(PaymentWebhookEvent webhookEvent)
+    private sealed class StripeSessionDto
     {
-        return WebhookProcessingResult.Skipped($"Unhandled event type: {webhookEvent.EventType}");
+        public string Id { get; set; } = string.Empty;
+        public string? Mode { get; set; }
+        [JsonPropertyName("payment_intent")]
+        public string? PaymentIntentId { get; set; }
+        [JsonPropertyName("subscription")]
+        public string? SubscriptionId { get; set; }
+        public long? AmountTotal { get; set; }
+        public string? Currency { get; set; }
+        public Dictionary<string, string> Metadata { get; set; } = new();
     }
-
-    // ========================================================================
-    // Internal DTOs for Robust Webhook Parsing
-    // ========================================================================
-private sealed class StripeSessionDto
-{
-    public string Id { get; set; } = string.Empty;
-    public string? Mode { get; set; }
-    [JsonPropertyName("payment_intent")]
-    public string? PaymentIntentId { get; set; }
-    [JsonPropertyName("subscription")]
-    public string? SubscriptionId { get; set; }
-    public long? AmountTotal { get; set; }
-    public string? Currency { get; set; }
-    public Dictionary<string, string> Metadata { get; set; } = new();
-}
 
     private sealed class StripeSubscriptionDto
     {
@@ -297,5 +331,26 @@ private sealed class StripeSessionDto
     private sealed class StripeInvoiceDto
     {
         public string? Subscription { get; set; }
+    }
+
+    private sealed class StripeChargeDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string? PaymentIntent { get; set; }
+        public string Currency { get; set; } = string.Empty;
+        public StripeRefundsListDto Refunds { get; set; } = new();
+    }
+
+    private sealed class StripeRefundsListDto
+    {
+        public List<StripeRefundDto> Data { get; set; } = new();
+    }
+
+    private sealed class StripeRefundDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public long Amount { get; set; }
+        public Dictionary<string, string> Metadata { get; set; } = new();
     }
 }

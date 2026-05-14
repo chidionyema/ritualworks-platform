@@ -59,6 +59,11 @@ public sealed class E2EEnvironmentFixture : IAsyncLifetime
             IgnoreHTTPSErrors = true
         });
     }
+
+    public Uri GetServiceEndpoint(string name)
+    {
+        return _app?.GetEndpoint(name) ?? throw new InvalidOperationException("App not started");
+    }
 }
 
 [CollectionDefinition("E2E Tests")]

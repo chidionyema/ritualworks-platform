@@ -19,4 +19,7 @@ public enum OrderStatus
 
     /// <summary>Stripe checkout session expired before completion.</summary>
     Expired = 3,
+
+    /// <summary>Order has been refunded.</summary>
+    Refunded = 4,
 }

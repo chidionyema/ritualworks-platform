@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Haworks.Orders.Application.Commands;
 using Haworks.Orders.Application.Queries;
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Extensions;
 
 namespace Haworks.Orders.Api.Controllers;
 
@@ -23,7 +24,16 @@ public sealed class OrdersController(IMediator mediator) : ControllerBase
         [FromQuery] int skip = 0,
         [FromQuery] int take = 20,
         CancellationToken ct = default)
-        => (await mediator.Send(new ListUserOrdersQuery(userId, skip, take), ct)).ToActionResult();
+    {
+        // If the requested userId doesn't match the authenticated user, and user is not Admin, return Forbidden
+        var authenticatedUserId = HttpContext.GetForwardedUserId();
+        if (userId != authenticatedUserId && !User.IsInRole("Admin"))
+        {
+            return Forbid();
+        }
+
+        return (await mediator.Send(new ListUserOrdersQuery(userId, skip, take), ct)).ToActionResult();
+    }
 
     [HttpGet("lookup")]
     [AllowAnonymous]

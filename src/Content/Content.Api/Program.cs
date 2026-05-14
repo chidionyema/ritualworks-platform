@@ -14,12 +14,7 @@ builder.AddServiceDefaults();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddApplication();
 
-// JWT validation via the shared JWKS endpoint exposed by identity-svc.
-// Same scheme every backend uses; tokens minted by Identity validate
-// across the cluster. Test fixtures swap the default scheme to a no-op
-// handler in ConfigureTestServices.
-builder.Services.AddJwksAuthentication(builder.Configuration);
-builder.Services.AddHttpContextAccessor();
+builder.Services.AddPlatformAuthentication(builder.Configuration);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

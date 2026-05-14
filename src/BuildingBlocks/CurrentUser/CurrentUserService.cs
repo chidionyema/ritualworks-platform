@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Haworks.BuildingBlocks.Extensions;
 using Microsoft.AspNetCore.Http;
 
 namespace Haworks.BuildingBlocks.CurrentUser;
@@ -13,7 +14,8 @@ public class CurrentUserService : ICurrentUserService
     }
 
     public string? UserId =>
-        _contextAccessor.HttpContext?.User?
+        _contextAccessor.HttpContext?.GetForwardedUserId()
+        ?? _contextAccessor.HttpContext?.User?
             .FindFirstValue(ClaimTypes.NameIdentifier);
 
     public string? ClientIp =>
