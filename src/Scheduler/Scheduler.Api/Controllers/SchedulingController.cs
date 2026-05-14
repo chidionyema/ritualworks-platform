@@ -1,10 +1,12 @@
 using Haworks.Scheduler.Application.Scheduling.Commands.ScheduleEvent;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.Scheduler.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class SchedulingController : ControllerBase
 {

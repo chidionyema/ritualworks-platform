@@ -22,5 +22,10 @@ public class CreateAddressCommandValidator : AbstractValidator<CreateAddressComm
         RuleFor(x => x.Longitude)
             .InclusiveBetween(-180, 180)
             .When(x => x.Longitude.HasValue);
+
+        RuleFor(x => x)
+            .Must(x => x.Latitude.HasValue == x.Longitude.HasValue)
+            .WithMessage("Both Latitude and Longitude must be provided together, or both omitted.")
+            .OverridePropertyName("Coordinates");
     }
 }

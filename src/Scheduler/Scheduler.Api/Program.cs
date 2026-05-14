@@ -47,12 +47,16 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapDefaultEndpoints();
 
 // Configure Hangfire Dashboard
-app.UseHangfireDashboard();
+if (app.Environment.IsDevelopment())
+{
+    app.UseHangfireDashboard();
+}
 
 app.Run();
 

@@ -1,5 +1,6 @@
 using FluentValidation;
 using Haworks.Notifications.Application.Commands;
+using Haworks.Notifications.Domain.Enums;
 
 namespace Haworks.Notifications.Application.Validators;
 
@@ -31,6 +32,14 @@ internal sealed class SendNotificationCommandValidator : AbstractValidator<SendN
         RuleFor(x => x.Recipient)
             .MaximumLength(MaxRecipientLength)
             .When(x => !string.IsNullOrWhiteSpace(x.Recipient));
+
+        RuleFor(x => x.Recipient)
+            .EmailAddress()
+            .When(x => x.Channel == NotificationChannel.Email && !string.IsNullOrWhiteSpace(x.Recipient));
+
+        RuleFor(x => x.Recipient)
+            .Matches(@"^\+[1-9]\d{6,14}$")
+            .When(x => x.Channel == NotificationChannel.Sms && !string.IsNullOrWhiteSpace(x.Recipient));
 
         RuleFor(x => x.Variables)
             .NotNull().WithMessage("Variables must not be null (use an empty dictionary if no substitutions are required).");
