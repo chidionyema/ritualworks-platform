@@ -163,13 +163,22 @@ public static class DependencyInjection
         services.AddMassTransit(mt =>
         {
             mt.SetKebabCaseEndpointNameFormatter();
+            mt.AddDelayedMessageScheduler();
             mt.AddEntityFrameworkOutbox<PaymentDbContext>(o =>
             {
                 o.UsePostgres();
                 o.UseBusOutbox();
+                o.DuplicateDetectionWindow = TimeSpan.FromMinutes(30);
             });
 
             mt.AddSagaStateMachine<RefundSaga, RefundSagaState>()
+                .EntityFrameworkRepository(r =>
+                {
+                    r.ExistingDbContext<PaymentDbContext>();
+                    r.UsePostgres();
+                });
+
+            mt.AddSagaStateMachine<SubscriptionSaga, SubscriptionSagaState>()
                 .EntityFrameworkRepository(r =>
                 {
                     r.ExistingDbContext<PaymentDbContext>();
@@ -187,6 +196,7 @@ public static class DependencyInjection
                     ?? throw new InvalidOperationException();
 
                 cfg.Host(new Uri(rabbitConn));
+                cfg.UseDelayedMessageScheduler();
                 cfg.UsePublishFilter(typeof(RelayPauseFilter<>), context);
                 cfg.ConfigureEndpoints(context);
             });

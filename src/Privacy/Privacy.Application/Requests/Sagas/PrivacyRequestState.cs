@@ -10,12 +10,15 @@ public class PrivacyRequestState : SagaStateMachineInstance, ISagaVersion
 
     public Guid UserId { get; set; }
     public string RequestType { get; set; } = null!;
-    
-    // Tracking completion of steps (simplistic for now)
+
+    // Tracking completion per service
     public bool IdentityCompleted { get; set; }
     public bool OrdersCompleted { get; set; }
     public bool PaymentsCompleted { get; set; }
 
     public DateTime? CreatedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
+
+    // PR-02: timeout schedule token
+    public Guid? ErasureTimeoutTokenId { get; set; }
 }

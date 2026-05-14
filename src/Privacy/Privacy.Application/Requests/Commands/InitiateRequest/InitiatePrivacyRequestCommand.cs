@@ -1,6 +1,6 @@
 using FluentValidation;
 using Haworks.Privacy.Application.Common.Interfaces;
-using Haworks.Privacy.Application.Requests.Sagas;
+using Haworks.Contracts.Privacy;
 using Haworks.Privacy.Domain.Aggregates;
 using Haworks.Privacy.Domain.Enums;
 using MassTransit;

@@ -9,6 +9,7 @@ public sealed record RefundRequestedEvent : DomainEvent
     public required string Currency { get; init; }
     public string? Reason { get; init; }
     public string? RequestedBy { get; init; }
+    public string? Provider { get; init; }
 }
 
 public sealed record ProviderRefundInitiationRequestedEvent : DomainEvent

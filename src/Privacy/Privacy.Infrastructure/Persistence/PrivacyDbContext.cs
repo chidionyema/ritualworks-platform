@@ -39,6 +39,10 @@ public class PrivacyDbContext : DbContext, IPrivacyDbContext
             entity.Property(e => e.CurrentState).HasMaxLength(64);
             entity.Property(e => e.UserId).IsRequired();
             entity.Property(e => e.Version).IsConcurrencyToken();
+            // PR-08: defense-in-depth concurrency (matching CheckoutSaga pattern)
+            entity.Property<uint>("xmin")
+                .HasColumnName("xmin").HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
         });
     }
 }

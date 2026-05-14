@@ -124,6 +124,12 @@ public class PaymentDbContext : DbContext, IPaymentDbContext
             entity.HasIndex(s => s.OrderId);
             entity.HasIndex(s => s.PaymentId);
             entity.HasIndex(s => s.ProviderRefundId);
+
+            // Concurrency protection (XC-01/RS-01)
+            entity.Property(s => s.Version).IsConcurrencyToken();
+            entity.Property<uint>("xmin")
+                .HasColumnName("xmin").HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
         });
 
         modelBuilder.Entity<SubscriptionSagaState>(entity =>
@@ -140,6 +146,12 @@ public class PaymentDbContext : DbContext, IPaymentDbContext
 
             entity.HasIndex(s => s.ProviderSubscriptionId);
             entity.HasIndex(s => s.UserId);
+
+            // Concurrency protection (XC-01/RS-02/SS-05)
+            entity.Property(s => s.Version).IsConcurrencyToken();
+            entity.Property<uint>("xmin")
+                .HasColumnName("xmin").HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
         });
 
         modelBuilder.AddInboxStateEntity();

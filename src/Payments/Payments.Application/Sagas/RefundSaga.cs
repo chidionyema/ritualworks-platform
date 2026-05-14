@@ -38,12 +38,13 @@ public sealed class RefundSaga : MassTransitStateMachine<RefundSagaState>
                     saga.Amount = msg.Amount;
                     saga.Currency = msg.Currency;
                     saga.Reason = msg.Reason ?? "";
+                    saga.Provider = msg.Provider ?? "Stripe";
                     saga.CreatedAt = DateTime.UtcNow;
                 })
                 .PublishAsync(ctx => ctx.Init<ProviderRefundInitiationRequestedEvent>(new ProviderRefundInitiationRequestedEvent
                 {
                     RefundId = ctx.Saga.CorrelationId,
-                    Provider = "Stripe", // Default for now
+                    Provider = ctx.Saga.Provider, // RS-04: use provider from event, not hardcoded
                     PaymentId = ctx.Saga.PaymentId,
                     Amount = ctx.Saga.Amount,
                     Currency = ctx.Saga.Currency
