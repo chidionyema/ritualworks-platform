@@ -2,6 +2,7 @@ using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BuildingBlocks.Idempotency;
 using Haworks.BuildingBlocks.Persistence;
+using Haworks.BuildingBlocks.Startup;
 using Haworks.BuildingBlocks.Vault;
 using Haworks.Payments.Api.Webhooks;
 using Haworks.Payments.Infrastructure;
@@ -50,6 +51,7 @@ if (builder.Configuration.GetValue("Vault:Enabled", false)
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddApplication();
 builder.Services.AddPostgresIdempotency<PaymentDbContext>();
+builder.Services.AddStartupTaskRunner();
 
 builder.Services.AddPlatformAuthentication(builder.Configuration);
 
@@ -77,16 +79,16 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 
 var app = builder.Build();
 
-// Auto-apply EF migrations at startup. payments-svc owns the 'payments'
-// schema in its own database. Skipped in Test env where the integration
-// fixture applies migrations explicitly.
 if (!app.Environment.IsEnvironment("Test"))
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider
-        .GetRequiredService<Haworks.Payments.Infrastructure.PaymentDbContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    await db.Database.MigrateWithRetryAsync(logger);
+    var startupRunner = app.Services.GetRequiredService<StartupTaskRunner>();
+    startupRunner.AddTask(async (sp, ct) =>
+    {
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Haworks.Payments.Infrastructure.PaymentDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        await db.Database.MigrateWithRetryAsync(logger, ct);
+    });
 }
 
 app.MapDefaultEndpoints();

@@ -2,6 +2,7 @@ using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BuildingBlocks.Idempotency;
 using Haworks.BuildingBlocks.Persistence;
+using Haworks.BuildingBlocks.Startup;
 using Haworks.BuildingBlocks.Vault;
 using Haworks.Notifications.Application;
 using Haworks.Notifications.Infrastructure;
@@ -40,6 +41,7 @@ if (builder.Configuration.GetValue("Vault:Enabled", false)
 builder.Services.AddNotificationsInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddApplication();
 builder.Services.AddPostgresIdempotency<NotificationsDbContext>();
+builder.Services.AddStartupTaskRunner();
 
 builder.Services.AddPlatformAuthentication(builder.Configuration);
 
@@ -71,11 +73,14 @@ var app = builder.Build();
 
 if (!app.Environment.IsEnvironment("Test"))
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider
-        .GetRequiredService<NotificationsDbContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    await db.Database.MigrateWithRetryAsync(logger);
+    var startupRunner = app.Services.GetRequiredService<StartupTaskRunner>();
+    startupRunner.AddTask(async (sp, ct) =>
+    {
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NotificationsDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        await db.Database.MigrateWithRetryAsync(logger, ct);
+    });
 }
 
 app.MapDefaultEndpoints();

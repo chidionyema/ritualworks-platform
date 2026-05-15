@@ -1,5 +1,6 @@
 using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
+using Haworks.BuildingBlocks.Startup;
 using Haworks.Webhooks.Api.Controllers;
 using Haworks.Webhooks.Application;
 using Haworks.Webhooks.Infrastructure;
@@ -21,6 +22,7 @@ builder.AddServiceDefaults();
 
 builder.Services.AddApplication();
 builder.Services.AddWebhooksInfrastructure(builder.Configuration, builder.Environment);
+builder.Services.AddStartupTaskRunner();
 
 // CDC via Kafka (Debezium) — enabled when ConnectionStrings:kafka is configured.
 // When Kafka is not available, CDC events flow through MassTransit/RabbitMQ
@@ -67,9 +69,13 @@ if (app.Environment.IsDevelopment())
 
 if (!app.Environment.IsEnvironment("Test"))
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<WebhooksDbContext>();
-    await db.Database.MigrateAsync();
+    var startupRunner = app.Services.GetRequiredService<StartupTaskRunner>();
+    startupRunner.AddTask(async (sp, ct) =>
+    {
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<WebhooksDbContext>();
+        await db.Database.MigrateAsync(ct);
+    });
 }
 
 app.UseHttpsRedirection();

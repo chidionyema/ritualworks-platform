@@ -2,6 +2,7 @@ using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BuildingBlocks.Idempotency;
 using Haworks.BuildingBlocks.Persistence;
+using Haworks.BuildingBlocks.Startup;
 using Haworks.CheckoutOrchestrator.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -13,6 +14,7 @@ builder.AddServiceDefaults();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddApplication(builder.Configuration);
 builder.Services.AddPostgresIdempotency<CheckoutDbContext>();
+builder.Services.AddStartupTaskRunner();
 
 builder.Services.AddPlatformAuthentication(builder.Configuration);
 
@@ -35,11 +37,14 @@ var app = builder.Build();
 
 if (!app.Environment.IsEnvironment("Test"))
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider
-        .GetRequiredService<Haworks.CheckoutOrchestrator.Infrastructure.CheckoutDbContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    await db.Database.MigrateWithRetryAsync(logger);
+    var startupRunner = app.Services.GetRequiredService<StartupTaskRunner>();
+    startupRunner.AddTask(async (sp, ct) =>
+    {
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Haworks.CheckoutOrchestrator.Infrastructure.CheckoutDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        await db.Database.MigrateWithRetryAsync(logger, ct);
+    });
 }
 
 app.MapDefaultEndpoints();

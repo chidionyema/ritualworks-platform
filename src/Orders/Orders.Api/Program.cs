@@ -2,6 +2,7 @@ using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BuildingBlocks.Idempotency;
 using Haworks.BuildingBlocks.Persistence;
+using Haworks.BuildingBlocks.Startup;
 using Haworks.Orders.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -15,6 +16,7 @@ builder.Services.AddHealthChecks()
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddApplication(builder.Configuration);
 builder.Services.AddPostgresIdempotency<OrderDbContext>();
+builder.Services.AddStartupTaskRunner();
 
 builder.Services.AddPlatformAuthentication(builder.Configuration);
 
@@ -32,16 +34,16 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 
 var app = builder.Build();
 
-// Auto-apply EF migrations at startup. orders-svc owns the 'orders' schema
-// in its own database. Skipped in Test env where the integration fixture
-// applies migrations explicitly.
 if (!app.Environment.IsEnvironment("Test"))
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider
-        .GetRequiredService<Haworks.Orders.Infrastructure.OrderDbContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    await db.Database.MigrateWithRetryAsync(logger);
+    var startupRunner = app.Services.GetRequiredService<StartupTaskRunner>();
+    startupRunner.AddTask(async (sp, ct) =>
+    {
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Haworks.Orders.Infrastructure.OrderDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        await db.Database.MigrateWithRetryAsync(logger, ct);
+    });
 }
 
 app.MapDefaultEndpoints();
