@@ -40,6 +40,8 @@ public sealed class TestAuthenticationHandler(
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, TestUserId),
+            new Claim("sub", TestUserId),
+            new Claim("email", "test@test.invalid"),
             new Claim(ClaimTypes.Name, TestUserId),
             new Claim(ClaimTypes.Role, "User"),
             new Claim(ClaimTypes.Role, "Admin"),

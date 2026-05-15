@@ -26,7 +26,7 @@ public class TestAuthMiddleware
         {
             var claims = new[]
             {
-                new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+                new Claim(ClaimTypes.NameIdentifier, "test-user-id"),
                 new Claim(ClaimTypes.Name, "test_auth_user"),
                 new Claim(ClaimTypes.Role, "ContentUploader"),
                 new Claim("permission", "upload_content"),
