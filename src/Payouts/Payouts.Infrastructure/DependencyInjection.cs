@@ -1,3 +1,4 @@
+using Haworks.BuildingBlocks.Messaging;
 using Haworks.Payouts.Application.Common.Interfaces;
 using Haworks.Payouts.Infrastructure.Gateways;
 using Haworks.Payouts.Infrastructure.Messaging.Consumers;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Hangfire;
 using Hangfire.PostgreSql;
+using System;
 
 namespace Haworks.Payouts.Infrastructure;
 
@@ -28,6 +30,7 @@ public static class DependencyInjection
         if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Test")
         {
             services.AddMassTransit(x => {
+                x.SetKebabCaseEndpointNameFormatter();
                 x.AddConsumer<PaymentCompletedConsumer>();
                 x.AddEntityFrameworkOutbox<PayoutsDbContext>(o =>
                 {
@@ -42,7 +45,7 @@ public static class DependencyInjection
                         h.Username(rabbitMqConfig["Username"] ?? throw new InvalidOperationException("RabbitMq:Username is required"));
                         h.Password(rabbitMqConfig["Password"] ?? throw new InvalidOperationException("RabbitMq:Password is required"));
                     });
-                    cfg.ReceiveEndpoint("payouts-payment-completed", e => e.ConfigureConsumer<PaymentCompletedConsumer>(context));
+                    cfg.ConfigureStandardRabbitMq(context);
                 });
             });
         }

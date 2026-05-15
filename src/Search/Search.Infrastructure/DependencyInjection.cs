@@ -1,3 +1,4 @@
+using Haworks.BuildingBlocks.Messaging;
 using Elastic.Clients.Elasticsearch;
 using Haworks.BuildingBlocks.Resilience;
 using Haworks.Search.Application.Catalog;
@@ -61,7 +62,7 @@ public static class DependencyInjection
                     var rabbit = configuration.GetConnectionString("rabbitmq")
                         ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is missing");
                     cfg.Host(new Uri(rabbit));
-                    cfg.ConfigureEndpoints(ctx);
+                    cfg.ConfigureStandardRabbitMq(ctx);
                 });
             });
         }

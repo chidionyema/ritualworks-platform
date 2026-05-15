@@ -89,7 +89,7 @@ public static class DependencyInjection
                     ?? throw new InvalidOperationException(
                         "ConnectionStrings:rabbitmq is missing. Aspire injects it via WithReference(rabbitmq).");
                 cfg.Host(new Uri(rabbitConn));
-                cfg.ConfigureEndpoints(context);
+                cfg.ConfigureStandardRabbitMq(context);
             });
         });
 

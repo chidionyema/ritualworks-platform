@@ -1,3 +1,4 @@
+using Haworks.BuildingBlocks.Messaging;
 using Haworks.Scheduler.Application.Common.Interfaces;
 using Haworks.Scheduler.Infrastructure.Messaging;
 using Haworks.Scheduler.Infrastructure.Persistence;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Hangfire;
 using Hangfire.PostgreSql;
+using System;
 
 namespace Haworks.Scheduler.Infrastructure;
 
@@ -26,6 +28,7 @@ public static class DependencyInjection
         {
             services.AddMassTransit(x =>
             {
+                x.SetKebabCaseEndpointNameFormatter();
                 x.AddEntityFrameworkOutbox<SchedulerDbContext>(o =>
                 {
                     o.UsePostgres();
@@ -40,6 +43,7 @@ public static class DependencyInjection
                         h.Username(rabbitMqConfig["Username"] ?? throw new InvalidOperationException("RabbitMq:Username is required"));
                         h.Password(rabbitMqConfig["Password"] ?? throw new InvalidOperationException("RabbitMq:Password is required"));
                     });
+                    cfg.ConfigureStandardRabbitMq(context);
                 });
             });
         }

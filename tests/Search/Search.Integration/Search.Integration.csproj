@@ -17,7 +17,7 @@
     <PackageReference Include="FluentAssertions" Version="7.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.0.0" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.0.0" />
-    <PackageReference Include="MassTransit.TestFramework" Version="8.2.5" />
+    <PackageReference Include="MassTransit.TestFramework" Version="8.3.4" />
     <PackageReference Include="Testcontainers" Version="4.0.0" />
     <PackageReference Include="Elastic.Clients.Elasticsearch" Version="8.17.0" />
     <PackageReference Include="WireMock.Net" Version="1.6.7" />

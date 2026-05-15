@@ -1,5 +1,7 @@
+using Haworks.BuildingBlocks.Messaging;
 using Haworks.Privacy.Application.Common.Interfaces;
 using Haworks.Privacy.Application.Requests.Sagas;
+using Haworks.Privacy.Infrastructure.Messaging;
 using Haworks.Privacy.Infrastructure.Persistence;
 using Haworks.Privacy.Infrastructure.Workers;
 using MassTransit;
@@ -41,7 +43,7 @@ public static class DependencyInjection
             x.SetKebabCaseEndpointNameFormatter();
             x.AddDelayedMessageScheduler();
 
-            x.AddSagaStateMachine<PrivacyRequestStateMachine, PrivacyRequestState>()
+            x.AddSagaStateMachine<PrivacyRequestStateMachine, PrivacyRequestState, PrivacyRequestSagaDefinition>()
                 .EntityFrameworkRepository(r =>
                 {
                     r.ExistingDbContext<PrivacyDbContext>();
@@ -62,7 +64,7 @@ public static class DependencyInjection
 
                 cfg.Host(new Uri(rabbitConn));
                 cfg.UseDelayedMessageScheduler();
-                cfg.ConfigureEndpoints(context);
+                cfg.ConfigureStandardRabbitMq(context);
             });
         });
 

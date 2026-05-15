@@ -1,3 +1,4 @@
+using Haworks.BuildingBlocks.Messaging;
 using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BuildingBlocks.Startup;
@@ -46,7 +47,7 @@ builder.Services.AddMassTransit(x =>
     x.UsingRabbitMq((context, cfg) =>
     {
         cfg.Host(builder.Configuration.GetConnectionString("rabbitmq"));
-        cfg.ConfigureEndpoints(context);
+        cfg.ConfigureStandardRabbitMq(context);
     });
 });
 

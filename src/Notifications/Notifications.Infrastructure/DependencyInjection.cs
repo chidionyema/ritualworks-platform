@@ -70,7 +70,7 @@ public static partial class DependencyInjection
                         ?? throw new InvalidOperationException("RabbitMQ connection string missing");
 
                     cfg.Host(new Uri(rabbitConn));
-                    cfg.ConfigureEndpoints(context);
+                    cfg.ConfigureStandardRabbitMq(context);
                 });
             });
         }

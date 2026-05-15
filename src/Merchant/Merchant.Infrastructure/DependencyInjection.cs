@@ -1,5 +1,6 @@
 using Haworks.Merchant.Application.Common.Interfaces;
 using Haworks.Merchant.Infrastructure.Persistence;
+using Haworks.BuildingBlocks.Messaging;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -38,7 +39,7 @@ public static class DependencyInjection
                         h.Password(rabbitMqConfig["Password"] ?? throw new InvalidOperationException("RabbitMq:Password is required"));
                     });
 
-                    cfg.ConfigureEndpoints(context);
+                    cfg.ConfigureStandardRabbitMq(context);
                 });
             });
         }

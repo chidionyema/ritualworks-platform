@@ -204,7 +204,7 @@ public static class DependencyInjection
                 cfg.Host(new Uri(rabbitConn));
                 cfg.UseDelayedMessageScheduler();
                 cfg.UsePublishFilter(typeof(RelayPauseFilter<>), context);
-                cfg.ConfigureEndpoints(context);
+                cfg.ConfigureStandardRabbitMq(context);
             });
         });
 

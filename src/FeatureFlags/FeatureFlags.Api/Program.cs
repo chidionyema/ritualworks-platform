@@ -1,3 +1,4 @@
+using Haworks.BuildingBlocks.Messaging;
 using Haworks.FeatureFlags.Api.Application;
 using Haworks.FeatureFlags.Api.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -36,7 +37,7 @@ builder.Services.AddMassTransit(mt =>
 
     mt.UsingInMemory((context, cfg) =>
     {
-        cfg.ConfigureEndpoints(context);
+        cfg.ConfigureStandardBus(context);
     });
 });
 
