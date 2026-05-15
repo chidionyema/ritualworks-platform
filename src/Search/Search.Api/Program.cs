@@ -15,8 +15,11 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 builder.AddServiceDefaults();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 
-// Kafka Consumer for Debezium CDC — search index updates
-if (!builder.Environment.IsEnvironment("Test"))
+// CDC via Kafka (Debezium) — enabled when ConnectionStrings:kafka is configured.
+// When Kafka is not available, CDC events flow through MassTransit/RabbitMQ
+// via ProductCacheInvalidatedEvent and CategoryUpdatedEvent published by Catalog.
+var kafkaConn = builder.Configuration.GetConnectionString("kafka");
+if (!builder.Environment.IsEnvironment("Test") && !string.IsNullOrEmpty(kafkaConn))
 {
     builder.AddKafkaConsumer<string, string>("kafka", consumerBuilder =>
     {
