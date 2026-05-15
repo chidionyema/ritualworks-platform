@@ -106,8 +106,21 @@ public sealed class NotificationRequestConsumer(
             // variables once the aggregate carries them.
             var variables = new Dictionary<string, object>();
 
-            renderedSubject = await templateRenderer.RenderAsync(template.SubjectTemplate, variables);
-            renderedBody = await templateRenderer.RenderAsync(template.BodyTemplate, variables);
+            if (template is not null)
+            {
+                renderedSubject = await templateRenderer.RenderAsync(template.SubjectTemplate, variables);
+                renderedBody = await templateRenderer.RenderAsync(template.BodyTemplate, variables);
+            }
+            else
+            {
+                // No active template row for this templateId/locale/channel.
+                // Fall through with the persisted Subject/Body so the dispatch
+                // path remains exercisable (same intent as the NotImplementedException
+                // catch below).
+                logger.LogWarning(
+                    "No active template found for templateId={TemplateId}, channel={Channel}; dispatching {NotificationId} with persisted body",
+                    notification.TemplateId, notification.Channel, notification.Id);
+            }
         }
         catch (NotImplementedException)
         {

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Confluent.Kafka;
+using Confluent.Kafka.Admin;
 using Elastic.Clients.Elasticsearch;
 using FluentAssertions;
 using Haworks.BuildingBlocks.Testing.Containers;
@@ -40,7 +41,37 @@ public sealed class CdcSearchIndexWorkerTests : IAsyncLifetime
         _esClient = _scope.ServiceProvider.GetRequiredService<ElasticsearchClient>();
         _esOptions = _scope.ServiceProvider.GetRequiredService<IOptions<ElasticsearchOptions>>().Value;
         _bootstrapServers = await SharedTestKafka.GetBootstrapAddressAsync();
+        await EnsureKafkaTopicsAsync(_bootstrapServers);
         await _index.EnsureSettingsAsync();
+    }
+
+    private static async Task EnsureKafkaTopicsAsync(string bootstrapServers)
+    {
+        var adminConfig = new AdminClientConfig { BootstrapServers = bootstrapServers };
+        using var admin = new AdminClientBuilder(adminConfig).Build();
+
+        var topics = new[]
+        {
+            "db.catalog.public.products",
+            "db.catalog.public.categories",
+        };
+
+        var specs = topics.Select(t => new TopicSpecification
+        {
+            Name = t,
+            NumPartitions = 1,
+            ReplicationFactor = 1,
+        }).ToList();
+
+        try
+        {
+            await admin.CreateTopicsAsync(specs);
+        }
+        catch (CreateTopicsException ex)
+            when (ex.Results.All(r => r.Error.Code == ErrorCode.TopicAlreadyExists))
+        {
+            // Topics already exist — nothing to do.
+        }
     }
 
     public Task DisposeAsync()
