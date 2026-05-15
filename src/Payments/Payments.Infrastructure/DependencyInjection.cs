@@ -55,6 +55,7 @@ public static class DependencyInjection
             {
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "payments");
             });
+            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
 
             // Wire dynamic Postgres credential rotation via Vault. Role name
             // matches infra/vault/database/roles.json + the per-service

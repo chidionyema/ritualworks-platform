@@ -20,10 +20,13 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("webhooks");
 
         services.AddDbContext<WebhooksDbContext>(options =>
+        {
             options.UseNpgsql(connectionString, npgsqlOptions =>
             {
                 npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "webhooks");
-            }));
+            });
+            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        });
 
         services.AddScoped<IWebhooksDbContext>(sp => sp.GetRequiredService<WebhooksDbContext>());
 

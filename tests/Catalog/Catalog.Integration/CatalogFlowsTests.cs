@@ -70,7 +70,7 @@ public sealed class CatalogFlowsTests : IAsyncLifetime
     [Fact]
     public async Task Get_missing_product_returns_404()
     {
-        var resp = await _client.GetAsync($"/api/products/{Guid.Empty}");
+        var resp = await _client.GetAsync($"/api/products/{Guid.NewGuid()}");
         resp.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 

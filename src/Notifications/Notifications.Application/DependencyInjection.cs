@@ -18,6 +18,7 @@ public static partial class DependencyInjection
         });
 
         services.AddValidatorsFromAssembly(assembly);
+        services.AddScoped<Common.Idempotency.IIdempotencyKeyGenerator, Common.Idempotency.IdempotencyKeyGenerator>();
 
         return services;
     }

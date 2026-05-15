@@ -19,6 +19,8 @@ public static class DependencyInjection
         services.AddDbContext<PayoutsDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<IPayoutsDbContext>(provider => provider.GetRequiredService<PayoutsDbContext>());
         services.AddScoped<IPayoutGateway, StripePayoutGateway>();
+        services.AddScoped<Haworks.Payouts.Application.Ledger.Services.ILedgerService, Haworks.Payouts.Application.Ledger.Services.LedgerService>();
+        services.AddScoped<Haworks.Payouts.Application.Disbursements.Services.IDisbursementService, Haworks.Payouts.Application.Disbursements.Services.DisbursementService>();
         if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Test")
         {
             services.AddMassTransit(x => {
