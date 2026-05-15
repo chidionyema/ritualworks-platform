@@ -69,10 +69,12 @@ public static class JwksAuthenticationExtensions
                 var issuer = jwksSection["Issuer"] ?? throw new InvalidOperationException("JwksOptions:Issuer required");
                 var audience = jwksSection["Audience"] ?? throw new InvalidOperationException("JwksOptions:Audience required");
 
+                // Fetch JWKS keys at startup
+                using var httpClient = new HttpClient();
+                var jwksJson = httpClient.GetStringAsync(jwksUri).GetAwaiter().GetResult();
+                var jwks = new JsonWebKeySet(jwksJson);
+
                 bearer.MapInboundClaims = false;
-                bearer.Authority = issuer;
-                bearer.Audience = audience;
-                bearer.RequireHttpsMetadata = !jwksUri.StartsWith("http://localhost", StringComparison.Ordinal);
                 bearer.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidIssuer = issuer,
@@ -82,8 +84,8 @@ public static class JwksAuthenticationExtensions
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
                     ClockSkew = TimeSpan.FromSeconds(30),
+                    IssuerSigningKeys = jwks.GetSigningKeys(),
                 };
-                bearer.MetadataAddress = jwksUri;
             });
 
         return services;
