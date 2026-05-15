@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Haworks.BuildingBlocks.Authentication;
@@ -44,10 +45,11 @@ public static class JwksAuthenticationExtensions
             // OpenIdConnectConfigurationRetriever knows how to parse a
             // discovery document, but it also handles raw JWKS responses
             // (the keys are exposed via the SigningKeys collection).
+            var env = sp.GetRequiredService<IHostEnvironment>();
             var manager = new ConfigurationManager<OpenIdConnectConfiguration>(
                 opts.JwksUri,
                 new OpenIdConnectConfigurationRetriever(),
-                new HttpDocumentRetriever { RequireHttps = false })
+                new HttpDocumentRetriever { RequireHttps = !env.IsDevelopment() })
             {
                 AutomaticRefreshInterval = opts.AutomaticRefresh
                     ? opts.RefreshInterval
@@ -79,7 +81,7 @@ public static class JwksAuthenticationExtensions
                     ValidateAudience = true,
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
-                    ClockSkew = TimeSpan.Zero,
+                    ClockSkew = TimeSpan.FromSeconds(30),
                     IssuerSigningKeyResolver = (token, securityToken, kid, parameters) =>
                         ResolveKeys(manager, kid, logger),
                 };
