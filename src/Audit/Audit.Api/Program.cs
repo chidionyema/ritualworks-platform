@@ -5,6 +5,7 @@ using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,7 +15,10 @@ builder.AddServiceDefaults();
 // Audit's Postgres — the connection string lands here from Aspire (audit DB)
 // or compose (ConnectionStrings__audit env var).
 builder.Services.AddDbContext<AuditDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("audit")));
+{
+    options.UseNpgsql(builder.Configuration.GetConnectionString("audit"));
+    options.ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
+});
 
 builder.Services.AddAuditApplication();
 

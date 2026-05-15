@@ -74,7 +74,7 @@ public sealed class OrderFlowsTests(OrdersWebAppFactory factory) : IAsyncLifetim
     [Fact]
     public async Task GET_missing_order_returns_404()
     {
-        var resp = await _client.GetAsync($"/api/orders/{Guid.Empty}");
+        var resp = await _client.GetAsync($"/api/orders/{Guid.NewGuid()}");
         resp.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
