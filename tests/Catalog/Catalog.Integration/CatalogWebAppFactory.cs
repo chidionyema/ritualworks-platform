@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.TestHost;
 using MassTransit;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -69,7 +70,7 @@ public sealed class CatalogWebAppFactory : WebApplicationFactory<Program>, IAsyn
             });
         });
 
-        builder.ConfigureServices(services =>
+        builder.ConfigureTestServices(services =>
         {
             // Production AddMassTransit + AddDomainEventPublisher were skipped
             // by AddInfrastructure when ASPNETCORE_ENVIRONMENT=Test (see

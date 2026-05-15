@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.TestHost;
 using MassTransit;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -49,7 +50,7 @@ public sealed class BffWebFactory : WebApplicationFactory<Program>, IAsyncLifeti
             });
         });
 
-        builder.ConfigureServices(services =>
+        builder.ConfigureTestServices(services =>
         {
             services.AddAuthentication(TestAuthenticationHandler.SchemeName).AddTestAuth();
 

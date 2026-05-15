@@ -1,10 +1,12 @@
 using Haworks.RulesEngine.Api.Application;
 using Haworks.BuildingBlocks.Common;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.RulesEngine.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class RulesController : ControllerBase

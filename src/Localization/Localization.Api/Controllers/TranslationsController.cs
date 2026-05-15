@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Haworks.BuildingBlocks.Common;
 using Haworks.Localization.Api.Application;
 using MediatR;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Haworks.Localization.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class TranslationsController : ControllerBase
 {

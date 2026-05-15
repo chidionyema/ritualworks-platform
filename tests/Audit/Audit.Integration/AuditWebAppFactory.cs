@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -71,7 +72,7 @@ public class AuditWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
         });
 
         // Add stubs for L1.A if they are not registered yet
-        builder.ConfigureServices(services =>
+        builder.ConfigureTestServices(services =>
         {
             services.AddSingleton(typeof(IAuditExtractor<>), typeof(TestStubExtractor<>));
             services.AddSingleton<ISecretRedactor, TestStubRedactor>();

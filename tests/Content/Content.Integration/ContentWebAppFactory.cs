@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.TestHost;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.AspNetCore.Hosting;
@@ -116,7 +117,7 @@ public sealed class ContentWebAppFactory : WebApplicationFactory<Program>, IAsyn
             });
         });
 
-        builder.ConfigureServices(services =>
+        builder.ConfigureTestServices(services =>
         {
             // [Authorize]-decorated endpoints need an authentication scheme.
             // Stamp the shared no-op test scheme as default so the controller's

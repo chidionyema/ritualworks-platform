@@ -8,8 +8,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-var connectionString = builder.Configuration.GetConnectionString("featureflags") 
-    ?? "Host=localhost;Database=featureflags;Username=postgres;Password=postgres";
+var connectionString = builder.Configuration.GetConnectionString("featureflags")
+    ?? "Host=localhost;Database=featureflags;Username=postgres;Password=";
 
 builder.Services.AddDbContext<FeatureFlagsDbContext>(options =>
 {
@@ -40,6 +40,7 @@ builder.Services.AddMassTransit(mt =>
     });
 });
 
+builder.Services.AddHealthChecks().AddDbHealthCheck<FeatureFlagsDbContext>();
 builder.Services.AddApplication();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
