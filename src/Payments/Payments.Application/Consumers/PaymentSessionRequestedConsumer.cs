@@ -132,6 +132,8 @@ public sealed class PaymentSessionRequestedConsumer(
                 AttemptNumber = 1,
                 IsFinalAttempt = true
             }, context.CancellationToken);
+
+            throw; // let MassTransit retry
         }
     }
 
