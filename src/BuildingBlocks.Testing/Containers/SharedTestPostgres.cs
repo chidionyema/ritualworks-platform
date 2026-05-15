@@ -49,8 +49,9 @@ public static class SharedTestPostgres
         var container = await GetAsync();
         var adminConn = container.GetConnectionString();
 
-        // Clean up orphaned databases from previous test runs (keeps last 5 per service)
-        await CleanupOrphanedDatabasesAsync(adminConn, serviceName);
+        // Clean up orphaned databases from previous test runs (keeps last 3 per service).
+        // Runs BEFORE creating the new DB to avoid killing active connections.
+        try { await CleanupOrphanedDatabasesAsync(adminConn, serviceName); } catch { /* best effort */ }
 
         var dbName = $"{serviceName}_{Guid.NewGuid():N}".ToLowerInvariant();
         await using (var conn = new NpgsqlConnection(adminConn))
@@ -99,8 +100,8 @@ public static class SharedTestPostgres
             while (await reader.ReadAsync()) databases.Add(reader.GetString(0));
             await reader.CloseAsync();
 
-            // Keep only the last 2, drop the rest
-            var toDrop = databases.SkipLast(2).ToList();
+            // Keep last 3, drop the rest
+            var toDrop = databases.SkipLast(3).ToList();
             foreach (var db in toDrop)
             {
                 try

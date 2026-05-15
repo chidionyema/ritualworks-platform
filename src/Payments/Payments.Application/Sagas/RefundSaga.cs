@@ -16,7 +16,6 @@ public sealed class RefundSaga : MassTransitStateMachine<RefundSagaState>
             instance => instance.RefundTimeoutTokenId,
             s =>
             {
-                s.Delay = TimeSpan.FromHours(24);
                 s.Received = r => r.CorrelateById(ctx => ctx.Message.RefundId);
             });
 
@@ -53,7 +52,7 @@ public sealed class RefundSaga : MassTransitStateMachine<RefundSagaState>
                 .Schedule(RefundTimeoutSchedule, ctx => ctx.Init<RefundTimedOutEvent>(new RefundTimedOutEvent
                 {
                     RefundId = ctx.Saga.CorrelationId
-                }))
+                }), _ => TimeSpan.FromHours(24))
                 .TransitionTo(Requested));
 
         During(Requested,
@@ -145,7 +144,7 @@ public sealed class RefundSaga : MassTransitStateMachine<RefundSagaState>
                 .Schedule(RefundTimeoutSchedule, ctx => ctx.Init<RefundTimedOutEvent>(new RefundTimedOutEvent
                 {
                     RefundId = ctx.Saga.CorrelationId
-                }))
+                }), _ => TimeSpan.FromHours(24))
                 .TransitionTo(AwaitingProviderConfirmation));
 
         // Idempotency: late-arriving duplicate events on a finalized saga

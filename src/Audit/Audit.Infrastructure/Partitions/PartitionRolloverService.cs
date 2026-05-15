@@ -59,17 +59,17 @@ public class PartitionRolloverService : BackgroundService
         var toDate = new DateTime(year, month, 1).AddMonths(1).ToString("yyyy-MM-dd");
 
         var sql = $@"
-            CREATE TABLE IF NOT EXISTS {partitionName} PARTITION OF audit_events
+            CREATE TABLE IF NOT EXISTS audit.{partitionName} PARTITION OF audit.audit_events
             FOR VALUES FROM ('{fromDate}') TO ('{toDate}');
             
             CREATE INDEX IF NOT EXISTS {partitionName}_entity_idx 
-            ON {partitionName} (entity_type, entity_id, occurred_at DESC);
+            ON audit.{partitionName} (entity_type, entity_id, occurred_at DESC);
             
             CREATE INDEX IF NOT EXISTS {partitionName}_event_type_idx 
-            ON {partitionName} (event_type, occurred_at DESC);
+            ON audit.{partitionName} (event_type, occurred_at DESC);
 
             CREATE UNIQUE INDEX IF NOT EXISTS audit_events_msg_id_uniq_{year}_{month:D2}
-            ON {partitionName} ((metadata->>'message_id'))
+            ON audit.{partitionName} ((metadata->>'message_id'))
             WHERE metadata->>'message_id' IS NOT NULL;
         ";
 

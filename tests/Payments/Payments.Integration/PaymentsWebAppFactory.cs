@@ -60,6 +60,14 @@ public class PaymentsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
         var db = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
         await db.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS payments;");
         await db.Database.EnsureCreatedAsync();
+        // Drop outbox/inbox tables — they cause MassTransit's saga PublishAsync to
+        // route through the EF outbox pipeline which faults on ctx.Init<T>() in
+        // the in-memory test harness. The saga tests publish directly via IBus.
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("DROP TABLE IF EXISTS payments.\"InboxState\", payments.\"OutboxMessage\", payments.\"OutboxState\" CASCADE");
+        }
+        catch { /* tables may not exist */ }
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -93,10 +101,9 @@ public class PaymentsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
 
             services.AddMassTransitTestHarness(mt =>
             {
-                // The RefundSaga calls .Schedule() on entry to Requested state.
-                // Without a scheduler the saga faults and never transitions, causing
-                // sagaHarness.Consumed.Any<RefundRequestedEvent>() to return false.
-                mt.AddDelayedMessageScheduler();
+                // No explicit scheduler needed — the Schedule() delay is passed inline
+                // in the saga binder (not via s.Delay on the configuration), so MT
+                // uses the in-memory transport's built-in scheduler.
 
                 // Only register consumers that don't interfere with manual saga event flow.
                 // ProviderRefundInitiationRequestedConsumer and SubscriptionRenewalRequestedConsumer
