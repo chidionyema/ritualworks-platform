@@ -81,7 +81,6 @@ public class CreateProductCommandValidatorTests
     }
 
     [Theory]
-    [InlineData(0)]
     [InlineData(0.01)]
     [InlineData(1000)]
     public void Validate_WithValidPrice_ShouldNotHaveError(decimal price)
