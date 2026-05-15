@@ -1,0 +1,17 @@
+{
+  "solution": {
+    "path": "../RitualworksPlatform.sln",
+    "projects": [
+      "src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj",
+      "src/BuildingBlocks/Haworks.BuildingBlocks.csproj",
+      "src/Content/Content.Api/Content.Api.csproj",
+      "src/Content/Content.Application/Content.Application.csproj",
+      "src/Content/Content.Domain/Content.Domain.csproj",
+      "src/Content/Content.Infrastructure/Content.Infrastructure.csproj",
+      "src/Contracts/Haworks.Contracts.csproj",
+      "tests/Content/Content.Integration/Content.Integration.csproj",
+      "tests/Content/Content.Unit/Content.Unit.csproj",
+      "tests/Platform.ArchitecturalGuards/Platform.ArchitecturalGuards.csproj"
+    ]
+  }
+}

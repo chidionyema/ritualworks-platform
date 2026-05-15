@@ -1,0 +1,18 @@
+{
+  "solution": {
+    "path": "../RitualworksPlatform.sln",
+    "projects": [
+      "src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj",
+      "src/BuildingBlocks/Haworks.BuildingBlocks.csproj",
+      "src/Contracts/Haworks.Contracts.csproj",
+      "src/Privacy/Privacy.Api/Privacy.Api.csproj",
+      "src/Privacy/Privacy.Application/Privacy.Application.csproj",
+      "src/Privacy/Privacy.Domain/Privacy.Domain.csproj",
+      "src/Privacy/Privacy.Infrastructure/Privacy.Infrastructure.csproj",
+      "tests/Platform.ArchitecturalGuards/Platform.ArchitecturalGuards.csproj",
+      "tests/Privacy.Architecture/Privacy.Architecture.csproj",
+      "tests/Privacy.Integration/Privacy.Integration.csproj",
+      "tests/Privacy.Unit/Privacy.Unit.csproj"
+    ]
+  }
+}

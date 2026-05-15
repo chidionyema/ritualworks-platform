@@ -1,0 +1,18 @@
+{
+  "solution": {
+    "path": "../RitualworksPlatform.sln",
+    "projects": [
+      "src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj",
+      "src/BuildingBlocks/Haworks.BuildingBlocks.csproj",
+      "src/Contracts/Haworks.Contracts.csproj",
+      "src/Scheduler/Scheduler.Api/Scheduler.Api.csproj",
+      "src/Scheduler/Scheduler.Application/Scheduler.Application.csproj",
+      "src/Scheduler/Scheduler.Domain/Scheduler.Domain.csproj",
+      "src/Scheduler/Scheduler.Infrastructure/Scheduler.Infrastructure.csproj",
+      "tests/Platform.ArchitecturalGuards/Platform.ArchitecturalGuards.csproj",
+      "tests/Scheduler.Architecture/Scheduler.Architecture.csproj",
+      "tests/Scheduler.Integration/Scheduler.Integration.csproj",
+      "tests/Scheduler.Unit/Scheduler.Unit.csproj"
+    ]
+  }
+}

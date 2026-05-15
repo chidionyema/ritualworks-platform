@@ -1,0 +1,18 @@
+{
+  "solution": {
+    "path": "../RitualworksPlatform.sln",
+    "projects": [
+      "src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj",
+      "src/BuildingBlocks/Haworks.BuildingBlocks.csproj",
+      "src/Contracts/Haworks.Contracts.csproj",
+      "src/Payouts/Payouts.Api/Payouts.Api.csproj",
+      "src/Payouts/Payouts.Application/Payouts.Application.csproj",
+      "src/Payouts/Payouts.Domain/Payouts.Domain.csproj",
+      "src/Payouts/Payouts.Infrastructure/Payouts.Infrastructure.csproj",
+      "tests/Payouts.Architecture/Payouts.Architecture.csproj",
+      "tests/Payouts.Integration/Payouts.Integration.csproj",
+      "tests/Payouts.Unit/Payouts.Unit.csproj",
+      "tests/Platform.ArchitecturalGuards/Platform.ArchitecturalGuards.csproj"
+    ]
+  }
+}

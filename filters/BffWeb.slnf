@@ -1,0 +1,17 @@
+{
+  "solution": {
+    "path": "../RitualworksPlatform.sln",
+    "projects": [
+      "src/BffWeb/BffWeb.Api/BffWeb.Api.csproj",
+      "src/BffWeb/BffWeb.Application/BffWeb.Application.csproj",
+      "src/BffWeb/BffWeb.Domain/BffWeb.Domain.csproj",
+      "src/BffWeb/BffWeb.Infrastructure/BffWeb.Infrastructure.csproj",
+      "src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj",
+      "src/BuildingBlocks/Haworks.BuildingBlocks.csproj",
+      "src/Contracts/Haworks.Contracts.csproj",
+      "tests/BffWeb/BffWeb.Architecture/BffWeb.Architecture.csproj",
+      "tests/BffWeb/BffWeb.Integration/BffWeb.Integration.csproj",
+      "tests/Platform.ArchitecturalGuards/Platform.ArchitecturalGuards.csproj"
+    ]
+  }
+}
