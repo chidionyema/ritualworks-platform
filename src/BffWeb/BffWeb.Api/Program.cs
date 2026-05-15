@@ -22,8 +22,11 @@ builder.Services.AddTransient<Haworks.BuildingBlocks.Authentication.UserIdentity
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddApplication(builder.Configuration);
 
-// Kafka Consumer for Debezium CDC — BFF cache invalidation
-if (!builder.Environment.IsEnvironment("Test"))
+// CDC via Kafka (Debezium) — enabled when ConnectionStrings:kafka is configured.
+// When Kafka is not available, CDC events flow through MassTransit/RabbitMQ
+// via ProductCacheInvalidatedEvent and CategoryUpdatedEvent published by Catalog.
+var kafkaConn = builder.Configuration.GetConnectionString("kafka");
+if (!builder.Environment.IsEnvironment("Test") && !string.IsNullOrEmpty(kafkaConn))
 {
     builder.AddKafkaConsumer<string, string>("kafka", consumerBuilder =>
     {
