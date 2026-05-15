@@ -26,9 +26,7 @@ public class PayoutsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifeti
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<PayoutsDbContext>();
         await db.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS payouts;");
-        var creator = db.Database.GetService<IRelationalDatabaseCreator>();
-        try { await creator.CreateTablesAsync(); }
-        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P07") { /* tables already exist */ }
+        await db.Database.EnsureCreatedAsync();
     }
     protected override void ConfigureWebHost(IWebHostBuilder builder) { builder.UseEnvironment("Test"); builder.ConfigureAppConfiguration((_, config) => { config.AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:payouts"] = ConnString, ["Stripe:SecretKey"] = "sk_test_dummy" }); }); builder.ConfigureTestServices(services => { var mockGateway = new Mock<IPayoutGateway>(); mockGateway.Setup(x => x.InitiatePayoutAsync(It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync(("tr_test", Haworks.Payouts.Domain.Enums.PayoutStatus.Succeeded)); services.AddSingleton(mockGateway.Object); services.AddMassTransitTestHarness(); services.AddAuthentication(TestAuthenticationHandler.SchemeName).AddTestAuth(); }); }
 }
