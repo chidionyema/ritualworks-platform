@@ -39,11 +39,16 @@ public class AuditWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
-        await db.Database.EnsureDeletedAsync();
         await db.Database.OpenConnectionAsync();
-        try { await db.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS audit;"); }
-        finally { await db.Database.CloseConnectionAsync(); }
-        await db.Database.EnsureCreatedAsync();
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS audit;");
+            await db.Database.EnsureCreatedAsync();
+        }
+        finally
+        {
+            await db.Database.CloseConnectionAsync();
+        }
     }
 
     async Task IAsyncLifetime.DisposeAsync()
