@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using Haworks.BuildingBlocks.Common;
 using Haworks.RulesEngine.Api.Domain;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace Haworks.RulesEngine.Api.Application;
 
@@ -18,25 +20,34 @@ public class EvaluateRuleQueryHandler : IRequestHandler<EvaluateRuleQuery, Resul
 
     public async Task<Result<bool>> Handle(EvaluateRuleQuery request, CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
+
         // Strict timeout implementation
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(5));
 
         try
         {
-            _logger.LogInformation("Evaluating rule {RuleId}", request.RuleId);
-            
             // In a real app, we'd fetch the rule from a repository
             var expression = "input.age > 18"; 
 
             var result = await _rulesEvaluator.EvaluateAsync(expression, request.Inputs, cts.Token);
 
+            sw.Stop();
+
             if (result.IsSuccess)
             {
-                _logger.LogInformation("Rule {RuleId} evaluated to {Result}", request.RuleId, result.Value);
-                // Mock TraceLog to Audit
-                _logger.LogInformation("TRACE: Rule={RuleId}, Result={Result}, Inputs={Inputs}", 
-                    request.RuleId, result.Value, string.Join(",", request.Inputs.Select(kv => $"{kv.Key}={kv.Value}")));
+                // Staff-level hardening: Structured Traceability. 
+                // This payload can be serialized and pushed to the Analytics ingestion pipeline.
+                var trace = new RuleTrace(
+                    request.RuleId,
+                    result.Value,
+                    request.Inputs,
+                    sw.Elapsed,
+                    DateTime.UtcNow
+                );
+
+                _logger.LogInformation("RuleTrace: {Trace}", JsonSerializer.Serialize(trace));
             }
 
             return result;

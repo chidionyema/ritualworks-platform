@@ -23,7 +23,6 @@ builder.Services.AddHostedService<KafkaFlushingService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
 
 builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 {
