@@ -72,7 +72,12 @@ internal sealed class SendNotificationCommandHandler(
                     _ => NotificationStatus.Suppressed
                 };
 
-                var suppressed = HydrateNotification(request, idempotencyKey, status, preferenceResult.ToString());
+                var suppressed = CreateNotification(request, idempotencyKey);
+                if (status == NotificationStatus.Suppressed)
+                    suppressed.MarkSuppressed(preferenceResult.ToString());
+                else
+                    suppressed.MarkFailed(preferenceResult.ToString());
+
                 repository.Add(suppressed);
                 await repository.SaveChangesAsync(ct).ConfigureAwait(false);
 
@@ -91,7 +96,8 @@ internal sealed class SendNotificationCommandHandler(
 
         if (isSuppressed)
         {
-            var suppressed = HydrateNotification(request, idempotencyKey, NotificationStatus.Suppressed, "Recipient on suppression list");
+            var suppressed = CreateNotification(request, idempotencyKey);
+            suppressed.MarkSuppressed("Recipient on suppression list");
             repository.Add(suppressed);
             await repository.SaveChangesAsync(ct).ConfigureAwait(false);
 
@@ -103,7 +109,7 @@ internal sealed class SendNotificationCommandHandler(
 
         // Happy path: create with status Created. Publish event BEFORE SaveChanges
         // so the OutboxMessage commits in the same EF txn as the Notification INSERT.
-        var notification = HydrateNotification(request, idempotencyKey, NotificationStatus.Created, errorMessage: null);
+        var notification = CreateNotification(request, idempotencyKey);
         repository.Add(notification);
 
         await eventPublisher.PublishAsync(new NotificationCreatedEvent
@@ -125,75 +131,15 @@ internal sealed class SendNotificationCommandHandler(
         return Result.Success(notification.Id);
     }
 
-    /// <summary>
-    /// Wraps <see cref="Notification.Create"/>. L1.A may still be filling that
-    /// factory body; if it throws <see cref="NotImplementedException"/> we
-    /// fall back to reflection-based hydration so the L1.G surface compiles
-    /// and runs end-to-end today. The TODO disappears when L1.A lands a real
-    /// factory that accepts the command parameters.
-    /// </summary>
-    private static Notification HydrateNotification(
-        SendNotificationCommand request,
-        string idempotencyKey,
-        NotificationStatus status,
-        string? errorMessage)
+    private Notification CreateNotification(SendNotificationCommand request, string idempotencyKey)
     {
-        Notification notification;
-        try
-        {
-            // Preferred path once L1.A lands a real factory.
-            // L3 unblock: L1.A's Create now requires args; the existing
-            // reflection fallback below remains correct, so explicitly
-            // trigger it until L1.G is updated to call the new factory.
-            throw new NotImplementedException();
-#pragma warning disable CS0162 // Unreachable code — kept for the L1.G TODO trail.
-            notification = Notification.Create(string.Empty, default, string.Empty, string.Empty);
-#pragma warning restore CS0162
-            // TODO(notif-L1.G): once L1.A's Notification.Create accepts the
-            // command parameters, drop the reflection fallback below and
-            // remove this hydration helper entirely.
-        }
-        catch (NotImplementedException)
-        {
-            // TODO(notif-L1.G): wait for L1.A. Until then we materialise the
-            // entity through its private setters via reflection so the row
-            // reflects the command intent end-to-end (idempotency key, status,
-            // recipient, etc).
-            notification = (Notification)System.Runtime.CompilerServices.RuntimeHelpers
-                .GetUninitializedObject(typeof(Notification));
-
-            // AuditableEntity defaults — set via the public setters on the base type.
-            var baseType = typeof(Notification).BaseType!;
-            baseType.GetProperty("Id")!.SetValue(notification, Guid.NewGuid());
-            baseType.GetProperty("CreatedAt")!.SetValue(notification, DateTime.UtcNow);
-            baseType.GetProperty("RowVersion")!.SetValue(notification, new byte[8]);
-
-            // Initialise the backing list so EF Core OwnsMany doesn't NRE.
-            var attemptsField = typeof(Notification).GetField(
-                "_deliveryAttempts",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-            attemptsField?.SetValue(notification, new List<Domain.ValueObjects.DeliveryAttempt>());
-        }
-
-        SetPrivate(notification, nameof(Notification.UserId), request.UserId);
-        SetPrivate(notification, nameof(Notification.Recipient), request.Recipient);
-        SetPrivate(notification, nameof(Notification.Channel), request.Channel);
-        SetPrivate(notification, nameof(Notification.TemplateId), request.TemplateId);
-        SetPrivate(notification, nameof(Notification.Priority), request.Priority);
-        SetPrivate(notification, nameof(Notification.Status), status);
-        SetPrivate(notification, nameof(Notification.Subject), string.Empty);
-        SetPrivate(notification, nameof(Notification.Body), string.Empty);
-        SetPrivate(notification, nameof(Notification.ErrorMessage), errorMessage);
-        SetPrivate(notification, nameof(Notification.IdempotencyKey), idempotencyKey);
-
-        return notification;
-    }
-
-    private static void SetPrivate(object target, string propertyName, object? value)
-    {
-        var prop = typeof(Notification).GetProperty(
-            propertyName,
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-        prop?.SetValue(target, value);
+        return Notification.Create(
+            request.Recipient,
+            request.Channel,
+            request.TemplateId,
+            idempotencyKey,
+            request.UserId,
+            request.Priority
+        );
     }
 }

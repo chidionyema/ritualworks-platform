@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using MassTransit;
 using Haworks.Payments.Domain;
+using Haworks.Payments.Application.Telemetry;
 using Haworks.Contracts;
 using Haworks.Contracts.Payments;
 using Microsoft.Extensions.Logging;
@@ -67,6 +69,7 @@ public sealed class SubscriptionSaga : MassTransitStateMachine<SubscriptionSagaS
                 .Then(ctx =>
                 {
                     ctx.Saga.RetryCount++;
+                    EmitSpan(ctx.Saga.CorrelationId, ctx.Saga.ProviderSubscriptionId, "grace_period_from_active");
                     logger.LogWarning("Unexpected renewal failure in Active state for {SubscriptionId}. Attempt {RetryCount}",
                         ctx.Saga.ProviderSubscriptionId, ctx.Saga.RetryCount);
                 })
@@ -96,6 +99,7 @@ public sealed class SubscriptionSaga : MassTransitStateMachine<SubscriptionSagaS
                 .Then(ctx =>
                 {
                     ctx.Saga.RetryCount++;
+                    EmitSpan(ctx.Saga.CorrelationId, ctx.Saga.ProviderSubscriptionId, "grace_period_from_renewing");
                     logger.LogWarning("Renewal failed for {SubscriptionId}. Entering Grace Period / Dunning. Attempt {RetryCount}",
                         ctx.Saga.ProviderSubscriptionId, ctx.Saga.RetryCount);
                 })
@@ -126,6 +130,7 @@ public sealed class SubscriptionSaga : MassTransitStateMachine<SubscriptionSagaS
                 .Then(ctx =>
                 {
                     ctx.Saga.RetryCount = 0;
+                    EmitSpan(ctx.Saga.CorrelationId, ctx.Saga.ProviderSubscriptionId, "payment_recovered");
                     logger.LogInformation("Payment recovered for {SubscriptionId} during Grace Period", ctx.Saga.ProviderSubscriptionId);
                 })
                 .Unschedule(DunningRetrySchedule)
@@ -152,7 +157,11 @@ public sealed class SubscriptionSaga : MassTransitStateMachine<SubscriptionSagaS
                             ctx => TimeSpan.FromDays(2)))
                 .If(ctx => ctx.Saga.RetryCount > 3,
                     binder => binder
-                        .Then(ctx => logger.LogError("Dunning exhausted for {SubscriptionId}. Terminating access.", ctx.Saga.ProviderSubscriptionId))
+                        .Then(ctx =>
+                        {
+                            EmitSpan(ctx.Saga.CorrelationId, ctx.Saga.ProviderSubscriptionId, "canceled_dunning_exhausted");
+                            logger.LogError("Dunning exhausted for {SubscriptionId}. Terminating access.", ctx.Saga.ProviderSubscriptionId);
+                        })
                         .TransitionTo(Canceled)
                         .Finalize()));
 
@@ -161,11 +170,34 @@ public sealed class SubscriptionSaga : MassTransitStateMachine<SubscriptionSagaS
             When(SubscriptionCancelled)
                 .If(ctx => ctx.Saga.CurrentState != Canceled.Name,
                     binder => binder
-                        .Then(ctx => logger.LogInformation("Subscription {SubscriptionId} cancelled", ctx.Saga.ProviderSubscriptionId))
+                        .Then(ctx =>
+                        {
+                            EmitSpan(ctx.Saga.CorrelationId, ctx.Saga.ProviderSubscriptionId, "canceled_explicit");
+                            logger.LogInformation("Subscription {SubscriptionId} cancelled", ctx.Saga.ProviderSubscriptionId);
+                        })
                         .Unschedule(RenewalTimeoutSchedule)
                         .Unschedule(DunningRetrySchedule)
                         .TransitionTo(Canceled)
-                        .Finalize()));
+                        .Finalize()),
+            // SS-08: Guards for out-of-sequence events — no-op when saga is in a terminal or incompatible state
+            When(SubscriptionRenewed)
+                .If(ctx => ctx.Saga.CurrentState == Canceled.Name,
+                    binder => binder
+                        .Then(ctx => logger.LogWarning(
+                            "Ignoring late SubscriptionRenewed for canceled {SubscriptionId}",
+                            ctx.Saga.ProviderSubscriptionId))),
+            When(RenewalFailed)
+                .If(ctx => ctx.Saga.CurrentState == Canceled.Name,
+                    binder => binder
+                        .Then(ctx => logger.LogWarning(
+                            "Ignoring late RenewalFailed for canceled {SubscriptionId}",
+                            ctx.Saga.ProviderSubscriptionId))),
+            When(PaymentRecovered)
+                .If(ctx => ctx.Saga.CurrentState == Active.Name || ctx.Saga.CurrentState == Canceled.Name,
+                    binder => binder
+                        .Then(ctx => logger.LogWarning(
+                            "Ignoring late PaymentRecovered for {SubscriptionId} in state {State}",
+                            ctx.Saga.ProviderSubscriptionId, ctx.Saga.CurrentState))));
 
         SetCompletedWhenFinalized();
     }
@@ -173,6 +205,21 @@ public sealed class SubscriptionSaga : MassTransitStateMachine<SubscriptionSagaS
     // SS-04: Guard against negative TimeSpan from past PeriodEnd
     private static TimeSpan GuardDelay(TimeSpan delay) =>
         delay < TimeSpan.Zero ? TimeSpan.Zero : delay;
+
+    /// <summary>
+    /// Emits a discrete <c>subscription.saga.transition</c> span on key
+    /// state transitions. The span is start-and-immediately-disposed —
+    /// it represents the moment the saga transitioned, not a duration.
+    /// Tags carry the reason and ids so Tempo can correlate the span
+    /// back to the subscription/saga across services.
+    /// </summary>
+    private static void EmitSpan(Guid sagaId, string providerSubscriptionId, string reason)
+    {
+        using var activity = PaymentsActivities.Source.StartActivity("subscription.saga.transition");
+        activity?.SetTag("saga.id", sagaId);
+        activity?.SetTag("subscription.provider_id", providerSubscriptionId);
+        activity?.SetTag("transition.reason", reason);
+    }
 
     public State Active { get; private set; } = null!;
     public State Renewing { get; private set; } = null!;

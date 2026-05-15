@@ -1,5 +1,6 @@
 using Haworks.BuildingBlocks.Common;
 using Haworks.CheckoutOrchestrator.Application.Telemetry;
+using Haworks.CheckoutOrchestrator.Application.Interfaces;
 using Haworks.Contracts.Checkout;
 using MassTransit;
 using MediatR;
@@ -19,7 +20,8 @@ public sealed record StartCheckoutCommand(
 public sealed record StartCheckoutResponse(Guid SagaId, Guid OrderId);
 
 internal sealed class StartCheckoutCommandHandler(
-    IPublishEndpoint publishEndpoint
+    IPublishEndpoint publishEndpoint,
+    ICheckoutDbContext db
 ) : IRequestHandler<StartCheckoutCommand, Result<StartCheckoutResponse>>
 {
     public async Task<Result<StartCheckoutResponse>> Handle(StartCheckoutCommand request, CancellationToken ct)
@@ -45,6 +47,8 @@ internal sealed class StartCheckoutCommandHandler(
             IdempotencyKey = request.IdempotencyKey,
             IsGuest = false,
         }, ct);
+
+        await db.SaveChangesAsync(ct);
 
         return Result.Success(new StartCheckoutResponse(sagaId, orderId));
     }

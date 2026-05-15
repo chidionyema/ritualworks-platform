@@ -1,26 +1,45 @@
 using Haworks.Privacy.Application.Common.Interfaces;
 using Haworks.Privacy.Application.Requests.Sagas;
 using Haworks.Privacy.Infrastructure.Persistence;
+using Haworks.Privacy.Infrastructure.Workers;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Haworks.Privacy.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment env)
     {
         var connectionString = configuration.GetConnectionString("privacy");
 
         services.AddDbContext<PrivacyDbContext>(options =>
-            options.UseNpgsql(connectionString));
+        {
+            options.UseNpgsql(connectionString);
+            options.ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
+        });
 
         services.AddScoped<IPrivacyDbContext>(provider => provider.GetRequiredService<PrivacyDbContext>());
 
+        services.AddHostedService<ErasureStalledWatcher>();
+
+        if (env.IsEnvironment("Test"))
+        {
+            return services;
+        }
+
         services.AddMassTransit(x =>
         {
+            x.SetKebabCaseEndpointNameFormatter();
+            x.AddDelayedMessageScheduler();
+
             x.AddSagaStateMachine<PrivacyRequestStateMachine, PrivacyRequestState>()
                 .EntityFrameworkRepository(r =>
                 {
@@ -32,17 +51,16 @@ public static class DependencyInjection
             {
                 o.UsePostgres();
                 o.UseBusOutbox();
+                o.DuplicateDetectionWindow = TimeSpan.FromMinutes(30);
             });
 
             x.UsingRabbitMq((context, cfg) =>
             {
-                var rabbitMqConfig = configuration.GetSection("RabbitMq");
-                cfg.Host(rabbitMqConfig["Host"], "/", h =>
-                {
-                    h.Username(rabbitMqConfig["Username"] ?? "guest");
-                    h.Password(rabbitMqConfig["Password"] ?? "guest");
-                });
-                
+                var rabbitConn = configuration.GetConnectionString("rabbitmq")
+                    ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is missing.");
+
+                cfg.Host(new Uri(rabbitConn));
+                cfg.UseDelayedMessageScheduler();
                 cfg.ConfigureEndpoints(context);
             });
         });

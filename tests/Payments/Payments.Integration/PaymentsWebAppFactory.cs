@@ -99,12 +99,24 @@ public class PaymentsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
 
             services.AddMassTransitTestHarness(mt =>
             {
+                // Only register consumers that don't interfere with manual saga event flow.
+                // ProviderRefundInitiationRequestedConsumer and SubscriptionRenewalRequestedConsumer
+                // are omitted because they auto-process saga-published events (calling real Stripe)
+                // and race with manually-published test events.
                 mt.AddConsumer<PaymentWebhookValidatedConsumer>();
                 mt.AddConsumer<PaymentSessionRequestedConsumer>();
-                mt.AddConsumer<ProviderRefundInitiationRequestedConsumer>();
-                mt.AddConsumer<SubscriptionRenewalRequestedConsumer>();
-                mt.AddSagaStateMachine<RefundSaga, RefundSagaState>();
-                mt.AddSagaStateMachine<SubscriptionSaga, SubscriptionSagaState>();
+                mt.AddSagaStateMachine<RefundSaga, RefundSagaState>()
+                    .EntityFrameworkRepository(r =>
+                    {
+                        r.ExistingDbContext<PaymentDbContext>();
+                        r.UsePostgres();
+                    });
+                mt.AddSagaStateMachine<SubscriptionSaga, SubscriptionSagaState>()
+                    .EntityFrameworkRepository(r =>
+                    {
+                        r.ExistingDbContext<PaymentDbContext>();
+                        r.UsePostgres();
+                    });
             });
 
             services.AddDomainEventPublisher();

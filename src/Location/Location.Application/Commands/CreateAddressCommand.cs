@@ -1,3 +1,4 @@
+using Haworks.BuildingBlocks.Common;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Contracts.Location;
 using Haworks.Location.Application.Interfaces;
@@ -11,7 +12,7 @@ namespace Haworks.Location.Application.Commands;
 /// Command to create a new address record and publish a LocationUpdated event.
 /// Coordinates are optional; if missing, the service will attempt to geocode the address.
 /// </summary>
-public record CreateAddressCommand : IRequest<Guid>
+public record CreateAddressCommand : IRequest<Result<Guid>>
 {
     public required string Street { get; init; }
     public required string City { get; init; }
@@ -25,9 +26,9 @@ public class CreateAddressCommandHandler(
     ILocationDbContext dbContext,
     IDomainEventPublisher publisher,
     IGeocodingService geocodingService,
-    IGeohashService geohashService) : IRequestHandler<CreateAddressCommand, Guid>
+    IGeohashService geohashService) : IRequestHandler<CreateAddressCommand, Result<Guid>>
 {
-    public async Task<Guid> Handle(CreateAddressCommand request, CancellationToken cancellationToken)
+    public async Task<Result<Guid>> Handle(CreateAddressCommand request, CancellationToken cancellationToken)
     {
         double lat = request.Latitude ?? 0;
         double lon = request.Longitude ?? 0;
@@ -49,9 +50,9 @@ public class CreateAddressCommandHandler(
                 lat = coords.Value.Latitude;
                 lon = coords.Value.Longitude;
             }
-            else if (!request.Latitude.HasValue)
+            else
             {
-                throw new InvalidOperationException($"Could not geocode address: {addressString}");
+                return Result.Failure<Guid>(Error.Validation("Address.GeocodingFailed", $"Could not geocode address: {addressString}"));
             }
         }
 
@@ -90,6 +91,6 @@ public class CreateAddressCommandHandler(
             Geohash = address.Geohash
         }, cancellationToken);
 
-        return address.Id;
+        return Result.Success(address.Id);
     }
 }

@@ -118,7 +118,20 @@ public sealed class WebhooksController(
 
     private bool VerifySendGridSignature(string payload, string signature, string timestamp)
     {
-        return true; 
+        if (string.IsNullOrEmpty(options.Value.SendGrid?.WebhookSecret)) return false;
+
+        try
+        {
+            using var ecdsa = ECDsa.Create();
+            ecdsa.ImportSubjectPublicKeyInfo(Convert.FromBase64String(options.Value.SendGrid.WebhookSecret), out _);
+            
+            var data = Encoding.UTF8.GetBytes(timestamp + payload);
+            return ecdsa.VerifyData(data, Convert.FromBase64String(signature), HashAlgorithmName.SHA256);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task PublishValidatedAsync(

@@ -219,7 +219,9 @@ public sealed class CdcSearchIndexWorkerTests : IAsyncLifetime
             if (string.Equals(table, "products", StringComparison.OrdinalIgnoreCase))
                 await ProcessProductAsync(envelope, index, cts.Token);
             else if (string.Equals(table, "categories", StringComparison.OrdinalIgnoreCase))
-                ; // category updates are no-ops in current impl
+            {
+                // category updates are no-ops in current impl
+            }
 
             consumer.Commit(result);
 
