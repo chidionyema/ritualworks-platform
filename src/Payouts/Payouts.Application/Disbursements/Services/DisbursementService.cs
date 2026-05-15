@@ -55,7 +55,7 @@ public class DisbursementService : IDisbursementService
         {
             // FOR UPDATE lock prevents concurrent payouts against the same account
             var account = await _context.LedgerAccounts
-                .FromSqlRaw("SELECT * FROM payouts.ledger_accounts WHERE id = {0} FOR UPDATE", accountId)
+                .FromSqlRaw("SELECT *, xmin FROM payouts.\"LedgerAccounts\" WHERE \"Id\" = {0} FOR UPDATE", accountId)
                 .FirstAsync();
 
             var payoutAmount = account.Balance;
