@@ -62,7 +62,7 @@ public class PaymentDbContext : DbContext, IPaymentDbContext
             entity.Property(p => p.ProviderTransactionId).HasMaxLength(255);
             entity.Property(p => p.ProviderSessionId).HasMaxLength(255);
 
-            entity.HasIndex(p => p.OrderId);
+            entity.HasIndex(p => p.OrderId).IsUnique();
             entity.HasIndex(p => p.ProviderTransactionId);
             entity.HasIndex(p => p.ProviderSessionId);
         });
@@ -174,6 +174,13 @@ public class PaymentDbContext : DbContext, IPaymentDbContext
                 entry.Entity.CreatedAt = DateTime.UtcNow;
                 entry.Entity.CreatedBy = _currentUserService.UserId ?? "system";
                 entry.Entity.CreatedFromIp = _currentUserService.ClientIp ?? "unknown";
+            }
+
+            if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.LastModifiedDate = DateTime.UtcNow;
+                entry.Entity.LastModifiedBy = _currentUserService.UserId ?? "system";
+                entry.Entity.ModifiedFromIp = _currentUserService.ClientIp ?? "unknown";
             }
         }
     }

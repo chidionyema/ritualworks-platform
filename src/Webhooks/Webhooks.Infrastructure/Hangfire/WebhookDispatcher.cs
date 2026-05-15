@@ -68,8 +68,8 @@ public sealed class WebhookDispatcher(
             stopwatch.Stop();
         }
 
-        DateTime? nextAttemptAt = succeeded ? null : CalculateNextAttempt(delivery.Attempts);
-        
+        DateTime? nextAttemptAt = succeeded ? null : CalculateNextAttempt(delivery.Attempts + 1);
+
         delivery.RecordAttempt(httpStatus ?? 0, responseBody, error, succeeded, nextAttemptAt);
         await db.SaveChangesAsync(ct);
 

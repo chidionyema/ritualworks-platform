@@ -46,6 +46,8 @@ public sealed class WebhooksDbContext(DbContextOptions<WebhooksDbContext> option
             entity.HasIndex(e => new { e.Status, e.NextAttemptAt }).HasFilter("\"Status\" IN ('Pending', 'Failed')");
             entity.HasIndex(e => e.EventId);
             entity.HasIndex(e => new { e.SubscriptionId, e.CreatedAt });
+            entity.HasIndex(e => new { e.SubscriptionId, e.EventId }).IsUnique();
+            entity.Property<uint>("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
         });
 
         modelBuilder.Entity<WebhookDeliveryAttempt>(entity =>
