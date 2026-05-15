@@ -4,12 +4,10 @@ using Haworks.BuildingBlocks.Idempotency;
 using Haworks.BuildingBlocks.Persistence;
 using Haworks.BuildingBlocks.Startup;
 using Haworks.CheckoutOrchestrator.Infrastructure;
-using Haworks.BuildingBlocks.Vault;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Configuration.AddVaultSidecarSecrets();
 
 builder.AddServiceDefaults();
 
