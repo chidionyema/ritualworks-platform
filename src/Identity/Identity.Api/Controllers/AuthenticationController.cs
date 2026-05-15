@@ -198,4 +198,22 @@ public class AuthenticationController : ControllerBase
         });
     }
 #endif
+
+    [HttpPost("service-token")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ServiceToken(
+        [FromHeader(Name = "X-Service-Secret")] string? serviceSecret,
+        CancellationToken ct)
+    {
+        var config = HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+        var expectedSecret = config["ServiceAuth:SharedSecret"];
+        if (string.IsNullOrEmpty(expectedSecret) || serviceSecret != expectedSecret)
+            return Unauthorized(new { error = "Invalid service secret" });
+
+        var result = await _mediator.Send(
+            new Identity.Application.Commands.Auth.CreateServiceTokenCommand(), ct);
+        return result.IsSuccess
+            ? Ok(new { token = result.Value, expiresInMinutes = 30 })
+            : StatusCode(500, new { error = "Failed to create service token" });
+    }
 }

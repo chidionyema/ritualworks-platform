@@ -40,4 +40,9 @@ public interface IJwtTokenService
     /// Deletes the auth cookie.
     /// </summary>
     void DeleteAuthCookie(HttpContext context);
+
+    /// <summary>
+    /// Generates a short-lived JWT for service-to-service calls.
+    /// </summary>
+    Task<string> GenerateServiceTokenAsync(DateTime expiration);
 }

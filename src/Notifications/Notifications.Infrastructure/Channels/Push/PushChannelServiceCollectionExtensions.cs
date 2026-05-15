@@ -16,6 +16,10 @@ public static class PushChannelServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        var enabled = configuration.GetValue(
+            $"{Haworks.Notifications.Infrastructure.Channels.Push.Fcm.FcmOptions.SectionName}:Enabled", true);
+        if (!enabled) return services;
+
         services.AddOptions<Haworks.Notifications.Infrastructure.Channels.Push.Fcm.FcmOptions>()
             .Bind(configuration.GetSection(Haworks.Notifications.Infrastructure.Channels.Push.Fcm.FcmOptions.SectionName))
             .ValidateDataAnnotations()
