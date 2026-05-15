@@ -143,12 +143,9 @@ public class IdentityRefreshTokenRepository : IRefreshTokenRepository
     {
         if (string.IsNullOrEmpty(userId)) return;
 
-        var tokens = await _context.RefreshTokens
+        await _context.RefreshTokens
             .Where(rt => rt.UserId == userId)
-            .ToListAsync(ct);
-
-        _context.RefreshTokens.RemoveRange(tokens);
-        await _context.SaveChangesAsync(ct);
+            .ExecuteDeleteAsync(ct);
     }
 
     public async Task<IDisposable> BeginTransactionAsync(CancellationToken ct = default)

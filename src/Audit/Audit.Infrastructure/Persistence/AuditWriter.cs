@@ -94,26 +94,34 @@ public sealed class AuditWriter : IAuditWriter, IAsyncDisposable
             await connection.OpenAsync();
         }
 
-        using var writer = await connection.BeginBinaryImportAsync(
+        await using var writer = await connection.BeginBinaryImportAsync(
             "COPY audit_events (id, occurred_at, received_at, event_type, entity_type, entity_id, actor_id, actor_type, correlation_id, payload, metadata) FROM STDIN (FORMAT BINARY)");
 
-        foreach (var row in batch)
+        try
         {
-            await writer.StartRowAsync();
-            await writer.WriteAsync(Guid.NewGuid(), NpgsqlTypes.NpgsqlDbType.Uuid);
-            await writer.WriteAsync(row.OccurredAt, NpgsqlTypes.NpgsqlDbType.TimestampTz);
-            await writer.WriteAsync(DateTimeOffset.UtcNow, NpgsqlTypes.NpgsqlDbType.TimestampTz);
-            await writer.WriteAsync(row.EventType, NpgsqlTypes.NpgsqlDbType.Text);
-            await writer.WriteAsync(row.EntityType, NpgsqlTypes.NpgsqlDbType.Text);
-            await writer.WriteAsync(row.EntityId, NpgsqlTypes.NpgsqlDbType.Text);
-            await writer.WriteAsync(row.ActorId, NpgsqlTypes.NpgsqlDbType.Text);
-            await writer.WriteAsync(row.ActorType, NpgsqlTypes.NpgsqlDbType.Text);
-            await writer.WriteAsync(row.CorrelationId, NpgsqlTypes.NpgsqlDbType.Text);
-            await writer.WriteAsync(JsonSerializer.Serialize(row.Payload), NpgsqlTypes.NpgsqlDbType.Jsonb);
-            await writer.WriteAsync(JsonSerializer.Serialize(row.Metadata), NpgsqlTypes.NpgsqlDbType.Jsonb);
-        }
+            foreach (var row in batch)
+            {
+                await writer.StartRowAsync();
+                await writer.WriteAsync(Guid.NewGuid(), NpgsqlTypes.NpgsqlDbType.Uuid);
+                await writer.WriteAsync(row.OccurredAt, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                await writer.WriteAsync(DateTimeOffset.UtcNow, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                await writer.WriteAsync(row.EventType, NpgsqlTypes.NpgsqlDbType.Text);
+                await writer.WriteAsync(row.EntityType, NpgsqlTypes.NpgsqlDbType.Text);
+                await writer.WriteAsync(row.EntityId, NpgsqlTypes.NpgsqlDbType.Text);
+                await writer.WriteAsync(row.ActorId, NpgsqlTypes.NpgsqlDbType.Text);
+                await writer.WriteAsync(row.ActorType, NpgsqlTypes.NpgsqlDbType.Text);
+                await writer.WriteAsync(row.CorrelationId, NpgsqlTypes.NpgsqlDbType.Text);
+                await writer.WriteAsync(JsonSerializer.Serialize(row.Payload), NpgsqlTypes.NpgsqlDbType.Jsonb);
+                await writer.WriteAsync(JsonSerializer.Serialize(row.Metadata), NpgsqlTypes.NpgsqlDbType.Jsonb);
+            }
 
-        await writer.CompleteAsync();
+            await writer.CompleteAsync();
+        }
+        catch
+        {
+            try { await writer.CloseAsync(); } catch { }
+            throw;
+        }
     }
 
     public async ValueTask DisposeAsync()
