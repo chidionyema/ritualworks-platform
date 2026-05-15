@@ -19,6 +19,21 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 DEPLOY_CONTENT="${DEPLOY_CONTENT:-false}"
 
+# ── Step 0: Fresh Vault credentials ──────────────────────────────────
+# Generate fresh response-wrapped SecretIds (30-min TTL) for every service.
+# This MUST run before any fly deploy so the wrapping tokens are fresh
+# when services boot and attempt to unwrap.
+echo ">>> staging fresh Vault credentials (wrapped, 30-min TTL)"
+if [[ -x "$ROOT_DIR/deploy/fly/ci-stage-vault-creds.sh" ]]; then
+  "$ROOT_DIR/deploy/fly/ci-stage-vault-creds.sh" || {
+    echo "WARN: Vault credential staging failed — services with Vault enabled may crash on boot" >&2
+    echo "      This is expected if Vault is not deployed yet. Continuing..." >&2
+  }
+else
+  echo "WARN: ci-stage-vault-creds.sh not found or not executable — skipping Vault credential staging"
+fi
+echo ""
+
 deploy_one() {
   local svc="$1"
   echo ">>> deploying $svc"
