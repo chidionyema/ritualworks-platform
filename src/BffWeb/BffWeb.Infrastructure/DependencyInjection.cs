@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Messaging;
+using Haworks.BffWeb.Infrastructure.Authentication;
 
 namespace Haworks.BffWeb.Infrastructure;
 
@@ -23,6 +25,11 @@ public static class DependencyInjection
         }
 
         services.AddDomainEventPublisher();
+
+        // Service-to-service JWT: BFF obtains a token from Identity for internal calls
+        // Requires: ServiceAuth__SharedSecret + Services__Identity__BaseUrl on Fly
+        services.AddHttpClient("IdentityServiceToken");
+        services.AddSingleton<IServiceTokenProvider, BffServiceTokenProvider>();
 
         return services;
     }

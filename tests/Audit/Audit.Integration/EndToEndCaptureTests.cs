@@ -77,16 +77,14 @@ public sealed class EndToEndCaptureTests : IClassFixture<AuditWebAppFactory>
             Timestamp = DateTime.UtcNow
         });
 
-        // Assert
-        // Poll for up to 30 seconds — wait for THIS test's specific events
-        var expectedTypes = new HashSet<string> { nameof(OrderCreatedEvent), nameof(PaymentCompletedEvent), nameof(StockReservationFailedEvent), nameof(VaultRotationStageEvent) };
+        // Assert — poll with fresh DbContext scopes (EF caches results within a scope)
         List<AuditEvent>? events = null;
         for (int i = 0; i < 60; i++)
         {
-            events = await dbContext.AuditEvents.AsNoTracking()
-                .Where(e => expectedTypes.Contains(e.EventType))
-                .OrderByDescending(e => e.OccurredAt)
-                .Take(10)
+            await using var pollScope = _factory.Services.CreateAsyncScope();
+            var pollDb = pollScope.ServiceProvider.GetRequiredService<AuditDbContext>();
+            events = await pollDb.AuditEvents.AsNoTracking()
+                .Where(e => e.EntityId == orderId.ToString() || e.EntityId == paymentId.ToString() || e.EntityId == "")
                 .ToListAsync();
             if (events.Count >= 4) break;
             await Task.Delay(500);

@@ -60,8 +60,8 @@ public class NotificationsWebAppFactory : WebApplicationFactory<Program>, IAsync
         Environment.SetEnvironmentVariable("Notifications__Providers__Twilio__AccountSid", "AC-test");
         Environment.SetEnvironmentVariable("Notifications__Providers__Twilio__AuthToken", "test-auth-token");
         Environment.SetEnvironmentVariable("Notifications__Providers__Twilio__FromNumber", "+15005550006");
+        Environment.SetEnvironmentVariable("Notifications__Providers__Fcm__Enabled", "false");
         Environment.SetEnvironmentVariable("Notifications__Providers__Fcm__ProjectId", "test-project");
-        Environment.SetEnvironmentVariable("Notifications__Providers__Fcm__ServiceAccountJson", "{}");
     }
 
     async Task IAsyncLifetime.DisposeAsync()

@@ -196,4 +196,27 @@ public class JwtTokenService : IJwtTokenService
             Path = "/"
         });
     }
+
+    public Task<string> GenerateServiceTokenAsync(DateTime expiration)
+    {
+        var signingCredentials = new SigningCredentials(
+            _signingKeyProvider.SigningKey, SecurityAlgorithms.RsaSha256);
+
+        var claims = new[]
+        {
+            new Claim(JwtRegisteredClaimNames.Sub, "bff-service"),
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new Claim(ClaimTypes.Role, "Service"),
+        };
+
+        var token = new JwtSecurityToken(
+            issuer: _jwtOptions.Issuer,
+            audience: _jwtOptions.Audience,
+            claims: claims,
+            expires: expiration,
+            signingCredentials: signingCredentials);
+        token.Header["kid"] = _signingKeyProvider.KeyId;
+
+        return Task.FromResult(new JwtSecurityTokenHandler().WriteToken(token));
+    }
 }
