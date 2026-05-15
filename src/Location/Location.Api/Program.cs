@@ -38,6 +38,9 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
         .Enrich.FromLogContext();
 });
 
+builder.Services.AddHealthChecks()
+    .AddDbHealthCheck<Haworks.Location.Infrastructure.Persistence.LocationDbContext>();
+
 var app = builder.Build();
 
 // Auto-migrate database at startup (except in tests, unless forced)

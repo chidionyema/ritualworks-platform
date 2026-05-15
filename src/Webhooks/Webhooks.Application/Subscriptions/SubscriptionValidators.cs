@@ -70,3 +70,19 @@ public sealed class UpdateWebhookSubscriptionValidator : AbstractValidator<Updat
         RuleFor(x => x.Events).NotEmpty().WithMessage("At least one event must be selected.");
     }
 }
+
+public sealed class DeleteWebhookSubscriptionCommandValidator : AbstractValidator<DeleteWebhookSubscriptionCommand>
+{
+    public DeleteWebhookSubscriptionCommandValidator()
+    {
+        RuleFor(x => x.Id).NotEmpty();
+    }
+}
+
+public sealed class GetWebhookSubscriptionQueryValidator : AbstractValidator<GetWebhookSubscriptionQuery>
+{
+    public GetWebhookSubscriptionQueryValidator()
+    {
+        RuleFor(x => x.Id).NotEmpty();
+    }
+}

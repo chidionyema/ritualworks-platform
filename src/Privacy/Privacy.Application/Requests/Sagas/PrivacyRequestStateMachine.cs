@@ -1,4 +1,5 @@
 using Haworks.Contracts.Privacy;
+using Haworks.Privacy.Application.Telemetry;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 
@@ -34,10 +35,13 @@ public class PrivacyRequestStateMachine : MassTransitStateMachine<PrivacyRequest
                     _logger.LogInformation("Privacy erasure request initiated for user {UserId}, request {RequestId}",
                         context.Message.UserId, context.Message.RequestId);
                 })
-                .PublishAsync(context => context.Init<PrivacyErasureRequested>(new PrivacyErasureRequested(
-                    context.Message.RequestId, context.Message.UserId)))
-                .Schedule(ErasureTimeoutSchedule, ctx => new PrivacyErasureTimedOut(ctx.Saga.CorrelationId),
-                    _ => TimeSpan.FromDays(7)) // PR-02
+                .PublishAsync(context => context.Init<PrivacyErasureRequested>(new PrivacyErasureRequested
+                {
+                    RequestId = context.Message.RequestId,
+                    UserId = context.Message.UserId
+                }))
+                .Schedule(ErasureTimeoutSchedule, ctx => new PrivacyErasureTimedOut { RequestId = ctx.Saga.CorrelationId },
+                    _ => TimeSpan.FromDays(7))
                 .TransitionTo(Processing)
         );
 
@@ -72,6 +76,7 @@ public class PrivacyRequestStateMachine : MassTransitStateMachine<PrivacyRequest
                             ctx.Saga.CompletedAt = DateTime.UtcNow; // PR-05
                             _logger.LogInformation("Privacy erasure completed for user {UserId}, request {RequestId}",
                                 ctx.Saga.UserId, ctx.Saga.CorrelationId);
+                            EmitSpan(ctx.Saga.CorrelationId, ctx.Saga.UserId, "erasure_completed");
                         })
                         .Unschedule(ErasureTimeoutSchedule)
                         .TransitionTo(Completed)
@@ -83,6 +88,7 @@ public class PrivacyRequestStateMachine : MassTransitStateMachine<PrivacyRequest
                 {
                     _logger.LogError("Privacy erasure failed for service {ServiceName}, request {RequestId}: {Error}",
                         context.Message.ServiceName, context.Message.RequestId, context.Message.ErrorMessage);
+                    EmitSpan(context.Saga.CorrelationId, context.Saga.UserId, "erasure_failed");
                 })
                 .Unschedule(ErasureTimeoutSchedule)
                 .TransitionTo(Failed),
@@ -94,9 +100,31 @@ public class PrivacyRequestStateMachine : MassTransitStateMachine<PrivacyRequest
                     _logger.LogError("Privacy erasure timed out for request {RequestId}. Identity={Identity}, Orders={Orders}, Payments={Payments}",
                         context.Saga.CorrelationId, context.Saga.IdentityCompleted,
                         context.Saga.OrdersCompleted, context.Saga.PaymentsCompleted);
+                    EmitSpan(context.Saga.CorrelationId, context.Saga.UserId, "erasure_stalled");
                 })
                 .TransitionTo(Stalled)
         );
+
+        // Idempotency: late-arriving or duplicate events on a finalized saga
+        // (Completed / Failed / Stalled) silently no-op rather than throwing.
+        // MT's inbox dedupes most replays; this catches the rare case where
+        // the same event arrives via two paths or after the saga has moved on.
+        DuringAny(
+            When(ErasureCompleted)
+                .If(ctx => ctx.Saga.CurrentState == nameof(Completed)
+                        || ctx.Saga.CurrentState == nameof(Failed)
+                        || ctx.Saga.CurrentState == nameof(Stalled),
+                    binder => binder.Then(ctx =>
+                        _logger.LogInformation(
+                            "Ignoring late ErasureCompleted for request {RequestId} in state {State}",
+                            ctx.Saga.CorrelationId, ctx.Saga.CurrentState))),
+            When(ErasureFailed)
+                .If(ctx => ctx.Saga.CurrentState == nameof(Completed)
+                        || ctx.Saga.CurrentState == nameof(Failed),
+                    binder => binder.Then(ctx =>
+                        _logger.LogInformation(
+                            "Ignoring late ErasureFailed for request {RequestId} in state {State}",
+                            ctx.Saga.CorrelationId, ctx.Saga.CurrentState))));
 
         SetCompletedWhenFinalized(); // PR-04
     }
@@ -111,4 +139,18 @@ public class PrivacyRequestStateMachine : MassTransitStateMachine<PrivacyRequest
     public Event<PrivacyErasureFailed> ErasureFailed { get; private set; } = null!; // PR-03
 
     public Schedule<PrivacyRequestState, PrivacyErasureTimedOut> ErasureTimeoutSchedule { get; private set; } = null!; // PR-02
+
+    /// <summary>
+    /// Emits a discrete <c>privacy.saga.transition</c> span on key state
+    /// transitions. The span is start-and-immediately-disposed — it marks
+    /// the moment, not a duration. Tags carry ids and the reason so Tempo
+    /// can correlate the span across services.
+    /// </summary>
+    private static void EmitSpan(Guid requestId, Guid userId, string reason)
+    {
+        using var activity = PrivacyActivities.Source.StartActivity("privacy.saga.transition");
+        activity?.SetTag("saga.id", requestId);
+        activity?.SetTag("user.id", userId);
+        activity?.SetTag("transition.reason", reason);
+    }
 }

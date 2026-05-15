@@ -13,7 +13,7 @@ public class GetBalanceQueryHandler : IRequestHandler<GetBalanceQuery, decimal>
     public GetBalanceQueryHandler(IPayoutsDbContext context) { _context = context; }
     public async Task<decimal> Handle(GetBalanceQuery request, CancellationToken cancellationToken)
     {
-        var account = await _context.LedgerAccounts.FirstOrDefaultAsync(a => a.OwnerId == request.OwnerId && a.Type == request.Type && a.Currency == request.Currency, cancellationToken);
+        var account = await _context.LedgerAccounts.AsNoTracking().FirstOrDefaultAsync(a => a.OwnerId == request.OwnerId && a.Type == request.Type && a.Currency == request.Currency, cancellationToken);
         return account?.Balance ?? 0;
     }
 }

@@ -34,6 +34,9 @@ public class AuditExportWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Poll for any stranded jobs that were queued but not picked up (e.g. due to crash)
+        _ = Task.Run(() => PollStrandedJobsAsync(stoppingToken), stoppingToken);
+
         await foreach (var jobId in _queue.ReadAllAsync(stoppingToken))
         {
             try
@@ -47,13 +50,49 @@ public class AuditExportWorker : BackgroundService
         }
     }
 
+    private async Task PollStrandedJobsAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
+                
+                var strandedJobIds = await db.AuditExportJobs
+                    .Where(j => j.Status == AuditExportStatus.Queued)
+                    .Select(j => j.Id)
+                    .Take(100)
+                    .ToListAsync(ct);
+                    
+                foreach (var id in strandedJobIds)
+                {
+                    try
+                    {
+                        await ProcessJobAsync(id, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to process stranded export job {JobId}", id);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error polling stranded jobs");
+            }
+
+            await Task.Delay(TimeSpan.FromMinutes(1), ct);
+        }
+    }
+
     private async Task ProcessJobAsync(Guid jobId, CancellationToken ct)
     {
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
 
         var job = await db.AuditExportJobs.FindAsync(new object[] { jobId }, ct);
-        if (job == null) return;
+        if (job == null || job.Status != AuditExportStatus.Queued) return;
 
         job.Status = AuditExportStatus.Running;
         job.StartedAt = DateTimeOffset.UtcNow;

@@ -10,7 +10,7 @@ internal sealed class UpdateProductCommandValidator : AbstractValidator<UpdatePr
         RuleFor(x => x.ProductId).NotEqual(Guid.Empty);
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Description).NotEmpty().MaximumLength(4000);
-        RuleFor(x => x.UnitPrice).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.UnitPrice).GreaterThan(0);
         RuleFor(x => x.CategoryId).NotEqual(Guid.Empty);
     }
 }

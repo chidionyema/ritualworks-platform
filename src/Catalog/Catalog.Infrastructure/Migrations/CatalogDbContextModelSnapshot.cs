@@ -357,7 +357,19 @@ namespace Haworks.Catalog.Infrastructure.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("OrderId")
+                        .HasDatabaseName("IX_StockReservations_OrderId");
+
+                    b.HasIndex("SagaId")
+                        .HasDatabaseName("IX_StockReservations_SagaId");
 
                     b.HasIndex("Status", "ExpiresAt")
                         .HasDatabaseName("IX_StockReservations_Status_ExpiresAt");

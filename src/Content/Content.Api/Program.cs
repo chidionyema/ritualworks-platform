@@ -32,6 +32,9 @@ builder.Host.UseSerilog((context, loggerConfiguration) =>
     loggerConfiguration.ReadFrom.Configuration(context.Configuration).WriteTo.Console();
 });
 
+builder.Services.AddHealthChecks()
+    .AddDbHealthCheck<Haworks.Content.Infrastructure.Persistence.ContentDbContext>();
+
 var app = builder.Build();
 
 // Auto-apply EF migrations on startup. Skipped under Test where the

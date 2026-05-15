@@ -67,14 +67,18 @@ public class TokenRevocationService : ITokenRevocationService
             return true;
         }
 
-        // Check database (slow path)
-        var revokedToken = await _context.RevokedTokens
-            .FirstOrDefaultAsync(rt => rt.Token == tokenValue, ct);
+        // Check database (slow path) — existence check only, no need to load the full entity
+        var isRevoked = await _context.RevokedTokens
+            .AnyAsync(rt => rt.Token == tokenValue, ct);
 
-        if (revokedToken != null)
+        if (isRevoked)
         {
-            // Cache the revocation for future checks
-            await CacheRevocationAsync(tokenValue, revokedToken.ExpiresAt, ct);
+            // Cache the revocation for future checks — use a reasonable TTL since we don't have the expiry
+            var expiry = await _context.RevokedTokens
+                .Where(rt => rt.Token == tokenValue)
+                .Select(rt => rt.ExpiresAt)
+                .FirstOrDefaultAsync(ct);
+            await CacheRevocationAsync(tokenValue, expiry, ct);
             return true;
         }
 

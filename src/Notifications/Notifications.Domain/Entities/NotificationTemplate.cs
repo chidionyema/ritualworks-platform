@@ -19,5 +19,23 @@ public sealed class NotificationTemplate : AuditableEntity
 
     private NotificationTemplate() { }
 
-    public static NotificationTemplate Create() => throw new NotImplementedException("Track L1.B owns this body");
+    public static NotificationTemplate Create(
+        string templateId, string name, string category, string channel,
+        string locale, string subjectTemplate, string bodyTemplate,
+        string? textFallback = null, string? requiredVariablesJson = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(templateId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(subjectTemplate);
+        ArgumentException.ThrowIfNullOrWhiteSpace(bodyTemplate);
+        return new NotificationTemplate
+        {
+            TemplateId = templateId, Name = name, Category = category,
+            Channel = channel, Locale = locale,
+            SubjectTemplate = subjectTemplate, BodyTemplate = bodyTemplate,
+            TextFallbackTemplate = textFallback,
+            IsActive = true, Version = 1,
+            RequiredVariablesJson = requiredVariablesJson
+        };
+    }
 }

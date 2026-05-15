@@ -19,7 +19,7 @@ public sealed class CreateOrderCommandValidator : AbstractValidator<CreateOrderC
             item.RuleFor(i => i.ProductId).NotEqual(Guid.Empty);
             item.RuleFor(i => i.ProductName).NotEmpty();
             item.RuleFor(i => i.Quantity).GreaterThan(0);
-            item.RuleFor(i => i.UnitPrice).GreaterThanOrEqualTo(0);
+            item.RuleFor(i => i.UnitPrice).GreaterThan(0);
         });
     }
 }

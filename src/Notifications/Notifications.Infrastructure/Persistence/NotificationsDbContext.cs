@@ -77,6 +77,7 @@ public class NotificationsDbContext : DbContext
             entity.HasIndex(n => n.Recipient);
             entity.HasIndex(n => n.Status);
             entity.HasIndex(n => n.IdempotencyKey).IsUnique();
+            entity.Property<uint>("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
         });
 
         modelBuilder.Entity<NotificationTemplate>(entity =>

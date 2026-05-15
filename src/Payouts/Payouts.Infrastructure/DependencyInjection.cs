@@ -19,17 +19,26 @@ public static class DependencyInjection
         services.AddDbContext<PayoutsDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<IPayoutsDbContext>(provider => provider.GetRequiredService<PayoutsDbContext>());
         services.AddScoped<IPayoutGateway, StripePayoutGateway>();
-        services.AddMassTransit(x => {
-            x.AddConsumer<PaymentCompletedConsumer>();
-            x.UsingRabbitMq((context, cfg) => {
-                var rabbitMqConfig = configuration.GetSection("RabbitMq");
-                cfg.Host(rabbitMqConfig["Host"], "/", h => {
-                    h.Username(rabbitMqConfig["Username"] ?? "guest");
-                    h.Password(rabbitMqConfig["Password"] ?? "guest");
+        if (!env.IsEnvironment("Test"))
+        {
+            services.AddMassTransit(x => {
+                x.AddConsumer<PaymentCompletedConsumer>();
+                x.AddEntityFrameworkOutbox<PayoutsDbContext>(o =>
+                {
+                    o.UsePostgres();
+                    o.UseBusOutbox();
+                    o.QueryDelay = TimeSpan.FromSeconds(1);
                 });
-                cfg.ReceiveEndpoint("payouts-payment-completed", e => e.ConfigureConsumer<PaymentCompletedConsumer>(context));
+                x.UsingRabbitMq((context, cfg) => {
+                    var rabbitMqConfig = configuration.GetSection("RabbitMq");
+                    cfg.Host(rabbitMqConfig["Host"], "/", h => {
+                        h.Username(rabbitMqConfig["Username"] ?? throw new InvalidOperationException("RabbitMq:Username is required"));
+                        h.Password(rabbitMqConfig["Password"] ?? throw new InvalidOperationException("RabbitMq:Password is required"));
+                    });
+                    cfg.ReceiveEndpoint("payouts-payment-completed", e => e.ConfigureConsumer<PaymentCompletedConsumer>(context));
+                });
             });
-        });
+        }
         services.AddHangfire(config => config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180).UseSimpleAssemblyNameTypeSerializer().UseRecommendedSerializerSettings().UsePostgreSqlStorage(options => options.UseNpgsqlConnection(connectionString)));
         services.AddHangfireServer();
         return services;

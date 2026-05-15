@@ -27,16 +27,25 @@ public class DisbursementService : IDisbursementService
     public async Task ProcessEligiblePayoutsAsync()
     {
         var eligibleAccounts = await _context.LedgerAccounts
+            .AsNoTracking()
             .Where(a => a.Type == AccountType.SellerPayable && a.Balance > 0)
+            .Take(500)
             .ToListAsync();
+
+        var ownerIds = eligibleAccounts.Select(a => a.OwnerId).ToList();
+        var profiles = await _context.SellerProfiles
+            .Where(p => ownerIds.Contains(p.SellerId))
+            .ToDictionaryAsync(p => p.SellerId);
 
         foreach (var account in eligibleAccounts)
         {
-            var profile = await _context.SellerProfiles.FirstOrDefaultAsync(p => p.SellerId == account.OwnerId);
-            if (profile == null || !profile.PayoutsEnabled || string.IsNullOrEmpty(profile.ExternalProviderId)) continue;
+            if (!profiles.TryGetValue(account.OwnerId, out var profile)) continue;
+            if (!profile.PayoutsEnabled || string.IsNullOrEmpty(profile.ExternalProviderId)) continue;
             if (account.Balance < profile.PayoutThreshold) continue;
 
-            await ExecutePayout(account, profile);
+            // Re-load tracked for mutation
+            var trackedAccount = await _context.LedgerAccounts.FirstAsync(a => a.Id == account.Id);
+            await ExecutePayout(trackedAccount, profile);
         }
     }
 

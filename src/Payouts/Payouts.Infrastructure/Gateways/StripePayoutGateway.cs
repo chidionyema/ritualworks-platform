@@ -51,7 +51,7 @@ public class StripePayoutGateway : IPayoutGateway
     {
         var options = new TransferCreateOptions
         {
-            Amount = (long)(amount * 100),
+            Amount = (long)Math.Round(amount * 100m, 0, MidpointRounding.AwayFromZero),
             Currency = currency.ToLowerInvariant(),
             Destination = providerId,
             Description = description

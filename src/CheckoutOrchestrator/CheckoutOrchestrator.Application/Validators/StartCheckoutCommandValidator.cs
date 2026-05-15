@@ -31,7 +31,7 @@ internal sealed class StartCheckoutCommandValidator : AbstractValidator<StartChe
         {
             item.RuleFor(x => x.ProductId).NotEqual(Guid.Empty);
             item.RuleFor(x => x.Quantity).GreaterThan(0).LessThan(100);
-            item.RuleFor(x => x.UnitPrice).GreaterThanOrEqualTo(0);
+            item.RuleFor(x => x.UnitPrice).GreaterThan(0);
             item.RuleFor(x => x.ProductName).NotEmpty();
         });
     }

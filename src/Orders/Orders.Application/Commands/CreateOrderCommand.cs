@@ -31,7 +31,7 @@ internal sealed class CreateOrderCommandHandler(
     {
         using var activity = OrdersActivities.Source.StartActivity("orders.create");
         activity?.SetTag("customer.id", request.UserId);
-        activity?.SetTag("order.total_cents", (long)(request.TotalAmount * 100m));
+        activity?.SetTag("order.total_cents", (long)Math.Round(request.TotalAmount * 100m, 0, MidpointRounding.AwayFromZero));
         activity?.SetTag("order.currency", request.Currency);
         activity?.SetTag("order.item_count", request.Items.Count);
         activity?.SetTag("saga.id", request.SagaId);

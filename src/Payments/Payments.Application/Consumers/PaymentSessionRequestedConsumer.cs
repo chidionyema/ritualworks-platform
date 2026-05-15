@@ -51,7 +51,7 @@ public sealed class PaymentSessionRequestedConsumer(
         using var activity = PaymentsActivities.Source.StartActivity("payments.session.create");
         activity?.SetTag("order.id", evt.OrderId);
         activity?.SetTag("saga.id", evt.SagaId);
-        activity?.SetTag("payment.amount_cents", (long)(evt.Amount * 100m));
+        activity?.SetTag("payment.amount_cents", (long)Math.Round(evt.Amount * 100m, 0, MidpointRounding.AwayFromZero));
         activity?.SetTag("payment.currency", evt.Currency);
         activity?.SetTag("payment.provider", isDemoMode ? "demo-mock" : "stripe");
         activity?.SetTag("payment.demo_mode", isDemoMode);
@@ -132,6 +132,8 @@ public sealed class PaymentSessionRequestedConsumer(
                 AttemptNumber = 1,
                 IsFinalAttempt = true
             }, context.CancellationToken);
+
+            throw; // let MassTransit retry
         }
     }
 

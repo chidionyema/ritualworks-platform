@@ -29,11 +29,12 @@ public sealed class CdcSearchIndexWorker(
     {
         consumer.Subscribe(Topics);
 
+        ConsumeResult<string, string>? result = null;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                var result = consumer.Consume(stoppingToken);
+                result = consumer.Consume(stoppingToken);
                 if (result?.Message?.Value == null) continue;
 
                 await ProcessMessageAsync(result, stoppingToken);
@@ -42,6 +43,11 @@ public sealed class CdcSearchIndexWorker(
             catch (OperationCanceledException)
             {
                 break;
+            }
+            catch (Exception ex) when (ex is System.Text.Json.JsonException or KeyNotFoundException or FormatException or ArgumentNullException)
+            {
+                logger.LogError(ex, "Skipping malformed CDC message on {Topic}", result?.Topic);
+                if (result != null) consumer.Commit(result);
             }
             catch (Exception ex)
             {
@@ -102,8 +108,8 @@ public sealed class CdcSearchIndexWorker(
             name: name,
             description: description,
             unitPrice: price,
-            isInStock: true,
-            isListed: true,
+            isInStock: after.TryGetProperty("is_in_stock", out var stockProp) && stockProp.ValueKind == System.Text.Json.JsonValueKind.True,
+            isListed: after.TryGetProperty("is_listed", out var listedProp) && listedProp.ValueKind == System.Text.Json.JsonValueKind.True,
             categoryId: string.IsNullOrEmpty(categoryId) ? Guid.Empty : Guid.Parse(categoryId),
             categoryName: "Unknown (CDC)",
             sourceVersion: 1);

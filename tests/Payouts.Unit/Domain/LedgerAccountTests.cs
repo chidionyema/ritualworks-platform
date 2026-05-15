@@ -23,4 +23,21 @@ public class LedgerAccountTests
         account.UpdateBalance(50m, EntryType.Debit);
         account.Balance.Should().Be(150m);
     }
+
+    [Fact]
+    public void LedgerAccount_debit_exceeding_balance_throws()
+    {
+        var account = LedgerAccount.Create(Guid.NewGuid(), AccountType.SellerPending, "USD");
+        account.UpdateBalance(50m, EntryType.Credit);
+
+        var act = () => account.UpdateBalance(100m, EntryType.Debit);
+        act.Should().Throw<InvalidOperationException>().WithMessage("Insufficient balance");
+    }
+
+    [Fact]
+    public void Payout_Create_with_zero_amount_throws()
+    {
+        var act = () => Payout.Create(Guid.NewGuid(), 0m, "USD");
+        act.Should().Throw<ArgumentException>().WithMessage("Payout amount must be positive");
+    }
 }

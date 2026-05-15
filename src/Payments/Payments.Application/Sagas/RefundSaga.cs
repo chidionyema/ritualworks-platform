@@ -126,28 +126,45 @@ public sealed class RefundSaga : MassTransitStateMachine<RefundSagaState>
                 }))
                 .TransitionTo(RequiresReview));
 
+        // Idempotency: late-arriving duplicate events on a finalized saga
+        // (Refunded / Cancelled) or a terminal-ish state (RequiresReview)
+        // silently no-op rather than throwing.
         DuringAny(
+            When(ProviderRefundSucceeded)
+                .If(ctx => ctx.Saga.CurrentState == Refunded.Name
+                        || ctx.Saga.CurrentState == Cancelled.Name
+                        || ctx.Saga.CurrentState == RequiresReview.Name,
+                    x => x),
+            When(ProviderRefundFailed)
+                .If(ctx => ctx.Saga.CurrentState == RequiresReview.Name
+                        || ctx.Saga.CurrentState == Cancelled.Name
+                        || ctx.Saga.CurrentState == Refunded.Name,
+                    x => x),
             When(RefundCancelledByOperator)
-                .Then(ctx =>
-                {
-                    ctx.Saga.FailureCategory = RefundFailureCategory.CancelledByOperator;
-                    ctx.Saga.FailureDetail = "Cancelled by operator";
-                })
-                .Unschedule(RefundTimeoutSchedule)
-                .If(ctx => ctx.Saga.CurrentState == AwaitingProviderConfirmation.Name,
-                    x => x.PublishAsync(ctx => ctx.Init<ProviderRefundCancellationRequestedEvent>(new ProviderRefundCancellationRequestedEvent
-                    {
-                        RefundId = ctx.Saga.CorrelationId,
-                        ProviderRefundId = ctx.Saga.ProviderRefundId ?? ""
-                    })))
-                .PublishAsync(ctx => ctx.Init<RefundCancelledEvent>(new RefundCancelledEvent
-                {
-                    RefundId = ctx.Saga.CorrelationId,
-                    OrderId = ctx.Saga.OrderId,
-                    Reason = "Cancelled by operator"
-                }))
-                .TransitionTo(Cancelled)
-                .Finalize());
+                .IfElse(ctx => ctx.Saga.CurrentState == Cancelled.Name,
+                    noOp => noOp,
+                    active => active
+                        .Then(ctx =>
+                        {
+                            ctx.Saga.FailureCategory = RefundFailureCategory.CancelledByOperator;
+                            ctx.Saga.FailureDetail = "Cancelled by operator";
+                            EmitCompensateSpan(ctx.Saga.CorrelationId, ctx.Saga.OrderId, "refund_cancelled_by_operator");
+                        })
+                        .Unschedule(RefundTimeoutSchedule)
+                        .If(ctx => ctx.Saga.CurrentState == AwaitingProviderConfirmation.Name,
+                            x => x.PublishAsync(ctx => ctx.Init<ProviderRefundCancellationRequestedEvent>(new ProviderRefundCancellationRequestedEvent
+                            {
+                                RefundId = ctx.Saga.CorrelationId,
+                                ProviderRefundId = ctx.Saga.ProviderRefundId ?? ""
+                            })))
+                        .PublishAsync(ctx => ctx.Init<RefundCancelledEvent>(new RefundCancelledEvent
+                        {
+                            RefundId = ctx.Saga.CorrelationId,
+                            OrderId = ctx.Saga.OrderId,
+                            Reason = "Cancelled by operator"
+                        }))
+                        .TransitionTo(Cancelled)
+                        .Finalize()));
 
         SetCompletedWhenFinalized();
     }

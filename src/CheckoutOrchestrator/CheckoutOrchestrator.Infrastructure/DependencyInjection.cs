@@ -47,6 +47,8 @@ public static class DependencyInjection
             }
         });
 
+        services.AddScoped<Haworks.CheckoutOrchestrator.Application.Interfaces.ICheckoutDbContext>(sp => sp.GetRequiredService<CheckoutDbContext>());
+
         if (env.IsEnvironment("Test"))
         {
             return services;

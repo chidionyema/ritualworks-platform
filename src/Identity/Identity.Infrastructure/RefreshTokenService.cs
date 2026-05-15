@@ -49,16 +49,14 @@ public class RefreshTokenService : IRefreshTokenService
             return;
         }
 
-        var userRefreshTokens = await _context.RefreshTokens
+        var deletedCount = await _context.RefreshTokens
             .Where(rt => rt.UserId == userId)
-            .ToListAsync(ct);
+            .ExecuteDeleteAsync(ct);
 
-        if (userRefreshTokens.Count != 0)
+        if (deletedCount != 0)
         {
-            _context.RefreshTokens.RemoveRange(userRefreshTokens);
-            await _context.SaveChangesAsync(ct);
             _logger.LogInformation("Revoked {Count} refresh tokens for user {UserId}",
-                userRefreshTokens.Count, userId);
+                deletedCount, userId);
         }
     }
 }

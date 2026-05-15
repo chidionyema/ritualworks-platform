@@ -112,7 +112,7 @@ internal sealed class ProductRepository(CatalogDbContext db) : IProductRepositor
                     .Where(p => p.Id == item.ProductId && p.StockQuantity >= item.Quantity)
                     .ExecuteUpdateAsync(setters => setters
                         .SetProperty(p => p.StockQuantity, p => p.StockQuantity - item.Quantity)
-                        .SetProperty(p => p.IsInStock, p => p.StockQuantity > item.Quantity), ct);
+                        .SetProperty(p => p.IsInStock, p => p.StockQuantity - item.Quantity > 0), ct);
 
                 if (rows == 0)
                 {

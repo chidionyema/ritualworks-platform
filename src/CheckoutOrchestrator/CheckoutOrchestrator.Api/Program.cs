@@ -28,6 +28,9 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
         .Enrich.FromLogContext();
 });
 
+builder.Services.AddHealthChecks()
+    .AddDbHealthCheck<Haworks.CheckoutOrchestrator.Infrastructure.Persistence.CheckoutDbContext>();
+
 var app = builder.Build();
 
 if (!app.Environment.IsEnvironment("Test"))

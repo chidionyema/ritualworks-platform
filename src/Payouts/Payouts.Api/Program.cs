@@ -13,6 +13,8 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
+builder.Services.AddHealthChecks()
+    .AddDbHealthCheck<PayoutsDbContext>();
 builder.Host.UseSerilog((context, loggerConfiguration) => loggerConfiguration.ReadFrom.Configuration(context.Configuration));
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -40,8 +42,9 @@ app.MapControllers();
 app.MapDefaultEndpoints();
 if (app.Environment.IsDevelopment()) { app.UseHangfireDashboard(); }
 
-using (var scope = app.Services.CreateScope())
+if (!app.Environment.IsEnvironment("Test"))
 {
+    using var scope = app.Services.CreateScope();
     var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
     recurringJobManager.AddOrUpdate<IDisbursementService>("process-payouts", service => service.ProcessEligiblePayoutsAsync(), Cron.Daily);
     recurringJobManager.AddOrUpdate<IMediator>("mature-funds", mediator => mediator.Send(new MatureFundsCommand(), default), Cron.Hourly);

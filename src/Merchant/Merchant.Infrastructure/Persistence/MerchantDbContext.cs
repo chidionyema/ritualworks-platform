@@ -15,6 +15,7 @@ public class MerchantDbContext : DbContext, IMerchantDbContext
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.HasDefaultSchema("merchant");
 
         builder.AddInboxStateEntity();
         builder.AddOutboxStateEntity();

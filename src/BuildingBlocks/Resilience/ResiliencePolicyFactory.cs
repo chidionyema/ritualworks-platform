@@ -214,7 +214,7 @@ public sealed class ResiliencePolicyFactory : IResiliencePolicyFactory
         var retryPolicy = CreateRetryPolicy(options, onRetry);
         var circuitBreaker = CreateCircuitBreaker(options, onBreak, onReset);
 
-        return Policy.WrapAsync(retryPolicy, circuitBreaker);
+        return Policy.WrapAsync(circuitBreaker, retryPolicy);
     }
 
     /// <inheritdoc />
@@ -250,7 +250,7 @@ public sealed class ResiliencePolicyFactory : IResiliencePolicyFactory
                     _metrics.RecordCircuitBreakerStateChange(options.ServiceName, CircuitBreakerState.HalfOpen);
                 });
 
-        return Policy.WrapAsync(retryPolicy, circuitBreaker);
+        return Policy.WrapAsync(circuitBreaker, retryPolicy);
     }
 
     // ============================================================================

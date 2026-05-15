@@ -157,6 +157,16 @@ public sealed class Notification : AuditableEntity
         Touch();
     }
 
+    /// <summary>Any state -> Suppressed. Recipient opted out or hit rate limits.</summary>
+    public void MarkSuppressed(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        EnsureNotTerminal(nameof(MarkSuppressed));
+        Status = NotificationStatus.Suppressed;
+        ErrorMessage = reason;
+        Touch();
+    }
+
     /// <summary>
     /// Append a provider attempt (success or failure). Allowed in any non-terminal state — retries
     /// and provider failovers are normal during Queued/Sent.

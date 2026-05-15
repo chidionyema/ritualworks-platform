@@ -19,14 +19,6 @@ internal sealed class StockService(
 
         logger.LogInformation("Reserving stock for {Count} products for Order {OrderId}", itemsList.Count, orderId);
 
-        // Check if reservation already exists
-        var existing = await db.StockReservations.FirstOrDefaultAsync(r => r.OrderId == orderId, ct);
-        if (existing != null)
-        {
-            logger.LogWarning("Reservation for Order {OrderId} already exists", orderId);
-            return Result.Success(); // Idempotent
-        }
-
         var aggregatedItems = itemsList
             .GroupBy(i => i.ProductId)
             .Select(g => new StockReservationItem
@@ -39,6 +31,17 @@ internal sealed class StockService(
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
+        // Check if reservation already exists — inside the transaction to
+        // prevent TOCTOU race where two concurrent reservations both pass
+        // the check before either inserts.
+        var existing = await db.StockReservations.FirstOrDefaultAsync(r => r.OrderId == orderId, ct);
+        if (existing != null)
+        {
+            logger.LogWarning("Reservation for Order {OrderId} already exists", orderId);
+            await transaction.RollbackAsync(ct);
+            return Result.Success(); // Idempotent
+        }
+
         try
         {
             foreach (var item in aggregatedItems)
@@ -49,7 +52,7 @@ internal sealed class StockService(
                     .Where(p => p.Id == item.ProductId && p.StockQuantity >= item.Quantity)
                     .ExecuteUpdateAsync(setters => setters
                         .SetProperty(p => p.StockQuantity, p => p.StockQuantity - item.Quantity)
-                        .SetProperty(p => p.IsInStock, p => p.StockQuantity > item.Quantity), ct);
+                        .SetProperty(p => p.IsInStock, p => p.StockQuantity - item.Quantity > 0), ct);
 
                 if (rowsAffected == 0)
                 {
@@ -98,6 +101,22 @@ internal sealed class StockService(
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         try
         {
+            // Atomically mark the reservation as released, guarded by
+            // ReleasedAt IS NULL to prevent double-release races.
+            var markedRows = await db.StockReservations
+                .Where(r => r.Id == reservation.Id && r.ReleasedAt == null)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(r => r.ReleasedAt, DateTime.UtcNow)
+                    .SetProperty(r => r.ReleaseReason, reason), ct);
+
+            if (markedRows == 0)
+            {
+                // Another thread already released this reservation.
+                logger.LogWarning("Reservation for Order {OrderId} already released, skipping", orderId);
+                await transaction.RollbackAsync(ct);
+                return;
+            }
+
             foreach (var item in items)
             {
                 if (item.Quantity <= 0) continue;
@@ -109,9 +128,6 @@ internal sealed class StockService(
                         .SetProperty(p => p.IsInStock, true), ct);
             }
 
-            reservation.MarkReleased(reason);
-            db.StockReservations.Update(reservation);
-            await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
         }
         catch (Exception ex)

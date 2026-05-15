@@ -1,5 +1,8 @@
+using Haworks.CheckoutOrchestrator.Application.Interfaces;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Haworks.CheckoutOrchestrator.Infrastructure;
 
@@ -9,7 +12,7 @@ namespace Haworks.CheckoutOrchestrator.Infrastructure;
 /// tables. Per ADR-0009 the saga has no business state of its own beyond
 /// the snapshot it needs to drive orchestration.
 /// </summary>
-public class CheckoutDbContext : DbContext
+public class CheckoutDbContext : DbContext, ICheckoutDbContext
 {
     private readonly IHostEnvironment _environment;
     private readonly ILoggerFactory _loggerFactory;

@@ -42,8 +42,7 @@ public sealed class VaultAppRoleAuthenticator : IVaultAppRoleAuthenticator
             throw new ArgumentException("Secret ID required.", nameof(secretId));
 
         var http = _httpClientFactory?.CreateClient(nameof(VaultAppRoleAuthenticator))
-                   ?? new HttpClient();
-        try
+                   ?? throw new InvalidOperationException("IHttpClientFactory is required — register a named client for VaultAppRoleAuthenticator");
         {
             http.BaseAddress ??= new Uri(vaultAddress);
 
@@ -79,13 +78,6 @@ public sealed class VaultAppRoleAuthenticator : IVaultAppRoleAuthenticator
 
             _logger?.LogInformation("[VaultAuth] AppRole login succeeded; token lease_duration={LeaseSeconds}s", leaseSeconds);
             return new VaultAppRoleLoginResult(token, leaseDuration);
-        }
-        finally
-        {
-            if (_httpClientFactory is null)
-            {
-                http.Dispose();
-            }
         }
     }
 }

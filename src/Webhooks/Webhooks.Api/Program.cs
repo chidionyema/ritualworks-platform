@@ -49,6 +49,8 @@ builder.Services.AddPlatformAuthentication(builder.Configuration);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHealthChecks()
+    .AddDbHealthCheck<Haworks.Webhooks.Infrastructure.Persistence.WebhooksDbContext>();
 
 var app = builder.Build();
 
@@ -58,7 +60,10 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+}
 
+if (!app.Environment.IsEnvironment("Test"))
+{
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<WebhooksDbContext>();
     await db.Database.MigrateAsync();

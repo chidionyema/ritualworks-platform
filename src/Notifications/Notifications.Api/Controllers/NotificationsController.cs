@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MediatR;
 using Haworks.Notifications.Application.Commands;
@@ -8,6 +9,7 @@ namespace Haworks.Notifications.Api.Controllers;
 
 [ApiController]
 [Route("api/notifications")]
+[Authorize]
 public sealed class NotificationsController(IMediator mediator) : ControllerBase
 {
     private readonly IMediator _mediator = mediator;

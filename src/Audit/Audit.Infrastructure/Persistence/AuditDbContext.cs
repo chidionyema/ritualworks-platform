@@ -23,6 +23,8 @@ public sealed class AuditDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasDefaultSchema("audit");
+
         modelBuilder.Entity<AuditEvent>(b =>
         {
             // Composite key — partitioning by occurred_at requires it in the PK.

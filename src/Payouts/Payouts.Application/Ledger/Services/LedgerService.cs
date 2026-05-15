@@ -23,17 +23,25 @@ public class LedgerService : ILedgerService
 
     public async Task CreditSellerAsync(Guid sellerId, decimal amount, string currency, Guid referenceId, string description)
     {
+        var profile = await _context.SellerProfiles.FirstOrDefaultAsync(p => p.SellerId == sellerId);
+        var commissionRate = profile?.CommissionPercentage ?? 10.00m;
+        var commission = Math.Round(amount * commissionRate / 100m, 2, MidpointRounding.AwayFromZero);
+        var sellerAmount = amount - commission;
+
         var transactionId = Guid.NewGuid();
         var sellerAccount = await GetOrCreateAccount(sellerId, AccountType.SellerPending, currency);
-        var platformAccount = await GetOrCreateAccount(SystemPlatformId, AccountType.PlatformHolding, currency);
+        var platformHoldingAccount = await GetOrCreateAccount(SystemPlatformId, AccountType.PlatformHolding, currency);
+        var platformRevenueAccount = await GetOrCreateAccount(SystemPlatformId, AccountType.PlatformRevenue, currency);
 
-        var sellerEntry = LedgerEntry.Create(sellerAccount.Id, transactionId, amount, EntryType.Credit, description, referenceId.ToString());
-        var platformEntry = LedgerEntry.Create(platformAccount.Id, transactionId, amount, EntryType.Debit, description, referenceId.ToString());
+        var sellerEntry = LedgerEntry.Create(sellerAccount.Id, transactionId, sellerAmount, EntryType.Credit, description, referenceId.ToString());
+        var platformEntry = LedgerEntry.Create(platformHoldingAccount.Id, transactionId, amount, EntryType.Debit, description, referenceId.ToString());
+        var commissionEntry = LedgerEntry.Create(platformRevenueAccount.Id, transactionId, commission, EntryType.Credit, $"Commission: {description}", referenceId.ToString());
 
-        sellerAccount.UpdateBalance(amount, EntryType.Credit);
-        platformAccount.UpdateBalance(amount, EntryType.Debit);
+        sellerAccount.UpdateBalance(sellerAmount, EntryType.Credit);
+        platformHoldingAccount.UpdateBalance(amount, EntryType.Debit);
+        platformRevenueAccount.UpdateBalance(commission, EntryType.Credit);
 
-        _context.LedgerEntries.AddRange(sellerEntry, platformEntry);
+        _context.LedgerEntries.AddRange(sellerEntry, platformEntry, commissionEntry);
         await _context.SaveChangesAsync();
     }
 

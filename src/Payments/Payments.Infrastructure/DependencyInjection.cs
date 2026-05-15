@@ -152,6 +152,7 @@ public static class DependencyInjection
         services.AddScoped<IPaymentAmountMismatchHandler, Application.Webhooks.PaymentAmountMismatchHandler>();
 
         services.AddHostedService<RefundTimeoutWatcher>();
+        services.AddHostedService<SubscriptionRenewalWatcher>();
 
         services.AddDomainEventPublisher();
 

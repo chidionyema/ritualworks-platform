@@ -21,24 +21,27 @@ public static class DependencyInjection
 
         services.AddScoped<IEventScheduler, HangfireEventScheduler>();
 
-        services.AddMassTransit(x =>
+        if (!env.IsEnvironment("Test"))
         {
-            x.AddEntityFrameworkOutbox<SchedulerDbContext>(o =>
+            services.AddMassTransit(x =>
             {
-                o.UsePostgres();
-                o.UseBusOutbox();
-            });
-
-            x.UsingRabbitMq((context, cfg) =>
-            {
-                var rabbitMqConfig = configuration.GetSection("RabbitMq");
-                cfg.Host(rabbitMqConfig["Host"], "/", h =>
+                x.AddEntityFrameworkOutbox<SchedulerDbContext>(o =>
                 {
-                    h.Username(rabbitMqConfig["Username"] ?? "guest");
-                    h.Password(rabbitMqConfig["Password"] ?? "guest");
+                    o.UsePostgres();
+                    o.UseBusOutbox();
+                });
+
+                x.UsingRabbitMq((context, cfg) =>
+                {
+                    var rabbitMqConfig = configuration.GetSection("RabbitMq");
+                    cfg.Host(rabbitMqConfig["Host"], "/", h =>
+                    {
+                        h.Username(rabbitMqConfig["Username"] ?? throw new InvalidOperationException("RabbitMq:Username is required"));
+                        h.Password(rabbitMqConfig["Password"] ?? throw new InvalidOperationException("RabbitMq:Password is required"));
+                    });
                 });
             });
-        });
+        }
 
         services.AddHangfire(config => config
             .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)

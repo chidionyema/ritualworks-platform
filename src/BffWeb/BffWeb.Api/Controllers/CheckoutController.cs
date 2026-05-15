@@ -46,7 +46,7 @@ public sealed class CheckoutController(
         activity?.SetTag("saga.id", sagaId);
         activity?.SetTag("order.id", orderId);
         activity?.SetTag("customer.id", userId);
-        activity?.SetTag("checkout.total_amount_cents", (long)(body.TotalAmount * 100m));
+        activity?.SetTag("checkout.total_amount_cents", (long)Math.Round(body.TotalAmount * 100m, 0, MidpointRounding.AwayFromZero));
         activity?.SetTag("checkout.item_count", body.Items.Count);
 
         // User-scoped idempotency key. Every retry of the *same* checkout from the

@@ -12,6 +12,8 @@ using Serilog;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.Services.AddHealthChecks()
+    .AddDbHealthCheck<PaymentDbContext>();
 
 // Vault: pull payments-svc's owned secrets (Stripe + PayPal) into
 // IConfiguration BEFORE DI build, so the existing IOptions<PaymentProviderOptions>
@@ -56,7 +58,9 @@ builder.Services.AddPlatformAuthentication(builder.Configuration);
 // IOptions<>; production gets the real value from Vault. The controller
 // guards with an explicit IsNullOrEmpty check.
 builder.Services.AddOptions<WebhookOptions>()
-    .Bind(builder.Configuration.GetSection(WebhookOptions.SectionName));
+    .Bind(builder.Configuration.GetSection(WebhookOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

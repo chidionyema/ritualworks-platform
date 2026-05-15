@@ -36,7 +36,7 @@ public class InitiatePrivacyRequestCommandHandler : IRequestHandler<InitiatePriv
         
         _context.PrivacyRequests.Add(privacyRequest);
         
-        await _publishEndpoint.Publish(new InitiatePrivacyRequestMessage(privacyRequest.Id, request.UserId), cancellationToken);
+        await _publishEndpoint.Publish(new InitiatePrivacyRequestMessage { RequestId = privacyRequest.Id, UserId = request.UserId }, cancellationToken);
         
         await _context.SaveChangesAsync(cancellationToken);
 

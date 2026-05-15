@@ -39,7 +39,7 @@ public sealed class ProviderRefundInitiationRequestedConsumer(
         var result = await gateway.Refunds.CreateRefundAsync(new RefundRequest
         {
             TransactionId = payment.ProviderTransactionId ?? string.Empty,
-            AmountCents = (long)(msg.Amount * 100m),
+            AmountCents = (long)Math.Round(msg.Amount * 100m, 0, MidpointRounding.AwayFromZero),
             Reason = "Refund requested via saga",
             Metadata = new Dictionary<string, string>
             {

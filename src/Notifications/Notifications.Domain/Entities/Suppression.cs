@@ -12,5 +12,16 @@ public sealed class Suppression : AuditableEntity
 
     private Suppression() { }
 
-    public static Suppression Create() => throw new NotImplementedException("Track L1.D owns this body");
+    public static Suppression Create(string recipientHash, NotificationChannel channel, string reason, string? sourceEventId = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(recipientHash);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        return new Suppression
+        {
+            RecipientHash = recipientHash,
+            Channel = channel,
+            Reason = reason,
+            SourceEventId = sourceEventId
+        };
+    }
 }

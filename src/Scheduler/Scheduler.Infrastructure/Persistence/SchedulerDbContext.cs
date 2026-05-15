@@ -1,3 +1,4 @@
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Haworks.Scheduler.Application.Common.Interfaces;
 
@@ -10,6 +11,9 @@ public class SchedulerDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
-        // No custom business entities yet, but we need the Outbox tables.
+        builder.HasDefaultSchema("scheduler");
+        builder.AddInboxStateEntity();
+        builder.AddOutboxStateEntity();
+        builder.AddOutboxMessageEntity();
     }
 }

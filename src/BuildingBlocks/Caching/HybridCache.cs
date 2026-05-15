@@ -69,6 +69,11 @@ public sealed class HybridCache : IHybridCache, IDisposable
         // 3. Lock & Factory (Stampede Protection)
         var @lock = GetStripe(key);
         bool lockAcquired = await @lock.WaitAsync(LockTimeout, ct);
+        if (!lockAcquired)
+        {
+            _logger.LogWarning("Cache lock timeout for {Key}, returning default", key);
+            return default;
+        }
 
         try
         {
@@ -91,7 +96,7 @@ public sealed class HybridCache : IHybridCache, IDisposable
         }
         finally
         {
-            if (lockAcquired) @lock.Release();
+            @lock.Release();
         }
     }
 

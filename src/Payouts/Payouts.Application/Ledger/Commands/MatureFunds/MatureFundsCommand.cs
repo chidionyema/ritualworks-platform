@@ -14,10 +14,19 @@ public class MatureFundsCommandHandler : IRequestHandler<MatureFundsCommand>
     public MatureFundsCommandHandler(IPayoutsDbContext context) { _context = context; }
     public async Task Handle(MatureFundsCommand request, CancellationToken cancellationToken)
     {
-        var pendingAccounts = await _context.LedgerAccounts.Where(a => a.Type == AccountType.SellerPending && a.Balance > 0).ToListAsync(cancellationToken);
+        var pendingAccounts = await _context.LedgerAccounts.Where(a => a.Type == AccountType.SellerPending && a.Balance > 0).Take(500).ToListAsync(cancellationToken);
+        var ownerIds = pendingAccounts.Select(a => a.OwnerId).ToList();
+        var payableAccounts = await _context.LedgerAccounts
+            .Where(a => ownerIds.Contains(a.OwnerId) && a.Type == AccountType.SellerPayable)
+            .ToDictionaryAsync(a => (a.OwnerId, a.Currency), cancellationToken);
         foreach (var pendingAccount in pendingAccounts)
         {
-            var payableAccount = await _context.LedgerAccounts.FirstOrDefaultAsync(a => a.OwnerId == pendingAccount.OwnerId && a.Type == AccountType.SellerPayable && a.Currency == pendingAccount.Currency, cancellationToken) ?? LedgerAccount.Create(pendingAccount.OwnerId, AccountType.SellerPayable, pendingAccount.Currency);
+            var key = (pendingAccount.OwnerId, pendingAccount.Currency);
+            if (!payableAccounts.TryGetValue(key, out var payableAccount))
+            {
+                payableAccount = LedgerAccount.Create(pendingAccount.OwnerId, AccountType.SellerPayable, pendingAccount.Currency);
+                payableAccounts[key] = payableAccount;
+            }
             if (payableAccount.Id == Guid.Empty || !_context.LedgerAccounts.Local.Contains(payableAccount)) _context.LedgerAccounts.Add(payableAccount);
             var amount = pendingAccount.Balance;
             pendingAccount.UpdateBalance(amount, EntryType.Debit);

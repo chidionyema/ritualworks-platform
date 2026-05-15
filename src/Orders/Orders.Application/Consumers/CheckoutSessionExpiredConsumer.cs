@@ -75,12 +75,12 @@ public sealed class CheckoutSessionExpiredConsumer(
             }).ToList()
         }, context.CancellationToken);
 
-        // We don't need to call SaveChangesAsync here because MarkStockReleasedAsync 
-        // uses ExecuteUpdateAsync which executes immediately, and the publish uses 
-        // the outbox which is wired to commit with the bus (or would commit with 
-        // a transaction if we had one open, but here it's an atomic DB update 
-        // followed by a publish).
-        
+        // ExecuteUpdateAsync bypasses EF change tracking, so the outbox rows
+        // written by PublishAsync have NOT been flushed yet. Explicit
+        // SaveChangesAsync ensures the outbox message is committed to the DB
+        // so the BusOutboxDeliveryService can pick it up.
+        await orders.SaveChangesAsync(context.CancellationToken);
+
         logger.LogInformation("Order {OrderId} marked Expired; published StockReleaseRequestedEvent", order.Id);
     }
 }

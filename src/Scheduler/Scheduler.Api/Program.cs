@@ -27,6 +27,8 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHealthChecks()
+    .AddDbHealthCheck<Haworks.Scheduler.Infrastructure.Persistence.SchedulerDbContext>();
 
 var app = builder.Build();
 
