@@ -27,6 +27,19 @@ primary_region = "iad"
   min_machines_running = 1
   processes            = ["app"]
 
+
+  # Zero-downtime: Fly only routes traffic after readiness check passes.
+  # Old machine keeps serving until new one is healthy.
+
+[[http_service.checks]]
+  grace_period = "30s"
+  interval     = "10s"
+  method       = "GET"
+  timeout      = "5s"
+  path         = "/health/ready"
+
+[deploy]
+  strategy = "rolling"
 [[vm]]
   memory   = "512mb"
   cpu_kind = "shared"
