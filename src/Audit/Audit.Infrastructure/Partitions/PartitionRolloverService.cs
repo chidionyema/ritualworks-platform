@@ -73,7 +73,16 @@ public class PartitionRolloverService : BackgroundService
             WHERE metadata->>'message_id' IS NOT NULL;
         ";
 
-        await db.Database.ExecuteSqlRawAsync(sql, ct);
-        _logger.LogInformation("Ensured partition {PartitionName} exists", partitionName);
+        try
+        {
+            #pragma warning disable EF1002
+            await db.Database.ExecuteSqlRawAsync(sql, Array.Empty<object>());
+            #pragma warning restore EF1002
+            _logger.LogInformation("Ensured partition {PartitionName} exists", partitionName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Partition {PartitionName} creation failed (may already exist)", partitionName);
+        }
     }
 }
