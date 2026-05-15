@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MassTransit;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Haworks.Contracts.Payments;
@@ -23,6 +24,8 @@ namespace Haworks.Payments.Api.Controllers;
 /// Per ADR-0009 this controller injects no IOrderRepository / no
 /// foreign-context types. It only writes the validated event.
 /// </summary>
+// Webhook endpoints are called by payment providers — signature validation replaces auth
+[AllowAnonymous]
 [ApiController]
 [Route("webhooks")]
 public sealed class WebhooksController(

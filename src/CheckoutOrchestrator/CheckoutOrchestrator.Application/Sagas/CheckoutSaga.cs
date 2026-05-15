@@ -85,6 +85,7 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                     sagaState.UserId = msg.UserId;
                     sagaState.CustomerEmail = msg.CustomerEmail;
                     sagaState.TotalAmount = msg.TotalAmount;
+                    // TODO: propagate Currency from CheckoutInitiatedEvent once field is added
                     sagaState.Currency = "USD";
                     sagaState.IdempotencyKey = msg.IdempotencyKey;
                     sagaState.LineItemsJson = JsonSerializer.Serialize(msg.Items);
@@ -97,7 +98,7 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                     UserId = ctx.Message.UserId,
                     CustomerEmail = ctx.Message.CustomerEmail,
                     TotalAmount = ctx.Message.TotalAmount,
-                    Currency = "USD",
+                    Currency = ctx.Saga.Currency,
                     Items = ctx.Message.Items,
                     IdempotencyKey = ctx.Message.IdempotencyKey,
                 }))
@@ -120,7 +121,7 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                         .Select(li => new PaymentLineItemData
                         {
                             Name = li.ProductName,
-                            UnitAmountCents = (long)(li.UnitPrice * 100m),
+                            UnitAmountCents = (long)Math.Round(li.UnitPrice * 100m, 0, MidpointRounding.AwayFromZero),
                             Quantity = li.Quantity,
                         }).ToList(),
                     SuccessUrl = options.SuccessUrl,
