@@ -1,5 +1,4 @@
 using Haworks.BuildingBlocks.Messaging;
-using Haworks.BuildingBlocks.Persistence;
 using Haworks.BuildingBlocks.Vault;
 using Haworks.Location.Application.Interfaces;
 using Haworks.Location.Infrastructure.Persistence;
@@ -10,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace Haworks.Location.Infrastructure;
 
@@ -30,23 +30,28 @@ public static class DependencyInjection
         if (vaultEnabled)
         {
             services.AddVaultIntegration(configuration);
+            services.AddVaultNpgsqlDataSource(connectionString, "haworks-location");
         }
 
         services.AddDbContext<LocationDbContext>((sp, options) =>
         {
-            options.UseNpgsql(connectionString, npgsql =>
-            {
-                npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "location");
-                // Enable NetTopologySuite for PostGIS support
-                npgsql.UseNetTopologySuite();
-            });
-
             if (vaultEnabled)
             {
-                options.AddInterceptors(new DynamicCredentialsConnectionInterceptor(
-                    sp.GetRequiredService<IVaultService>(),
-                    roleName: "haworks-location",
-                    sp.GetRequiredService<ILogger<DynamicCredentialsConnectionInterceptor>>()));
+                options.UseNpgsql(sp.GetRequiredService<NpgsqlDataSource>(), npgsql =>
+                {
+                    npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "location");
+                    // Enable NetTopologySuite for PostGIS support
+                    npgsql.UseNetTopologySuite();
+                });
+            }
+            else
+            {
+                options.UseNpgsql(connectionString, npgsql =>
+                {
+                    npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "location");
+                    // Enable NetTopologySuite for PostGIS support
+                    npgsql.UseNetTopologySuite();
+                });
             }
         });
 

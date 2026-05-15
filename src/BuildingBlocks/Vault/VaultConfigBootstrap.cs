@@ -99,33 +99,16 @@ public static class VaultConfigBootstrap
         // shape-detection would be brittle.
         if (configuration.GetValue<bool>("Vault:SecretIdIsWrapped"))
         {
-            // Check for a cached raw secret_id from a previous successful unwrap.
-            // Wrapping tokens are one-time-use — on machine restart (same secrets),
-            // the token is already consumed. The cache file survives restarts.
-            var cacheFile = Path.Combine(Path.GetTempPath(), ".vault-secret-id");
-            if (File.Exists(cacheFile))
+            try
             {
-                secretId = File.ReadAllText(cacheFile).Trim();
-                logger?.LogInformation(
-                    "[VaultBootstrap] Using cached raw secret_id from previous unwrap (restart-safe)");
+                secretId = await UnwrapSecretIdAsync(address, secretId, ct);
+                logger?.LogInformation("[VaultBootstrap] Unwrapped secret_id (caching removed for security)");
             }
-            else
+            catch (Exception ex)
             {
-                try
-                {
-                    secretId = await UnwrapSecretIdAsync(address, secretId, ct);
-                    // Cache the raw secret_id so machine restarts don't need a new wrapping token.
-                    // File is in /tmp which is ephemeral to the machine (not persisted across deploys).
-                    File.WriteAllText(cacheFile, secretId);
-                    logger?.LogInformation(
-                        "[VaultBootstrap] Unwrapped and cached secret_id (restart-safe)");
-                }
-                catch (Exception ex)
-                {
-                    logger?.LogError(ex,
-                        "[VaultBootstrap] Failed to unwrap Vault:SecretId. The wrapper token may have expired (5min default TTL) or already been used. Re-run ci-stage-vault-creds.sh to issue a fresh wrapper.");
-                    throw;
-                }
+                logger?.LogError(ex,
+                    "[VaultBootstrap] Failed to unwrap Vault:SecretId. The wrapper token may have expired (5min default TTL) or already been used. Re-run ci-stage-vault-creds.sh to issue a fresh wrapper.");
+                throw;
             }
         }
 

@@ -6,9 +6,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.CheckoutOrchestrator.Infrastructure.Messaging;
-using Haworks.BuildingBlocks.Persistence;
 using Haworks.BuildingBlocks.Vault;
 using Haworks.CheckoutOrchestrator.Application.Sagas;
+using Npgsql;
 
 namespace Haworks.CheckoutOrchestrator.Infrastructure;
 
@@ -23,31 +23,35 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "ConnectionStrings:checkout is missing. Aspire injects it via WithReference(checkoutDb).");
 
-        // Vault: dynamic Postgres creds via DynamicCredentialsConnectionInterceptor.
+        // Vault: dynamic Postgres creds via NpgsqlDataSource with PeriodicPasswordProvider.
         // Role haworks-checkout-orchestrator matches infra/vault/database/roles.json.
         var vaultEnabled = configuration.GetValue("Vault:Enabled", false)
             && !env.IsEnvironment("Test");
         if (vaultEnabled)
         {
             services.AddVaultIntegration(configuration);
+            services.AddVaultNpgsqlDataSource(connectionString, "haworks-checkout-orchestrator");
         }
 
         services.AddDbContext<CheckoutDbContext>((sp, options) =>
         {
-            options.UseNpgsql(connectionString, npgsql =>
-            {
-                npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "checkout");
-                npgsql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromMilliseconds(500), errorCodesToAdd: null);
-            });
-            options.ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
-
             if (vaultEnabled)
             {
-                options.AddInterceptors(new DynamicCredentialsConnectionInterceptor(
-                    sp.GetRequiredService<IVaultService>(),
-                    roleName: "haworks-checkout-orchestrator",
-                    sp.GetRequiredService<ILogger<DynamicCredentialsConnectionInterceptor>>()));
+                options.UseNpgsql(sp.GetRequiredService<NpgsqlDataSource>(), npgsql =>
+                {
+                    npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "checkout");
+                    npgsql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromMilliseconds(500), errorCodesToAdd: null);
+                });
             }
+            else
+            {
+                options.UseNpgsql(connectionString, npgsql =>
+                {
+                    npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "checkout");
+                    npgsql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromMilliseconds(500), errorCodesToAdd: null);
+                });
+            }
+            options.ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
         });
 
         services.AddScoped<Haworks.CheckoutOrchestrator.Application.Interfaces.ICheckoutDbContext>(sp => sp.GetRequiredService<CheckoutDbContext>());

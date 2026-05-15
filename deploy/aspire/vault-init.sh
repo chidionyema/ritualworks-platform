@@ -145,14 +145,10 @@ fi
 PG_PORT="${PG_PORT:-5432}"
 
 DB_ROLES="$MANIFESTS/database/roles.json"
-DB_STMTS="$MANIFESTS/database/role-statements.json"
 DB_CONN_NAME=$(jq -r '.connection_name' "$DB_ROLES")
 DB_PLUGIN=$(jq -r '.plugin_name' "$DB_ROLES")
-DB_DEFAULT_TTL=$(jq -r '.default_ttl' "$DB_ROLES")
-DB_MAX_TTL=$(jq -r '.max_ttl' "$DB_ROLES")
+DB_ROTATION_PERIOD=$(jq -r '.rotation_period' "$DB_ROLES")
 DB_ALLOWED_ROLES=$(jq -r '.roles | map(.role_name) | join(",")' "$DB_ROLES")
-DB_CREATION_TMPL=$(jq -r '.creation_statements' "$DB_STMTS")
-DB_REVOCATION_TMPL=$(jq -r '.revocation_statements' "$DB_STMTS")
 
 log "Configuring postgres connection at $PG_HOST:$PG_PORT (user=$PG_USER)"
 vault write "database/config/$DB_CONN_NAME" \
@@ -162,24 +158,18 @@ vault write "database/config/$DB_CONN_NAME" \
     username="$PG_USER" \
     password="$PG_PASS" >/dev/null
 
-# Per-bounded-context dynamic roles. Each issued user joins the matching
-# <db>_owner group role, inheriting full privileges on that database only.
+# Per-bounded-context static roles.
 ROLE_COUNT=$(jq -r '.roles | length' "$DB_ROLES")
 i=0
 while [ "$i" -lt "$ROLE_COUNT" ]; do
     ROLE_NAME=$(jq -r ".roles[$i].role_name"  "$DB_ROLES")
-    OWNER=$(jq    -r ".roles[$i].owner_group" "$DB_ROLES")
+    USERNAME=$(jq    -r ".roles[$i].username" "$DB_ROLES")
 
-    CREATION=$(printf '%s'   "$DB_CREATION_TMPL"   | sed "s/{{owner}}/$OWNER/g")
-    REVOCATION=$(printf '%s' "$DB_REVOCATION_TMPL" | sed "s/{{owner}}/$OWNER/g")
-
-    vault write "database/roles/$ROLE_NAME" \
+    vault write "database/static-roles/$ROLE_NAME" \
         db_name="$DB_CONN_NAME" \
-        creation_statements="$CREATION" \
-        revocation_statements="$REVOCATION" \
-        default_ttl="$DB_DEFAULT_TTL" \
-        max_ttl="$DB_MAX_TTL" >/dev/null
-    log "Configured dynamic role $ROLE_NAME -> group $OWNER"
+        rotation_period="$DB_ROTATION_PERIOD" \
+        username="$USERNAME" >/dev/null
+    log "Configured static role $ROLE_NAME -> user $USERNAME"
 
     i=$((i + 1))
 done

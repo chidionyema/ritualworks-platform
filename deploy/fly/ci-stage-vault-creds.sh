@@ -126,27 +126,42 @@ if [[ "$init_json" != "NOFILE" ]] && echo "$init_json" | jq -e '.unseal_keys_b64
   unseal_key=$(echo "$init_json" | jq -r '.unseal_keys_b64[0]')
   root_token=$(echo "$init_json" | jq -r '.root_token')
   if [[ -n "$unseal_key" && "$unseal_key" != "null" ]]; then
+    log "creating CI deployer policy and token..."
+    fly_ssh "sh -c \"cat <<EOF > /tmp/ci-policy.hcl
+path \\\"auth/approle/role/*/role-id\\\" { capabilities = [\\\"read\\\"] }
+path \\\"auth/approle/role/*/secret-id\\\" { capabilities = [\\\"update\\\"] }
+EOF
+curl -fsS -X PUT -H 'X-Vault-Token: $root_token' --data-binary @/tmp/ci-policy.hcl http://[::1]:8200/v1/sys/policies/acl/ci-deployer\"" >/dev/null
+
+    ci_token_json=$(fly_ssh "sh -c \"curl -fsS -X POST -H 'X-Vault-Token: $root_token' -d '{\\\"policies\\\": [\\\"ci-deployer\\\"], \\\"period\\\": \\\"720h\\\"}' http://[::1]:8200/v1/auth/token/create\"")
+    ci_token=$(echo "$ci_token_json" | jq -r '.auth.client_token')
+
     mask "$unseal_key"
-    mask "$root_token"
-    log "staging VAULT_UNSEAL_KEY + VAULT_ROOT_TOKEN_PROD on $VAULT_APP"
+    mask "$ci_token"
+    log "staging VAULT_UNSEAL_KEY + VAULT_CI_TOKEN on $VAULT_APP"
     flyctl secrets set --stage -a "$VAULT_APP" \
       "VAULT_UNSEAL_KEY=$unseal_key" \
-      "VAULT_ROOT_TOKEN_PROD=$root_token" >/dev/null
+      "VAULT_CI_TOKEN=$ci_token" >/dev/null
+
+    log "revoking root token..."
+    fly_ssh "sh -c \"curl -fsS -X POST -H 'X-Vault-Token: $root_token' http://[::1]:8200/v1/auth/token/revoke-self\"" >/dev/null || true
+
+    root_token="$ci_token"
   fi
 else
   log "no .init.json on disk (already captured in a prior run, or vault is sealed)"
 fi
 
-# Need a root token. Prefer the one we just captured; fall back to env.
+# Need a root token or CI token. Prefer the one we just captured; fall back to env.
 if [[ -z "$root_token" ]]; then
-  log "no root token in this run's context — fetching from vault env"
-  root_token=$(fly_ssh 'sh -c "printenv VAULT_ROOT_TOKEN_PROD"' | head -1)
+  log "no token in this run's context — fetching VAULT_CI_TOKEN from vault env"
+  root_token=$(fly_ssh 'sh -c "printenv VAULT_CI_TOKEN"' | head -1)
   [[ -n "$root_token" ]] && mask "$root_token"
 fi
 
 if [[ -z "$root_token" || "$root_token" == "null" ]]; then
-  log "ERROR: no root token available — cannot capture AppRole creds."
-  log "       Re-run after VAULT_ROOT_TOKEN_PROD propagates (one redeploy)."
+  log "ERROR: no CI token available — cannot capture AppRole creds."
+  log "       Re-run after VAULT_CI_TOKEN propagates (one redeploy)."
   exit 1
 fi
 
