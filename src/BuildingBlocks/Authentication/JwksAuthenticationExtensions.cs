@@ -62,7 +62,7 @@ public static class JwksAuthenticationExtensions
         });
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, _ => { });
+            .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme);
 
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
             .Configure<IServiceProvider>((bearer, sp) =>
