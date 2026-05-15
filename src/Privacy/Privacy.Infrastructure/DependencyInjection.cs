@@ -34,6 +34,7 @@ public static class DependencyInjection
         }
 
         services.AddHostedService<ErasureStalledWatcher>();
+        services.AddHostedService<ErasureHealthWatcher>();
 
         services.AddMassTransit(x =>
         {
