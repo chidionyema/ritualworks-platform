@@ -16,7 +16,11 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         var connectionString = configuration.GetConnectionString("payouts");
-        services.AddDbContext<PayoutsDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddDbContext<PayoutsDbContext>(options =>
+        {
+            options.UseNpgsql(connectionString);
+            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        });
         services.AddScoped<IPayoutsDbContext>(provider => provider.GetRequiredService<PayoutsDbContext>());
         services.AddScoped<IPayoutGateway, StripePayoutGateway>();
         services.AddScoped<Haworks.Payouts.Application.Ledger.Services.ILedgerService, Haworks.Payouts.Application.Ledger.Services.LedgerService>();
