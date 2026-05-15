@@ -100,12 +100,27 @@ public sealed class AuditWriter : IAuditWriter, IAsyncDisposable
                 await connection.OpenAsync();
             }
 
+            // Deduplicate within the batch by message_id before COPY.
+            // COPY is all-or-nothing — a duplicate message_id in the same batch
+            // violates the unique index and rejects ALL rows.
+            var seen = new HashSet<string>();
+            var deduped = new List<PendingRow>();
+            foreach (var p in batch)
+            {
+                var meta = p.Row.Metadata;
+                var msgId = meta.TryGetProperty("message_id", out var mid) ? mid.GetString() : null;
+                if (msgId == null || seen.Add(msgId))
+                    deduped.Add(p);
+                else
+                    _logger.LogDebug("AuditWriter: skipping duplicate message_id {MessageId} within batch", msgId);
+            }
+
             await using var writer = await connection.BeginBinaryImportAsync(
                 "COPY audit.audit_events (id, occurred_at, received_at, event_type, entity_type, entity_id, actor_id, actor_type, correlation_id, payload, metadata) FROM STDIN (FORMAT BINARY)");
 
             try
             {
-                foreach (var pending in batch)
+                foreach (var pending in deduped)
                 {
                     var row = pending.Row;
                     await writer.StartRowAsync();
