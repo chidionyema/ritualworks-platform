@@ -33,10 +33,7 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 builder.Services.AddHealthChecks()
     .AddDbHealthCheck<Haworks.CheckoutOrchestrator.Infrastructure.CheckoutDbContext>();
 
-builder.Logging.AddFilter("Microsoft.AspNetCore.Authentication", Microsoft.Extensions.Logging.LogLevel.Debug);
-builder.Logging.AddFilter("Microsoft.AspNetCore.Authentication.JwtBearer", Microsoft.Extensions.Logging.LogLevel.Debug);
 
-builder.Logging.AddFilter("Microsoft.AspNetCore.Authentication", (global::Microsoft.Extensions.Logging.LogLevel)1);var app = builder.Build();
 
 if (!app.Environment.IsEnvironment("Test"))
 {
@@ -59,9 +56,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-// Debug JWT auth
-builder.Logging.AddFilter("Microsoft.AspNetCore.Authentication", Microsoft.Extensions.Logging.Microsoft.Extensions.Logging.LogLevel.Debug);
-builder.Logging.AddFilter("Microsoft.AspNetCore.Authentication.JwtBearer", Microsoft.Extensions.Logging.Microsoft.Extensions.Logging.LogLevel.Debug);app.UseAuthentication();
 app.UseAuthorization();
 // Idempotency middleware — opt-in via X-Idempotency-Key. Server-side
 // scoped by UserId; checkout's POST /api/checkouts is the highest-value
