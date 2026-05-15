@@ -1,5 +1,6 @@
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BuildingBlocks.Persistence;
+using Haworks.BuildingBlocks.Startup;
 using Haworks.BuildingBlocks.Vault;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -50,6 +51,7 @@ if (builder.Configuration.GetValue("Vault:Enabled", false)
 
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddApplication(builder.Configuration);
+builder.Services.AddStartupTaskRunner();
 
 // Vault probe HttpClient — used by AdminController.GetVaultStatus to
 // make a real /v1/sys/health round-trip every time it's called. Only
@@ -130,46 +132,49 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 
 var app = builder.Build();
 
-// Auto-apply EF migrations on startup. Identity-svc owns its DB schema, so
-// it's the only thing that should be writing DDL. In a polyrepo world this
-// also means: deploying identity-svc is the ONLY way the identity DB schema
-// changes — no shared migration runner, no other service touching its tables.
-//
-// In production this should be gated behind an opt-in flag and run via a
-// separate Job container instead of inline at API startup. For dev + portfolio
-// this is fast and obvious.
 if (!app.Environment.IsEnvironment("Test"))
 {
-    using var scope = app.Services.CreateScope();
+    var startupRunner = app.Services.GetRequiredService<StartupTaskRunner>();
 
     // 1. Apply EF migrations (creates tables in 'identity' schema)
-    var db = scope.ServiceProvider
-        .GetRequiredService<Haworks.Identity.Infrastructure.AppIdentityDbContext>();
-    var migrateLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    await db.Database.MigrateWithRetryAsync(migrateLogger);
+    startupRunner.AddTask(async (sp, ct) =>
+    {
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Haworks.Identity.Infrastructure.AppIdentityDbContext>();
+        var migrateLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        await db.Database.MigrateWithRetryAsync(migrateLogger, ct);
+    });
 
     // 2. Seed canonical roles. RegisterCommand assigns new users to
     //    "ContentUploader" by default; without this seed step the first
     //    register call 500s with "Role does not exist".
-    var roleManager = scope.ServiceProvider
-        .GetRequiredService<Microsoft.AspNetCore.Identity.RoleManager<Microsoft.AspNetCore.Identity.IdentityRole>>();
-    foreach (var roleName in new[] { "Admin", "ContentUploader", "User" })
+    startupRunner.AddTask(async (sp, ct) =>
     {
-        if (!await roleManager.RoleExistsAsync(roleName))
+        using var scope = sp.CreateScope();
+        var roleManager = scope.ServiceProvider
+            .GetRequiredService<Microsoft.AspNetCore.Identity.RoleManager<Microsoft.AspNetCore.Identity.IdentityRole>>();
+        foreach (var roleName in (string[]) ["Admin", "ContentUploader", "User"])
         {
-            await roleManager.CreateAsync(new Microsoft.AspNetCore.Identity.IdentityRole(roleName));
+            if (!await roleManager.RoleExistsAsync(roleName))
+            {
+                await roleManager.CreateAsync(new Microsoft.AspNetCore.Identity.IdentityRole(roleName));
+            }
         }
-    }
+    });
 
     // 3. Initialize the RSA signing keypair from Vault (generates on first run,
-    //    reads back on subsequent runs). Must complete before request handling
-    //    so JwtTokenService has a SigningKey to use.
-    var keyProvider = scope.ServiceProvider
-        .GetRequiredService<Haworks.BuildingBlocks.Vault.IJwtSigningKeyProvider>();
-    if (keyProvider is Haworks.BuildingBlocks.Vault.VaultJwtSigningKeyProvider vaultProvider)
+    //    reads back on subsequent runs). Runs async — JwtTokenService will use
+    //    the key once IsReady is true and the readiness check passes.
+    startupRunner.AddTask(async (sp, ct) =>
     {
-        await vaultProvider.InitializeAsync();
-    }
+        using var scope = sp.CreateScope();
+        var keyProvider = scope.ServiceProvider
+            .GetRequiredService<Haworks.BuildingBlocks.Vault.IJwtSigningKeyProvider>();
+        if (keyProvider is Haworks.BuildingBlocks.Vault.VaultJwtSigningKeyProvider vaultProvider)
+        {
+            await vaultProvider.InitializeAsync(ct);
+        }
+    });
 }
 
 app.MapDefaultEndpoints();

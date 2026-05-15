@@ -3,6 +3,7 @@ using Haworks.Audit.Application.Capture;
 using Haworks.Audit.Infrastructure.Persistence;
 using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
+using Haworks.BuildingBlocks.Startup;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -21,6 +22,7 @@ builder.Services.AddDbContext<AuditDbContext>(options =>
 });
 
 builder.Services.AddAuditApplication();
+builder.Services.AddStartupTaskRunner();
 
 // MassTransit + RabbitMQ. L1.B fills in AuditMassTransit.RegisterConsumers
 // (an empty static stub from L0) — this gives L1.B a write seam without
@@ -59,12 +61,16 @@ var app = builder.Build();
 
 if (!app.Environment.IsEnvironment("Test"))
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
-    // L0 ships no migrations; the call is a no-op until L1.B adds the
-    // partitioned-table migration. Wired now so the L1.B PR doesn't have
-    // to touch Program.cs.
-    await db.Database.MigrateAsync();
+    var startupRunner = app.Services.GetRequiredService<StartupTaskRunner>();
+    startupRunner.AddTask(async (sp, ct) =>
+    {
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
+        // L0 ships no migrations; the call is a no-op until L1.B adds the
+        // partitioned-table migration. Wired now so the L1.B PR doesn't have
+        // to touch Program.cs.
+        await db.Database.MigrateAsync(ct);
+    });
 }
 
 app.MapDefaultEndpoints();

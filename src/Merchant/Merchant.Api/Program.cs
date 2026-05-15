@@ -4,6 +4,7 @@ using Haworks.Merchant.Infrastructure.Persistence;
 using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BuildingBlocks.Persistence;
+using Haworks.BuildingBlocks.Startup;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -21,6 +22,7 @@ builder.Host.UseSerilog((context, loggerConfiguration) => loggerConfiguration
 // Add layers
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
+builder.Services.AddStartupTaskRunner();
 
 builder.Services.AddJwksAuthentication(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
@@ -31,13 +33,16 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Auto-apply EF migrations at startup. 
 if (!app.Environment.IsEnvironment("Test"))
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<MerchantDbContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    await db.Database.MigrateWithRetryAsync(logger);
+    var startupRunner = app.Services.GetRequiredService<StartupTaskRunner>();
+    startupRunner.AddTask(async (sp, ct) =>
+    {
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MerchantDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        await db.Database.MigrateWithRetryAsync(logger, ct);
+    });
 }
 
 // Configure the HTTP request pipeline
