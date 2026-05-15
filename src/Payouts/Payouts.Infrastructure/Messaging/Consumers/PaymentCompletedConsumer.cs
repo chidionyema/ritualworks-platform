@@ -20,7 +20,11 @@ public class PaymentCompletedConsumer : IConsumer<PaymentCompletedEvent>
     {
         var @event = context.Message;
         _logger.LogInformation("Processing payment completion for Order: {OrderId}, Amount: {Amount}", @event.OrderId, @event.Amount);
-        Guid sellerId = Guid.NewGuid(); // Placeholder
+        // TODO: PaymentCompletedEvent does not carry SellerId. A contract change
+        // (adding SellerId to the event) or an order-lookup service is needed to
+        // resolve the seller. Using OrderId as a deterministic placeholder until
+        // the contract is updated.
+        Guid sellerId = @event.OrderId;
         await _ledgerService.CreditSellerAsync(sellerId, @event.Amount, @event.Currency, @event.PaymentId, $"Payment for Order {@event.OrderId}");
     }
 }

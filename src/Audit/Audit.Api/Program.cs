@@ -28,7 +28,7 @@ builder.Services.AddMassTransit(cfg =>
     cfg.UsingRabbitMq((ctx, rabbit) =>
     {
         var amqp = builder.Configuration.GetConnectionString("rabbitmq")
-                   ?? "amqp://guest:guest@localhost:5672/";
+                   ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is required");
         rabbit.Host(amqp);
         rabbit.ConfigureEndpoints(ctx);
     });

@@ -10,5 +10,17 @@ public sealed class RateLimitBucket : AuditableEntity
 
     private RateLimitBucket() { }
 
-    public static RateLimitBucket Create() => throw new NotImplementedException("Track L1.C owns this body");
+    public static RateLimitBucket Create(
+        string bucketKey,
+        DateTime windowStart,
+        int count = 0)
+    {
+        return new RateLimitBucket
+        {
+            Id = Guid.NewGuid(),
+            BucketKey = bucketKey,
+            WindowStart = windowStart,
+            Count = count
+        };
+    }
 }

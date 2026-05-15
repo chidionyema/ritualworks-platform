@@ -13,5 +13,21 @@ public sealed class NotificationPreference : AuditableEntity
 
     private NotificationPreference() { }
 
-    public static NotificationPreference Create() => throw new NotImplementedException("Track L1.C owns this body");
+    public static NotificationPreference Create(
+        string userId,
+        string category,
+        NotificationChannel channel,
+        bool isEnabled,
+        string? quietHoursJson = null)
+    {
+        return new NotificationPreference
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Category = category,
+            Channel = channel,
+            IsEnabled = isEnabled,
+            QuietHoursJson = quietHoursJson
+        };
+    }
 }
