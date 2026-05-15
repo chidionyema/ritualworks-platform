@@ -62,28 +62,29 @@ public static class JwksAuthenticationExtensions
         });
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, _ => { });
-
-        services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-            .Configure<IServiceProvider>((bearer, sp) =>
+            .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, bearer =>
             {
-                var jwks = sp.GetRequiredService<IOptions<JwksOptions>>().Value;
-                var manager = sp.GetRequiredService<IConfigurationManager<OpenIdConnectConfiguration>>();
-                var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-                var logger = loggerFactory.CreateLogger("Haworks.BuildingBlocks.Authentication.Jwks");
+                var jwksSection = configuration.GetSection(JwksOptions.SectionName);
+                var jwksUri = jwksSection["JwksUri"] ?? throw new InvalidOperationException("JwksOptions:JwksUri required");
+                var issuer = jwksSection["Issuer"] ?? throw new InvalidOperationException("JwksOptions:Issuer required");
+                var audience = jwksSection["Audience"] ?? throw new InvalidOperationException("JwksOptions:Audience required");
+
+                // Fetch JWKS keys at startup
+                using var httpClient = new HttpClient();
+                var jwksJson = httpClient.GetStringAsync(jwksUri).GetAwaiter().GetResult();
+                var jwks = new JsonWebKeySet(jwksJson);
 
                 bearer.MapInboundClaims = false;
                 bearer.TokenValidationParameters = new TokenValidationParameters
                 {
-                    ValidIssuer = jwks.Issuer,
-                    ValidAudience = jwks.Audience,
+                    ValidIssuer = issuer,
+                    ValidAudience = audience,
                     ValidateIssuer = true,
                     ValidateAudience = true,
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
                     ClockSkew = TimeSpan.FromSeconds(30),
-                    IssuerSigningKeyResolver = (token, securityToken, kid, parameters) =>
-                        ResolveKeys(manager, kid, logger),
+                    IssuerSigningKeys = jwks.GetSigningKeys(),
                 };
             });
 
