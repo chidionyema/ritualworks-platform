@@ -1193,6 +1193,115 @@ public sealed class PlatformGuardTests
         // Informational — some events may be consumed by external services
     }
 
+    // ─── Integration Test Factory Quality (from CI debugging) ────────
+
+    [Fact]
+    public void No_EnsureDeletedAsync_in_test_factories()
+    {
+        var testRoot = Path.Combine(Directory.GetParent(SrcRoot)!.FullName, "tests");
+        if (!Directory.Exists(testRoot)) return;
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(testRoot, "*Factory.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("bin")))
+        {
+            var content = File.ReadAllText(file);
+            if (content.Contains("EnsureDeletedAsync"))
+            {
+                violations.Add($"{Relative(file)}: EnsureDeletedAsync drops the entire database — use fresh DB from SharedTestPostgres instead");
+            }
+        }
+        violations.Should().BeEmpty("test factories must never call EnsureDeletedAsync — it drops the DB");
+    }
+
+    [Fact]
+    public void Test_factories_create_schema_before_EnsureCreated()
+    {
+        var testRoot = Path.Combine(Directory.GetParent(SrcRoot)!.FullName, "tests");
+        if (!Directory.Exists(testRoot)) return;
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(testRoot, "*Factory.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("bin")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("EnsureCreatedAsync")) continue;
+            // Find which schema the service uses
+            var serviceName = Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(file)) ?? "");
+            // Check if the corresponding DbContext uses HasDefaultSchema
+            var dbContextFiles = FindDbContextFiles()
+                .Where(f => f.Contains(serviceName, StringComparison.OrdinalIgnoreCase));
+            foreach (var dbCtx in dbContextFiles)
+            {
+                var dbContent = File.ReadAllText(dbCtx);
+                var schemaMatch = Regex.Match(dbContent, @"HasDefaultSchema\(""(\w+)""\)");
+                if (schemaMatch.Success && !content.Contains($"CREATE SCHEMA IF NOT EXISTS {schemaMatch.Groups[1].Value}"))
+                {
+                    violations.Add($"{Relative(file)}: uses EnsureCreatedAsync but doesn't CREATE SCHEMA '{schemaMatch.Groups[1].Value}' first — tables won't be created");
+                }
+            }
+        }
+        violations.Should().BeEmpty("test factories must CREATE SCHEMA before EnsureCreatedAsync when DbContext uses HasDefaultSchema");
+    }
+
+    [Fact]
+    public void Test_factories_use_ConfigureTestServices_not_ConfigureServices()
+    {
+        var testRoot = Path.Combine(Directory.GetParent(SrcRoot)!.FullName, "tests");
+        if (!Directory.Exists(testRoot)) return;
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(testRoot, "*Factory.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("bin")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("WebApplicationFactory")) continue;
+            if (content.Contains("ConfigureServices") && !content.Contains("ConfigureTestServices"))
+            {
+                violations.Add($"{Relative(file)}: uses ConfigureServices — use ConfigureTestServices to guarantee override of app DI");
+            }
+        }
+        violations.Should().BeEmpty("test factories must use ConfigureTestServices (runs AFTER app DI)");
+    }
+
+    [Fact]
+    public void Test_factories_set_JwtTestDefaults()
+    {
+        var testRoot = Path.Combine(Directory.GetParent(SrcRoot)!.FullName, "tests");
+        if (!Directory.Exists(testRoot)) return;
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(testRoot, "*Factory.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("bin")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("WebApplicationFactory") || !content.Contains("IAsyncLifetime")) continue;
+            if (!content.Contains("JwtTestDefaults"))
+            {
+                violations.Add($"{Relative(file)}: missing JwtTestDefaults.SetTestEnvironmentVariables() — JwksOptions ValidateOnStart will throw");
+            }
+        }
+        violations.Should().BeEmpty("test factories must call JwtTestDefaults.SetTestEnvironmentVariables()");
+    }
+
+    [Fact]
+    public void Privacy_events_extend_DomainEvent()
+    {
+        var contractsDir = Path.Combine(SrcRoot, "Contracts", "Privacy");
+        if (!Directory.Exists(contractsDir)) return;
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(contractsDir, "*.cs")
+            .Where(f => !f.Contains("obj")))
+        {
+            var lines = File.ReadAllLines(file);
+            foreach (var line in lines)
+            {
+                if (Regex.IsMatch(line, @"public\s+(sealed\s+)?record\s+\w+\s*$") ||
+                    (Regex.IsMatch(line, @"public\s+(sealed\s+)?record\s+\w+\s*\{") && !line.Contains(":")))
+                {
+                    violations.Add($"{Relative(file)}: event record doesn't extend DomainEvent — MassTransit Init<T> will fault");
+                }
+            }
+        }
+        violations.Should().BeEmpty("all Privacy events must extend DomainEvent for MassTransit compatibility");
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────
 
     private static string FindSrcRoot()
