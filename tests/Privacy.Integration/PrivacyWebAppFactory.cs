@@ -57,16 +57,8 @@ public sealed class PrivacyWebAppFactory : WebApplicationFactory<Program>, IAsyn
 
         builder.ConfigureTestServices(services =>
         {
-            // AddEntityFrameworkOutbox is required because the saga uses PublishAsync
-            // within its state transitions. Without the outbox, the publish faults.
-            // Note: UseBusOutbox is NOT used here to avoid intercepting test helper publishes.
             services.AddMassTransitTestHarness(mt =>
             {
-                mt.AddEntityFrameworkOutbox<PrivacyDbContext>(o =>
-                {
-                    o.UsePostgres();
-                });
-
                 mt.AddSagaStateMachine<PrivacyRequestStateMachine, PrivacyRequestState>()
                     .EntityFrameworkRepository(r =>
                     {

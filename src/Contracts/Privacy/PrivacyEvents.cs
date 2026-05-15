@@ -1,55 +1,55 @@
 namespace Haworks.Contracts.Privacy;
 
-public record PrivacyErasureRequested
+public sealed record PrivacyErasureRequested : DomainEvent
 {
-    public Guid RequestId { get; init; }
-    public Guid UserId { get; init; }
+    public required Guid RequestId { get; init; }
+    public required Guid UserId { get; init; }
 }
 
-public record PrivacyErasureCompleted
+public sealed record PrivacyErasureCompleted : DomainEvent
 {
-    public Guid RequestId { get; init; }
-    public Guid UserId { get; init; }
+    public required Guid RequestId { get; init; }
+    public required Guid UserId { get; init; }
     public required string ServiceName { get; init; }
 }
 
-public record PrivacyErasureFailed
+public sealed record PrivacyErasureFailed : DomainEvent
 {
-    public Guid RequestId { get; init; }
-    public Guid UserId { get; init; }
+    public required Guid RequestId { get; init; }
+    public required Guid UserId { get; init; }
     public required string ServiceName { get; init; }
     public required string ErrorMessage { get; init; }
 }
 
-public record PrivacyErasureTimedOut
+public sealed record PrivacyErasureTimedOut : DomainEvent
 {
-    public Guid RequestId { get; init; }
+    public required Guid RequestId { get; init; }
 }
 
-public record PrivacyDataExportRequested
+public sealed record PrivacyDataExportRequested : DomainEvent
 {
-    public Guid RequestId { get; init; }
-    public Guid UserId { get; init; }
+    public required Guid RequestId { get; init; }
+    public required Guid UserId { get; init; }
 }
 
-public record PrivacyDataExportCompleted
+public sealed record PrivacyDataExportCompleted : DomainEvent
 {
-    public Guid RequestId { get; init; }
-    public Guid UserId { get; init; }
+    public required Guid RequestId { get; init; }
+    public required Guid UserId { get; init; }
     public required string ServiceName { get; init; }
     public string? DataLink { get; init; }
 }
 
-public record PrivacyDataExportFailed
+public sealed record PrivacyDataExportFailed : DomainEvent
 {
-    public Guid RequestId { get; init; }
-    public Guid UserId { get; init; }
+    public required Guid RequestId { get; init; }
+    public required Guid UserId { get; init; }
     public required string ServiceName { get; init; }
     public required string ErrorMessage { get; init; }
 }
 
-public record InitiatePrivacyRequestMessage
+public sealed record InitiatePrivacyRequestMessage : DomainEvent
 {
-    public Guid RequestId { get; init; }
-    public Guid UserId { get; init; }
+    public required Guid RequestId { get; init; }
+    public required Guid UserId { get; init; }
 }
