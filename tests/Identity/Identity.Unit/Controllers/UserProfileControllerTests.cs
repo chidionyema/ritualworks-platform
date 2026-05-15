@@ -47,15 +47,6 @@ public class UserProfileControllerTests : TestBase
 
         var result = await _controller.GetProfile(CancellationToken.None);
 
-<<<<<<< HEAD
-        var ok = Assert.IsType<OkObjectResult>(result);
-        Assert.NotNull(ok.Value);
-        _mediatorMock.Verify(
-            m => m.Send(
-                It.Is<GetUserProfileQuery>(q => q.UserId == "user-id"),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
-=======
         var okResult = Assert.IsType<OkObjectResult>(result);
         var response = Assert.IsType<ProfileResponse>(okResult.Value);
         Assert.Equal("John", response.FirstName);
@@ -78,6 +69,5 @@ public class UserProfileControllerTests : TestBase
 
         var objectResult = Assert.IsType<ObjectResult>(result);
         Assert.Equal(404, objectResult.StatusCode);
->>>>>>> worktree-agent-a1268af7
     }
 }
