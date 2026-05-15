@@ -108,14 +108,24 @@ public sealed class RotatingJwtSigningKeyRing : IHostedService, IJwtSigningKeyRi
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        // Vault must be initialized for KV reads to succeed; the existing
-        // singleton VaultService is initialized lazily, so call it here so the
-        // first poll doesn't race the first request.
-        await _vault.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // Vault must be initialized for KV reads to succeed; the existing
+            // singleton VaultService is initialized lazily, so call it here so the
+            // first poll doesn't race the first request.
+            await _vault.InitializeAsync(cancellationToken).ConfigureAwait(false);
 
-        // Initial load — if Vault has no signing_key yet (e.g. fresh dev env),
-        // generate one and persist it via the existing per-secret bootstrap.
-        await SeedFromVaultAsync(cancellationToken).ConfigureAwait(false);
+            // Initial load — if Vault has no signing_key yet (e.g. fresh dev env),
+            // generate one and persist it via the existing per-secret bootstrap.
+            await SeedFromVaultAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // Don't crash the host — JWT signing will use fallback config.
+            // The poll loop will retry Vault connection periodically.
+            _logger.LogCritical(ex, "Vault initialization failed in RotatingJwtSigningKeyRing — " +
+                "JWT signing will use fallback config until Vault becomes available");
+        }
 
         // Kick off the background poll loop. Don't await — IHostedService
         // contract is "start the work then return".

@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -56,16 +58,10 @@ public class PaymentsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
     {
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
-        await db.Database.OpenConnectionAsync();
-        try
-        {
-            await db.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS payments;");
-            await db.Database.EnsureCreatedAsync();
-        }
-        finally
-        {
-            await db.Database.CloseConnectionAsync();
-        }
+        await db.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS payments;");
+        var creator = db.Database.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalDatabaseCreator>();
+        try { await creator.CreateTablesAsync(); }
+        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P07") { }
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

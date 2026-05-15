@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 using Haworks.BuildingBlocks.Testing.Authentication;
@@ -40,16 +42,10 @@ public class AuditWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
-        await db.Database.OpenConnectionAsync();
-        try
-        {
-            await db.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS audit;");
-            await db.Database.EnsureCreatedAsync();
-        }
-        finally
-        {
-            await db.Database.CloseConnectionAsync();
-        }
+        await db.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS audit;");
+        var creator = db.Database.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalDatabaseCreator>();
+        try { await creator.CreateTablesAsync(); }
+        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P07") { }
     }
 
     async Task IAsyncLifetime.DisposeAsync()
