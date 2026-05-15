@@ -14,6 +14,7 @@ namespace Haworks.Audit.Infrastructure.Migrations
         {
             migrationBuilder.CreateTable(
                 name: "audit_export_jobs",
+                schema: "audit",
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -35,7 +36,8 @@ namespace Haworks.Audit.Infrastructure.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "audit_export_jobs");
+                name: "audit_export_jobs",
+                schema: "audit");
         }
     }
 }
