@@ -1015,6 +1015,184 @@ public sealed class PlatformGuardTests
         // Informational — MassTransit has default retry, but explicit config is better
     }
 
+    // ─── Clean Architecture ──────────────────────────────────────────
+
+    [Fact]
+    public void Domain_layer_does_not_reference_Infrastructure_or_Application()
+    {
+        // Clean Architecture: Domain must not depend on outer layers
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(SrcRoot, "*.csproj", SearchOption.AllDirectories)
+            .Where(f => f.Contains(".Domain") && !f.Contains("obj")))
+        {
+            var content = File.ReadAllText(file);
+            if (content.Contains("Infrastructure") || content.Contains("Application"))
+            {
+                // Check project references, not package references
+                if (Regex.IsMatch(content, @"<ProjectReference.*\.(Infrastructure|Application)\."))
+                {
+                    violations.Add($"{Relative(file)}: Domain layer references Infrastructure or Application — clean architecture violation");
+                }
+            }
+        }
+        violations.Should().BeEmpty("Domain layer must not reference outer layers (Infrastructure, Application)");
+    }
+
+    [Fact]
+    public void Controllers_do_not_directly_use_DbContext()
+    {
+        // Controllers should use MediatR/handlers, not access DbContext directly
+        var violations = new List<string>();
+        foreach (var file in FindControllerFiles())
+        {
+            if (file.Contains("Demo") || file.Contains("Admin")) continue; // demos are allowed
+            var content = File.ReadAllText(file);
+            if (Regex.IsMatch(content, @"\bDbContext\b") && !content.Contains("// design-time"))
+            {
+                violations.Add($"{Relative(file)}: controller directly uses DbContext — use MediatR handlers instead");
+            }
+        }
+        violations.Should().BeEmpty("controllers must not directly access DbContext — use handlers/services");
+    }
+
+    // ─── Reliability ─────────────────────────────────────────────────
+
+    [Fact]
+    public void No_async_void_methods()
+    {
+        // async void is fire-and-forget — exceptions crash the process
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"\basync\s+void\b") &&
+                    !lines[i].Contains("EventHandler") && // event handlers are the one valid use
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: async void — use async Task (exceptions in async void crash the process)");
+                }
+            }
+        }
+        violations.Should().BeEmpty("async void methods must not exist — use async Task");
+    }
+
+    [Fact]
+    public void No_Task_Run_in_request_pipeline()
+    {
+        // Task.Run in controllers/handlers causes thread pool starvation under load
+        var violations = new List<string>();
+        foreach (var file in FindControllerFiles()
+            .Concat(FindProductionCsFiles().Where(f => f.Contains("Handler") || f.Contains("Command"))))
+        {
+            if (file.Contains("Worker") || file.Contains("Background") || file.Contains("Admin") || file.Contains("Demo")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("Task.Run(") && !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: Task.Run in request pipeline — causes thread pool starvation");
+                }
+            }
+        }
+        violations.Should().BeEmpty("Task.Run must not be used in the HTTP request pipeline");
+    }
+
+    // ─── Data Safety ─────────────────────────────────────────────────
+
+    [Fact]
+    public void No_DateTime_Now_use_DateTime_UtcNow()
+    {
+        // DateTime.Now uses local timezone — always use UtcNow in server code
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Migration")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"DateTime\.Now\b") &&
+                    !lines[i].Contains("UtcNow") &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: DateTime.Now — use DateTime.UtcNow (server code must not depend on local timezone)");
+                }
+            }
+        }
+        violations.Should().BeEmpty("always use DateTime.UtcNow, never DateTime.Now in server code");
+    }
+
+    [Fact]
+    public void No_string_interpolation_in_ExecuteSqlRaw()
+    {
+        // ExecuteSqlRawAsync with $"..." is SQL injection. Use ExecuteSqlInterpolatedAsync or {0} params.
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("ExecuteSqlRaw") && lines[i].Contains("$\""))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: string interpolation in ExecuteSqlRaw — SQL injection risk. Use ExecuteSqlInterpolated or parameterized {0}");
+                }
+            }
+        }
+        violations.Should().BeEmpty("ExecuteSqlRaw must use parameterized queries, never string interpolation");
+    }
+
+    // ─── Observability ───────────────────────────────────────────────
+
+    [Fact]
+    public void No_string_concatenation_in_log_messages()
+    {
+        // Log messages should use structured logging {Param}, not "text" + variable
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"Log(Information|Warning|Error|Debug|Critical)\s*\(\s*\$""") &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: string interpolation in log message — use structured logging with {{placeholders}}");
+                }
+            }
+        }
+        violations.Should().BeEmpty("log messages must use structured logging {Placeholders}, not string interpolation");
+    }
+
+    // ─── Event Contracts ─────────────────────────────────────────────
+
+    [Fact]
+    public void Every_event_in_Contracts_has_at_least_one_consumer()
+    {
+        // Dead events are code smell — if nobody consumes it, delete it
+        var contractsDir = Path.Combine(SrcRoot, "Contracts");
+        if (!Directory.Exists(contractsDir)) return;
+
+        var violations = new List<string>();
+        var allSrcContent = string.Join("\n",
+            FindProductionCsFiles()
+                .Where(f => !f.Contains("Contracts") && !f.Contains("Test"))
+                .Select(f => File.ReadAllText(f)));
+
+        foreach (var file in Directory.GetFiles(contractsDir, "*Event.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj")))
+        {
+            var fileName = Path.GetFileNameWithoutExtension(file);
+            // Check if any file outside Contracts references this event type
+            if (!allSrcContent.Contains(fileName))
+            {
+                violations.Add($"{Relative(file)}: event {fileName} has no consumers — consider deleting dead event");
+            }
+        }
+        // Informational — some events may be consumed by external services
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────
 
     private static string FindSrcRoot()

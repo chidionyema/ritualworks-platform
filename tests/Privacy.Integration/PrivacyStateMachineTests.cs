@@ -25,6 +25,8 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         _factory = factory;
     }
 
+    private static bool _warmedUp;
+
     public async Task InitializeAsync()
     {
         await _factory.EnsureSchemaAsync();
@@ -32,6 +34,13 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         harness.TestTimeout = TimeSpan.FromSeconds(30);
         harness.TestInactivityTimeout = TimeSpan.FromSeconds(10);
         await harness.Start();
+
+        if (!_warmedUp)
+        {
+            // First test: wait for saga endpoint to fully initialize
+            await Task.Delay(3000);
+            _warmedUp = true;
+        }
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
