@@ -30,19 +30,22 @@ public static class DependencyInjection
 
         services.AddScoped<IWebhooksDbContext>(sp => sp.GetRequiredService<WebhooksDbContext>());
 
-        // Hangfire for durable retries
-        services.AddHangfire(config => config
-            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-            .UseSimpleAssemblyNameTypeSerializer()
-            .UseRecommendedSerializerSettings()
-            .UsePostgreSqlStorage(options => 
-                options.UseNpgsqlConnection(connectionString), 
-                new PostgreSqlStorageOptions 
-                { 
-                    SchemaName = "webhooks_jobs" 
-                }));
+        // Hangfire for durable retries (skip in Test — Hangfire creates tables that block EnsureCreatedAsync)
+        if (!env.IsEnvironment("Test"))
+        {
+            services.AddHangfire(config => config
+                .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+                .UseSimpleAssemblyNameTypeSerializer()
+                .UseRecommendedSerializerSettings()
+                .UsePostgreSqlStorage(options =>
+                    options.UseNpgsqlConnection(connectionString),
+                    new PostgreSqlStorageOptions
+                    {
+                        SchemaName = "webhooks_jobs"
+                    }));
 
-        services.AddHangfireServer();
+            services.AddHangfireServer();
+        }
 
         services.AddScoped<IWebhookDispatcher, WebhookDispatcher>();
         
