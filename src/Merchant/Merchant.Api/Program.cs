@@ -11,6 +11,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add service defaults & Aspire components
 builder.AddServiceDefaults();
+builder.Services.AddHealthChecks()
+    .AddDbHealthCheck<MerchantDbContext>();
 
 // Add Serilog
 builder.Host.UseSerilog((context, loggerConfiguration) => loggerConfiguration
@@ -46,6 +48,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapDefaultEndpoints();

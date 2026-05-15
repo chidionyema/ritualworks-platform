@@ -9,6 +9,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add service defaults & OTel (lifted from Aspire ServiceDefaults)
 builder.AddServiceDefaults();
+builder.Services.AddHealthChecks()
+    .AddDbHealthCheck<Haworks.Identity.Infrastructure.AppIdentityDbContext>();
 
 // Vault: pull identity-svc's owned secrets into IConfiguration BEFORE DI
 // build, so handlers/options resolving cfg["Jwt:Key"] etc. see the Vault
@@ -166,9 +168,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseRateLimiter();
 app.MapControllers();
 
 app.Run();
