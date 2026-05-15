@@ -1,6 +1,7 @@
 using MassTransit;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.CheckoutOrchestrator.Domain;
+using Haworks.CheckoutOrchestrator.Infrastructure;
 
 namespace Haworks.CheckoutOrchestrator.Infrastructure.Messaging;
 

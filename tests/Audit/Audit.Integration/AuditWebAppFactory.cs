@@ -55,9 +55,10 @@ public class AuditWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
         var rangeEnd = rangeStart.AddMonths(1);
         try
         {
-            await db.Database.ExecuteSqlRawAsync($@"
-                CREATE TABLE IF NOT EXISTS audit.{partName} PARTITION OF audit.audit_events
-                FOR VALUES FROM ('{rangeStart:yyyy-MM-dd}') TO ('{rangeEnd:yyyy-MM-dd}')");
+            var sql = $"CREATE TABLE IF NOT EXISTS audit.{partName} PARTITION OF audit.audit_events FOR VALUES FROM ('{rangeStart:yyyy-MM-dd}') TO ('{rangeEnd:yyyy-MM-dd}')";
+            #pragma warning disable EF1002 // Risk of vulnerability to SQL injection — partition names are derived from DateTime, not user input
+            await db.Database.ExecuteSqlRawAsync(sql);
+            #pragma warning restore EF1002
         }
         catch { /* partition may already exist */ }
     }
