@@ -54,17 +54,6 @@ public class AuthenticationControllerTests : TestBase
 
         var result = await _controller.Login(request, CancellationToken.None);
 
-<<<<<<< HEAD
-        var ok = Assert.IsType<OkObjectResult>(result);
-        Assert.NotNull(ok.Value);
-        _mediatorMock.Verify(
-            m => m.Send(
-                It.Is<LoginCommand>(c =>
-                    c.Username == request.Username &&
-                    c.Password == request.Password),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
-=======
         var okResult = Assert.IsType<OkObjectResult>(result);
         var response = Assert.IsType<AuthResponse>(okResult.Value);
         Assert.Equal("token", response.Token);
@@ -134,6 +123,5 @@ public class AuthenticationControllerTests : TestBase
 
         var objectResult = Assert.IsType<ObjectResult>(result);
         Assert.Equal(400, objectResult.StatusCode);
->>>>>>> worktree-agent-a1268af7
     }
 }
