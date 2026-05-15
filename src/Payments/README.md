@@ -16,7 +16,7 @@ Clean Architecture with four projects:
 |---|---|---|
 | Domain | `Payments.Domain` | `Payment`, `Subscription`, `SubscriptionPlan`, `WebhookEvent`, `RefundSagaState`, `SubscriptionSagaState` entities; `PaymentStatus`, `SubscriptionStatus`, `RefundFailureCategory` enums; repository interface |
 | Application | `Payments.Application` | MassTransit consumers, `RefundSaga`, `SubscriptionSaga`, command/query handlers, application interfaces, FluentValidation validators, idempotency key generator, webhook amount-mismatch handler |
-| Infrastructure | `Payments.Infrastructure` | `PaymentDbContext`, Stripe implementation (checkout, refund, subscription, webhook processor, payment session cache), PayPal implementation (checkout, refund, subscription manager, webhook processor), `WebhookRouter`, `WebhookIdempotencyGuard`, `RefundTimeoutWatcher` background service, `PaymentProviderHealthCheck` |
+| Infrastructure | `Payments.Infrastructure` | `PaymentDbContext`, Stripe implementation (checkout, refund, subscription, webhook processor, payment session cache), PayPal implementation (checkout, refund, subscription manager, webhook processor), `WebhookRouter`, `WebhookIdempotencyGuard`, `RefundTimeoutWatcher` background service, `SubscriptionRenewalWatcher` background service, `PaymentProviderHealthCheck` |
 | API | `Payments.Api` | `WebhooksController`, `RefundsController`, `SubscriptionsController`, `AdminController`, Stripe signature validator, Vault bootstrap |
 
 **Key dependencies:**
@@ -29,6 +29,7 @@ Clean Architecture with four projects:
 - `Haworks.BuildingBlocks.Idempotency` — `X-Idempotency-Key` middleware
 - Vault (`VaultConfigBootstrap`) — loads `payments/stripe` and `payments/paypal` into `IConfiguration` under `PaymentProviders:Stripe` / `PaymentProviders:PayPal`
 - `RefundTimeoutWatcher` — background service watching for 24-hour refund timeouts
+- `SubscriptionRenewalWatcher` — background service (polls every 5 minutes) that finds Active subscriptions past their `PeriodEnd` and publishes `SubscriptionRenewalRequestedEvent`; belt-and-braces fallback for the saga's MassTransit scheduled timeout; idempotent by construction — if the scheduler already fired, the saga has left Active state and the duplicate event is silently ignored
 - `PaymentProviderHealthCheck` — health check for provider connectivity
 - OpenTelemetry tracing via `PaymentsActivities` source
 

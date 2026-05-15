@@ -153,6 +153,14 @@ Response: `{ "url": "https://connect.stripe.com/..." }`
 **GET `/api/ledger/balance/{ownerId}` — query params:** `type` (`AccountType` enum value), `currency` (default: `USD`)
 Response: `{ "balance": decimal, "currency": "USD" }`
 
+### Hangfire Dashboard
+
+| Method | Route | Auth | Description |
+|---|---|---|---|
+| `GET` | `/hangfire` | Development only | Hangfire recurring-job dashboard |
+
+The dashboard is enabled only when `ASPNETCORE_ENVIRONMENT=Development` (`app.UseHangfireDashboard()` is called conditionally). It is not exposed in staging or production.
+
 ## Events
 
 ### Published

@@ -142,7 +142,7 @@ BffWeb owns no persistent domain entities. The Application layer defines interfa
 
 | Method | Route | Description |
 |---|---|---|
-| `*` | `/api/subscriptions/*` | Proxy to the Webhooks subscription endpoints. |
+| `*` | `/api/subscriptions/*` | Proxy to payments-svc subscription endpoints. |
 
 ### SignalR Hubs
 

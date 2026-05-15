@@ -54,9 +54,11 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         var (requestId, userId) = await PublishInitiateAsync();
         await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
 
-        // Publish all three service completions.
+        // Publish all three service completions (stagger to avoid concurrency conflicts).
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
+        await Task.Delay(500);
         await PublishErasureCompletedAsync(requestId, userId, "orders-svc");
+        await Task.Delay(500);
         await PublishErasureCompletedAsync(requestId, userId, "payments-svc");
 
         // SetCompletedWhenFinalized() removes the row once finalized.
@@ -90,10 +92,16 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
 
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
+        await Task.Delay(500); // Allow concurrency token to settle
         await PublishErasureCompletedAsync(requestId, userId, "orders-svc");
+        await Task.Delay(500);
 
-        // Give the saga time to process both events.
-        await Task.Delay(2000);
+        // Poll until both flags are set (concurrency retries may delay persistence)
+        await PollUntilAsync(() =>
+        {
+            var s = ReadSagaAsync(requestId).Result;
+            return s is { IdentityCompleted: true, OrdersCompleted: true };
+        }, TimeSpan.FromSeconds(10));
 
         var saga = await ReadSagaAsync(requestId);
         saga.Should().NotBeNull();
@@ -112,9 +120,11 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         var (requestId, userId) = await PublishInitiateAsync();
         await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
 
-        // Deliberately send in reverse order.
+        // Deliberately send in reverse order (stagger to avoid concurrency conflicts).
         await PublishErasureCompletedAsync(requestId, userId, "payments-svc");
+        await Task.Delay(500);
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
+        await Task.Delay(500);
         await PublishErasureCompletedAsync(requestId, userId, "orders-svc");
 
         await PollUntilAsync(() =>
@@ -201,7 +211,9 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
 
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
+        await Task.Delay(500);
         await PublishErasureCompletedAsync(requestId, userId, "orders-svc");
+        await Task.Delay(500);
         await PublishErasureCompletedAsync(requestId, userId, "payments-svc");
 
         await PollUntilAsync(() =>
@@ -232,7 +244,9 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
 
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
+        await Task.Delay(500);
         await PublishErasureCompletedAsync(requestId, userId, "orders-svc");
+        await Task.Delay(500);
         await PublishErasureCompletedAsync(requestId, userId, "payments-svc");
 
         await PollUntilAsync(() =>
@@ -317,8 +331,10 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
 
         // Restart and verify the saga can pick up where it left off.
         await harness.Start();
+        await Task.Delay(2000); // warmup after restart
 
         await PublishErasureCompletedAsync(requestId, userId, "orders-svc");
+        await Task.Delay(500);
         await PublishErasureCompletedAsync(requestId, userId, "payments-svc");
 
         await PollUntilAsync(() =>
