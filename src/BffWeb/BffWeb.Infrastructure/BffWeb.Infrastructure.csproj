@@ -5,6 +5,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../BffWeb.Application/BffWeb.Application.csproj" />
-    <PackageReference Include="MassTransit.RabbitMQ" Version="8.3.4" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.2.5" />
   </ItemGroup>
 </Project>

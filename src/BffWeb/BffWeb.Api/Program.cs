@@ -1,5 +1,6 @@
 using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
+using Haworks.BuildingBlocks.Messaging;
 using Haworks.BuildingBlocks.Middleware;
 using Haworks.BffWeb.Api;
 using Haworks.BffWeb.Api.Demo;
@@ -260,7 +261,7 @@ if (!builder.Environment.IsEnvironment("Test"))
             var rabbitConn = builder.Configuration.GetConnectionString("rabbitmq")
                 ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is missing.");
             cfg.Host(new Uri(rabbitConn));
-            cfg.ConfigureEndpoints(context);
+            cfg.ConfigureStandardRabbitMq(context);
         });
     });
 }

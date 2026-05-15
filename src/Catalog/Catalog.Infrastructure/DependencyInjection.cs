@@ -154,7 +154,7 @@ public static class DependencyInjection
 
                 cfg.Host(new Uri(rabbitConn));
                 cfg.UseDelayedMessageScheduler();
-                cfg.ConfigureEndpoints(context);
+                cfg.ConfigureStandardRabbitMq(context);
             });
         });
 

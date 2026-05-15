@@ -77,9 +77,9 @@ public static class DependencyInjection
             // CheckoutSaga state machine — persisted to CheckoutDbContext
             // via the EF saga repository. Each receive endpoint for the
             // saga's events runs through UseEntityFrameworkOutbox<CheckoutDbContext>
-            // (anchored by BoundedContextSagaDefinition in BuildingBlocks),
-            // so saga state writes + outbox publishes commit atomically.
-            mt.AddSagaStateMachine<CheckoutSaga, CheckoutSagaState>()
+            // (anchored by CheckoutSagaDefinition), so saga state writes +
+            // outbox publishes commit atomically.
+            mt.AddSagaStateMachine<CheckoutSaga, CheckoutSagaState, CheckoutSagaDefinition>()
                 .EntityFrameworkRepository(r =>
                 {
                     r.ExistingDbContext<CheckoutDbContext>();
@@ -93,7 +93,7 @@ public static class DependencyInjection
                         "ConnectionStrings:rabbitmq is missing.");
                 cfg.Host(new Uri(rabbitConn));
                 cfg.UseDelayedMessageScheduler();
-                cfg.ConfigureEndpoints(context);
+                cfg.ConfigureStandardRabbitMq(context);
             });
         });
 

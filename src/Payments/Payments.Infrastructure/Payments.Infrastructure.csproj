@@ -6,12 +6,12 @@
     <NoWarn>$(NoWarn);CA1861</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="MassTransit.EntityFrameworkCore" Version="9.1.1" />
+    <PackageReference Include="MassTransit.EntityFrameworkCore" Version="8.2.5" />
     <ProjectReference Include="../Payments.Application/Payments.Application.csproj" />
     <ProjectReference Include="../../BuildingBlocks/Haworks.BuildingBlocks.csproj" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.0" />
-    <PackageReference Include="MassTransit.RabbitMQ" Version="8.3.4" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.2.5" />
     <PackageReference Include="Stripe.net" Version="44.10.0" />
   </ItemGroup>
 

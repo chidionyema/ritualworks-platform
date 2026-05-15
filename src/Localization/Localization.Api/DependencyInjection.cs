@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MassTransit;
 using FluentValidation;
 using Haworks.BuildingBlocks.Behaviors;
+using Haworks.BuildingBlocks.Messaging;
 
 namespace Haworks.Localization.Api;
 
@@ -36,7 +37,7 @@ public static class DependencyInjection
                 {
                     var rabbitConn = configuration.GetConnectionString("rabbitmq") ?? throw new InvalidOperationException("RabbitMq:Username is required");
                     cfg.Host(new Uri(rabbitConn));
-                    cfg.ConfigureEndpoints(context);
+                    cfg.ConfigureStandardRabbitMq(context);
                 });
             });
         }

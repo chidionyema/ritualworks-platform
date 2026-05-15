@@ -31,12 +31,6 @@ public sealed class StockReleaseRequestedConsumerDefinition
         IConsumerConfigurator<StockReleaseRequestedConsumer> consumerConfigurator,
         IRegistrationContext context)
     {
-        // Layer 1: immediate retry with incremental backoff.
-        endpointConfigurator.UseMessageRetry(r => r.Incremental(
-            retryLimit: 3,
-            initialInterval: TimeSpan.FromSeconds(1),
-            intervalIncrement: TimeSpan.FromSeconds(2)));
-
         // Layer 2: delayed redelivery (uses the broker's delayed-message
         // exchange; RabbitMQ has the rabbitmq_delayed_message_exchange
         // plugin enabled per fly.rabbitmq config).
@@ -47,9 +41,8 @@ public sealed class StockReleaseRequestedConsumerDefinition
             TimeSpan.FromMinutes(30),
             TimeSpan.FromHours(1)));
 
-        // Layer 0: the standard catalog outbox + inbox dedupe wiring.
-        // Must come AFTER retry/redelivery filters so the outbox transaction
-        // wraps the actual consume, not the retry orchestration.
+        // Layer 0+1: the standard catalog outbox + baseline immediate retry
+        // wiring from BoundedContextConsumerDefinition.
         base.ConfigureConsumer(endpointConfigurator, consumerConfigurator, context);
     }
 }

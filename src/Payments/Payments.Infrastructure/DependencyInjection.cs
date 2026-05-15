@@ -175,14 +175,14 @@ public static class DependencyInjection
                 o.DuplicateDetectionWindow = TimeSpan.FromMinutes(30);
             });
 
-            mt.AddSagaStateMachine<RefundSaga, RefundSagaState>()
+            mt.AddSagaStateMachine<RefundSaga, RefundSagaState, RefundSagaDefinition>()
                 .EntityFrameworkRepository(r =>
                 {
                     r.ExistingDbContext<PaymentDbContext>();
                     r.UsePostgres();
                 });
 
-            mt.AddSagaStateMachine<SubscriptionSaga, SubscriptionSagaState>()
+            mt.AddSagaStateMachine<SubscriptionSaga, SubscriptionSagaState, SubscriptionSagaDefinition>()
                 .EntityFrameworkRepository(r =>
                 {
                     r.ExistingDbContext<PaymentDbContext>();
