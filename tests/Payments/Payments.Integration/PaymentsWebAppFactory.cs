@@ -99,6 +99,11 @@ public class PaymentsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
 
             services.AddMassTransitTestHarness(mt =>
             {
+                // The RefundSaga calls .Schedule() on entry to Requested state.
+                // Without a scheduler the saga faults and never transitions, causing
+                // sagaHarness.Consumed.Any<RefundRequestedEvent>() to return false.
+                mt.AddDelayedMessageScheduler();
+
                 // Only register consumers that don't interfere with manual saga event flow.
                 // ProviderRefundInitiationRequestedConsumer and SubscriptionRenewalRequestedConsumer
                 // are omitted because they auto-process saga-published events (calling real Stripe)

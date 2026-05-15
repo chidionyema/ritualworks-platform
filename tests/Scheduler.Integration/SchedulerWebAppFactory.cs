@@ -22,6 +22,10 @@ public class SchedulerWebAppFactory : WebApplicationFactory<Program>, IAsyncLife
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Test");
         Environment.SetEnvironmentVariable("ConnectionStrings__scheduler", ConnString);
         Environment.SetEnvironmentVariable("RabbitMq__Host", "localhost");
+
+        // AddPlatformAuthentication requires JwksOptions to be present at host startup.
+        // Values are test-grade placeholders; the real JWT pipeline is bypassed by TestAuthenticationHandler.
+        JwtTestDefaults.SetTestEnvironmentVariables();
     }
 
     public new Task DisposeAsync() => Task.CompletedTask;
