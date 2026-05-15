@@ -19,6 +19,7 @@ public static partial class DependencyInjection
 
         services.AddValidatorsFromAssembly(assembly);
         services.AddScoped<Common.Idempotency.IIdempotencyKeyGenerator, Common.Idempotency.IdempotencyKeyGenerator>();
+        services.AddScoped<Preferences.IPreferencesService, Preferences.PreferencesService>();
 
         return services;
     }
