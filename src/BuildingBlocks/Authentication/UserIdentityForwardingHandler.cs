@@ -12,10 +12,10 @@ public sealed class UserIdentityForwardingHandler : DelegatingHandler
 
     public UserIdentityForwardingHandler(
         IHttpContextAccessor accessor,
-        IServiceProvider serviceProvider)
+        IServiceTokenProvider? serviceTokenProvider = null)
     {
         _accessor = accessor;
-        _serviceTokenProvider = serviceProvider.GetService<IServiceTokenProvider>();
+        _serviceTokenProvider = serviceTokenProvider;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(
