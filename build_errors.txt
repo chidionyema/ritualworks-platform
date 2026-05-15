@@ -1,0 +1,13 @@
+/Users/chidionyema/Documents/code/ritualworks-platform/src/Analytics/Analytics.Api/Program.cs(50,1): error CS8803: Top-level statements must precede namespace and type declarations. [/Users/chidionyema/Documents/code/ritualworks-platform/src/Analytics/Analytics.Api/Analytics.Api.csproj]
+/Users/chidionyema/Documents/code/ritualworks-platform/src/Analytics/Analytics.Api/Program.cs(50,6): error CS1001: Identifier expected [/Users/chidionyema/Documents/code/ritualworks-platform/src/Analytics/Analytics.Api/Analytics.Api.csproj]
+/Users/chidionyema/Documents/code/ritualworks-platform/src/Analytics/Analytics.Api/Program.cs(50,6): error CS1003: Syntax error, ',' expected [/Users/chidionyema/Documents/code/ritualworks-platform/src/Analytics/Analytics.Api/Analytics.Api.csproj]
+/Users/chidionyema/Documents/code/ritualworks-platform/src/Analytics/Analytics.Api/Program.cs(50,8): error CS1002: ; expected [/Users/chidionyema/Documents/code/ritualworks-platform/src/Analytics/Analytics.Api/Analytics.Api.csproj]
+/Users/chidionyema/Documents/code/ritualworks-platform/src/Analytics/Analytics.Api/Program.cs(50,8): error CS1022: Type or namespace definition, or end-of-file expected [/Users/chidionyema/Documents/code/ritualworks-platform/src/Analytics/Analytics.Api/Analytics.Api.csproj]
+/Users/chidionyema/Documents/code/ritualworks-platform/src/FeatureFlags/FeatureFlags.Api/Application/Features.cs(38,34): error CS0266: Cannot implicitly convert type 'Haworks.BuildingBlocks.Common.Result' to 'Haworks.BuildingBlocks.Common.Result<bool>'. An explicit conversion exists (are you missing a cast?) [/Users/chidionyema/Documents/code/ritualworks-platform/src/FeatureFlags/FeatureFlags.Api/FeatureFlags.Api.csproj]
+/Users/chidionyema/Documents/code/ritualworks-platform/src/Media/Media.Api/Application/ProcessVirusScan.cs(28,20): error CS0266: Cannot implicitly convert type 'Haworks.BuildingBlocks.Common.Result' to 'Haworks.BuildingBlocks.Common.Result<MediatR.Unit>'. An explicit conversion exists (are you missing a cast?) [/Users/chidionyema/Documents/code/ritualworks-platform/src/Media/Media.Api/Media.Api.csproj]
+
+Build FAILED.
+    0 Warning(s)
+    7 Error(s)
+
+Time Elapsed 00:01:08.83

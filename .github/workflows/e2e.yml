@@ -1,0 +1,28 @@
+name: E2E Tests
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['src/**', 'tests/E2E/**']
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '9.0.x'
+      - name: Start infrastructure
+        run: docker compose -f deploy/compose/docker-compose.yml up -d --wait --timeout 120
+      - name: Wait for services
+        run: |
+          for port in 5050 5070; do
+            timeout 60 bash -c "until curl -sf http://localhost:$port/health; do sleep 2; done"
+          done
+      - name: Run E2E tests
+        run: dotnet test tests/E2E/ --logger "console;verbosity=normal"
+      - name: Teardown
+        if: always()
+        run: docker compose -f deploy/compose/docker-compose.yml down -v

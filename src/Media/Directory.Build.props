@@ -1,0 +1,20 @@
+<Project>
+  <Import Project="../../Directory.Build.props" />
+
+  <Target Name="EnforceServiceBoundary" BeforeTargets="Build">
+    <ItemGroup>
+      <ForbiddenRef Include="@(ProjectReference)"
+                    Condition="$([System.String]::Copy('%(Identity)').Contains('..\\Identity\\'))" />
+      <ForbiddenRef Include="@(ProjectReference)"
+                    Condition="$([System.String]::Copy('%(Identity)').Contains('..\\Orders\\'))" />
+      <ForbiddenRef Include="@(ProjectReference)"
+                    Condition="$([System.String]::Copy('%(Identity)').Contains('..\\Payments\\'))" />
+      <ForbiddenRef Include="@(ProjectReference)"
+                    Condition="$([System.String]::Copy('%(Identity)').Contains('..\\Content\\'))" />
+      <ForbiddenRef Include="@(ProjectReference)"
+                    Condition="$([System.String]::Copy('%(Identity)').Contains('..\\Catalog\\'))" />
+    </ItemGroup>
+    <Error Condition="'@(ForbiddenRef)' != ''"
+           Text="Boundary violation: Media service may only reference Contracts and BuildingBlocks. Forbidden ProjectReference: @(ForbiddenRef)" />
+  </Target>
+</Project>

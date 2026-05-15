@@ -31,7 +31,13 @@ public class UserProfileControllerTests : TestBase
     public async Task GetProfile_WithValidUser_ReturnsOk()
     {
         _currentUserServiceMock.Setup(s => s.UserId).Returns("user-id");
-        var dto = new UserProfileDto { FirstName = "John" };
+        var dto = new UserProfileDto
+        {
+            FirstName = "John",
+            LastName = "Doe",
+            Email = "john@example.com",
+            Phone = "555-1234"
+        };
 
         _mediatorMock
             .Setup(m => m.Send(
@@ -41,6 +47,7 @@ public class UserProfileControllerTests : TestBase
 
         var result = await _controller.GetProfile(CancellationToken.None);
 
+<<<<<<< HEAD
         var ok = Assert.IsType<OkObjectResult>(result);
         Assert.NotNull(ok.Value);
         _mediatorMock.Verify(
@@ -48,5 +55,29 @@ public class UserProfileControllerTests : TestBase
                 It.Is<GetUserProfileQuery>(q => q.UserId == "user-id"),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+=======
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<ProfileResponse>(okResult.Value);
+        Assert.Equal("John", response.FirstName);
+        Assert.Equal("Doe", response.LastName);
+        Assert.Equal("john@example.com", response.Email);
+        Assert.Equal("555-1234", response.Phone);
+    }
+
+    [Fact]
+    public async Task GetProfile_WhenNotFound_Returns404()
+    {
+        _currentUserServiceMock.Setup(s => s.UserId).Returns("unknown-id");
+
+        _mediatorMock
+            .Setup(m => m.Send(It.IsAny<GetUserProfileQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<UserProfileDto>(
+                Error.NotFound("User.NotFound", "User profile not found")));
+
+        var result = await _controller.GetProfile(CancellationToken.None);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(404, objectResult.StatusCode);
+>>>>>>> worktree-agent-a1268af7
     }
 }

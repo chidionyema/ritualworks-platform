@@ -493,7 +493,21 @@ public class SubscriptionSagaTests : IAsyncLifetime
         var sagaBefore = await ReadSagaAsync(sagaId);
 
         await PublishAsync(BuildCancelEvent(providerSubId));
-        await Task.Delay(2000);
+
+        // Settling time for negative assertion — we expect no state change.
+        // PollUntilAsync would timeout immediately if we polled for a change,
+        // so we use a brief fixed delay before asserting invariance.
+        try
+        {
+            await PollUntilAsync(() =>
+            {
+                var s = ReadSagaAsync(sagaId).GetAwaiter().GetResult();
+                // A second cancel should never move state away from Canceled/null
+                return s is not null && s.CurrentState != "Canceled";
+            }, TimeSpan.FromSeconds(2));
+            // If we get here the state unexpectedly changed — the assertion below will catch it
+        }
+        catch (TimeoutException) { /* expected — duplicate was correctly discarded */ }
 
         var sagaAfter = await ReadSagaAsync(sagaId);
 
@@ -537,7 +551,13 @@ public class SubscriptionSagaTests : IAsyncLifetime
             NewPeriodEnd = DateTime.UtcNow.AddDays(30)
         });
 
-        await Task.Delay(2000);
+        // Settling time for negative assertion — we expect the state NOT to change to Active.
+        try
+        {
+            await PollUntilAsync(() => SagaStateOrNull(sagaId) == "Active", TimeSpan.FromSeconds(2));
+            // Getting here means the saga was wrongly resurrected — the assertion below catches it
+        }
+        catch (TimeoutException) { /* expected — late renewal was correctly discarded */ }
 
         // The saga should remain absent (finalized) or still Canceled.
         var saga = await ReadSagaAsync(sagaId);

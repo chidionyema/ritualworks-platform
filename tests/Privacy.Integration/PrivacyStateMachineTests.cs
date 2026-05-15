@@ -188,7 +188,13 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
 
         // Only identity completes before timeout.
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
-        await Task.Delay(1000); // let the completion process
+
+        // Wait for identity completion to be persisted before firing the timeout.
+        await PollUntilAsync(() =>
+        {
+            var s = ReadSagaAsync(requestId).GetAwaiter().GetResult();
+            return s is { IdentityCompleted: true };
+        }, TimeSpan.FromSeconds(10));
 
         await PublishAsync(new PrivacyErasureTimedOut { RequestId = requestId });
         await PollUntilAsync(() => SagaStateOrNull(requestId) == "Stalled", TimeSpan.FromSeconds(15));
@@ -224,7 +230,16 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
 
         // Send a duplicate — should not throw or create a new saga instance.
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
-        await Task.Delay(1000);
+        // settling time for negative assertion — duplicate must not change finalized state
+        try
+        {
+            await PollUntilAsync(() =>
+            {
+                var s = ReadSagaAsync(requestId).GetAwaiter().GetResult();
+                return s is not null && s.CurrentState != "Completed" && s.CurrentState != "Final";
+            }, TimeSpan.FromSeconds(2));
+        }
+        catch (TimeoutException) { /* expected — duplicate was correctly discarded */ }
 
         // Saga should still be finalized (row gone or Completed/Final).
         var saga = await ReadSagaAsync(requestId);
@@ -257,7 +272,16 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
 
         // Publish failure after completion — saga is finalized, event is discarded.
         await PublishAsync(new PrivacyErasureFailed { RequestId = requestId, UserId = userId, ServiceName = "orders-svc", ErrorMessage = "late failure" });
-        await Task.Delay(1000);
+        // settling time for negative assertion — late failure must not move finalized saga
+        try
+        {
+            await PollUntilAsync(() =>
+            {
+                var s = ReadSagaAsync(requestId).GetAwaiter().GetResult();
+                return s is not null && s.CurrentState == "Failed";
+            }, TimeSpan.FromSeconds(2));
+        }
+        catch (TimeoutException) { /* expected — late failure was correctly discarded */ }
 
         var saga = await ReadSagaAsync(requestId);
         if (saga is not null)
@@ -280,7 +304,12 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
 
         // Publish completion after failure — should be discarded.
         await PublishErasureCompletedAsync(requestId, userId, "orders-svc");
-        await Task.Delay(1000);
+        // settling time for negative assertion — late completion must not move Failed saga
+        try
+        {
+            await PollUntilAsync(() => SagaStateOrNull(requestId) != "Failed", TimeSpan.FromSeconds(2));
+        }
+        catch (TimeoutException) { /* expected — completion after failure was correctly discarded */ }
 
         var saga = await ReadSagaAsync(requestId);
         saga.Should().NotBeNull();
@@ -297,7 +326,16 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
 
         await PublishErasureCompletedAsync(requestId, userId, "unknown-svc");
-        await Task.Delay(1000);
+        // settling time for negative assertion — unknown service must not set any flags
+        try
+        {
+            await PollUntilAsync(() =>
+            {
+                var s = ReadSagaAsync(requestId).GetAwaiter().GetResult();
+                return s is { IdentityCompleted: true } or { OrdersCompleted: true } or { PaymentsCompleted: true };
+            }, TimeSpan.FromSeconds(2));
+        }
+        catch (TimeoutException) { /* expected — unknown service was correctly ignored */ }
 
         var saga = await ReadSagaAsync(requestId);
         saga.Should().NotBeNull();
@@ -317,7 +355,13 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
 
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
-        await Task.Delay(1000);
+
+        // Wait for identity completion to be persisted before stopping harness.
+        await PollUntilAsync(() =>
+        {
+            var s = ReadSagaAsync(requestId).GetAwaiter().GetResult();
+            return s is { IdentityCompleted: true };
+        }, TimeSpan.FromSeconds(10));
 
         // Stop the harness — simulates the service pod going away.
         var harness = _factory.Services.GetRequiredService<ITestHarness>();

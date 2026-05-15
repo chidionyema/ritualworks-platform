@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>Haworks.Analytics.Api</RootNamespace>
+    <AssemblyName>Haworks.Analytics.Api</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../BuildingBlocks/Haworks.BuildingBlocks.csproj" />
+  </ItemGroup>
+</Project>
