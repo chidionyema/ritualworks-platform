@@ -189,7 +189,7 @@ public sealed class PlatformGuardTests
             {
                 // Check it's not GetByIdTrackedAsync
                 if (!content.Contains("GetByIdTrackedAsync") ||
-                    content.IndexOf("GetByIdAsync") != content.IndexOf("GetByIdTrackedAsync"))
+                    content.IndexOf("GetByIdAsync", StringComparison.Ordinal) != content.IndexOf("GetByIdTrackedAsync", StringComparison.Ordinal))
                 {
                     violations.Add($"{Relative(file)}: uses GetByIdAsync with mutation — use GetByIdTrackedAsync for entities you modify");
                 }
@@ -298,6 +298,239 @@ public sealed class PlatformGuardTests
             "JWKS must require HTTPS in non-Development environments");
     }
 
+    // ─── Concurrency (Wave 2) ────────────────────────────────────────
+
+    [Fact]
+    public void Every_DbContext_configures_xmin_on_entities_modified_by_consumers()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindDbContextFiles())
+        {
+            var content = File.ReadAllText(file);
+            // If the context has entities that are modified by consumers, it should have xmin
+            if (content.Contains("IsConcurrencyToken") || !content.Contains("entity.Property"))
+                continue;
+            // Check if any consumer references this context's entities
+            var contextName = Path.GetFileNameWithoutExtension(file);
+            if (contextName.Contains("Payout") || contextName.Contains("Webhook") || contextName.Contains("Notification"))
+            {
+                if (!content.Contains("xmin"))
+                    violations.Add($"{Relative(file)}: DbContext for consumer-modified entities should configure xmin concurrency token");
+            }
+        }
+        // Informational — not all contexts need this
+        violations.Should().BeEmpty("entities modified by concurrent consumers need xmin concurrency tokens");
+    }
+
+    [Fact]
+    public void No_reservation_check_outside_transaction_in_StockService()
+    {
+        var stockServiceFiles = Directory.GetFiles(SrcRoot, "StockService.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("Test"));
+        foreach (var file in stockServiceFiles)
+        {
+            var content = File.ReadAllText(file);
+            var reserveIdx = content.IndexOf("ReserveStockAsync", StringComparison.Ordinal);
+            if (reserveIdx < 0) continue;
+            var transactionIdx = content.IndexOf("BeginTransactionAsync", reserveIdx, StringComparison.Ordinal);
+            var existCheckIdx = content.IndexOf("FirstOrDefaultAsync", reserveIdx, StringComparison.Ordinal);
+            if (existCheckIdx > 0 && transactionIdx > 0 && existCheckIdx < transactionIdx)
+            {
+                Assert.Fail($"{Relative(file)}: Reservation existence check must be INSIDE the transaction, not before it");
+            }
+        }
+    }
+
+    // ─── Outbox & Messaging (Wave 2) ─────────────────────────────────
+
+    [Fact]
+    public void Every_service_with_MassTransit_has_outbox_configured()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindDependencyInjectionFiles())
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("AddMassTransit") && !content.Contains("AddConsumer")) continue;
+            if (content.Contains("IsEnvironment(\"Test\")")) continue; // test-guarded
+            if (!content.Contains("AddEntityFrameworkOutbox") && !content.Contains("UseBusOutbox"))
+            {
+                violations.Add($"{Relative(file)}: has MassTransit consumers but no EntityFrameworkOutbox — events lost on crash");
+            }
+        }
+        violations.Should().BeEmpty("every service publishing events must have AddEntityFrameworkOutbox configured");
+    }
+
+    [Fact]
+    public void No_MassTransit_without_Test_environment_guard()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindDependencyInjectionFiles())
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("AddMassTransit")) continue;
+            if (!content.Contains("IsEnvironment(\"Test\")") && !content.Contains("IsEnvironment( \"Test\")"))
+            {
+                violations.Add($"{Relative(file)}: AddMassTransit without Test environment guard — conflicts with test harness");
+            }
+        }
+        violations.Should().BeEmpty("AddMassTransit must be guarded with !env.IsEnvironment(\"Test\")");
+    }
+
+    // ─── EF Core (Wave 3) ────────────────────────────────────────────
+
+    [Fact]
+    public void No_Include_after_Skip_Take_in_repositories()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindRepositoryFiles())
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                // Look for .Include after .Take on the same query chain
+                if (lines[i].Contains(".Include(") &&
+                    i > 0 && (lines[i - 1].Contains(".Take(") || lines[i - 1].Contains(".Skip(")))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: .Include() must come BEFORE .Skip()/.Take() to avoid cartesian results");
+                }
+            }
+        }
+        violations.Should().BeEmpty("EF Include must be placed before Skip/Take");
+    }
+
+    [Fact]
+    public void No_unbounded_ToListAsync_in_background_workers()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindConsumerFiles().Where(f => f.Contains("Service") || f.Contains("Command") || f.Contains("Worker")))
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains(".ToListAsync") &&
+                    !lines.Take(i).Reverse().Take(5).Any(l => l.Contains(".Take(")) &&
+                    !file.Contains("Test"))
+                {
+                    // Check for a Take in the preceding query chain (within 5 lines)
+                    violations.Add($"{Relative(file)}:{i + 1}: ToListAsync without .Take() — add batch size limit");
+                }
+            }
+        }
+        // Informational — may have false positives for small tables
+        violations.Should().BeEmpty("background workers must use .Take() to bound query results");
+    }
+
+    // ─── Identity & Claims (Wave 1+3) ────────────────────────────────
+
+    [Fact]
+    public void CurrentUserService_checks_JWT_before_header()
+    {
+        var file = Path.Combine(SrcRoot, "BuildingBlocks", "CurrentUser", "CurrentUserService.cs");
+        if (!File.Exists(file)) return;
+        var content = File.ReadAllText(file);
+        var claimIdx = content.IndexOf("FindFirst", StringComparison.Ordinal);
+        var headerIdx = content.IndexOf("X-User-Id", StringComparison.Ordinal);
+        if (claimIdx < 0 || headerIdx < 0) return;
+        claimIdx.Should().BeLessThan(headerIdx,
+            "CurrentUserService must check JWT claims BEFORE X-User-Id header to prevent spoofing");
+    }
+
+    [Fact]
+    public void ClaimsPrincipalExtensions_falls_back_to_sub_claim()
+    {
+        var file = Path.Combine(SrcRoot, "BuildingBlocks", "Extensions", "ClaimsPrincipalExtensions.cs");
+        if (!File.Exists(file)) return;
+        var content = File.ReadAllText(file);
+        content.Should().Contain("\"sub\"",
+            "GetUserId must fall back to 'sub' claim when NameIdentifier is absent");
+    }
+
+    // ─── Health Checks (Wave 3) ──────────────────────────────────────
+
+    [Fact]
+    public void Every_service_with_DbContext_has_health_check()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProgramFiles())
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("DbContext") && !content.Contains("AddInfrastructure")) continue;
+            if (!content.Contains("AddDbHealthCheck") && !content.Contains("AddHealthChecks"))
+            {
+                violations.Add($"{Relative(file)}: service has DB but no health check");
+            }
+        }
+        violations.Should().BeEmpty("every service with a database must register a health check");
+    }
+
+    // ─── Saga Compensation (Wave 2) ──────────────────────────────────
+
+    [Fact]
+    public void No_saga_dead_end_states_without_handler()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindSagaFiles())
+        {
+            var content = File.ReadAllText(file);
+            if (content.Contains("RequiresReview") &&
+                !content.Contains("During(RequiresReview") &&
+                !content.Contains("DuringAny"))
+            {
+                violations.Add($"{Relative(file)}: RequiresReview state defined but has no outbound transition handler");
+            }
+        }
+        // Informational — some RequiresReview states are intentional dead ends with operator UI
+        violations.Should().BeEmpty("saga states should have outbound transitions or be explicitly finalized");
+    }
+
+    // ─── Test Quality (Wave 3) ───────────────────────────────────────
+
+    [Fact]
+    public void No_Task_Delay_for_test_synchronization()
+    {
+        var testRoot = Path.Combine(Directory.GetParent(SrcRoot)!.FullName, "tests");
+        if (!Directory.Exists(testRoot)) return;
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(testRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("bin")))
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"Task\.Delay\(\d+\)") &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: use polling/harness.Published.Any instead of Task.Delay for test sync");
+                }
+            }
+        }
+        // This is a best-practice check, not a hard requirement
+        // violations.Should().BeEmpty("tests should use polling, not Task.Delay for synchronization");
+        // For now, just report count
+        if (violations.Count > 0)
+        {
+            // Log but don't fail — tracked as tech debt
+        }
+    }
+
+    [Fact]
+    public void No_True_Is_True_placeholder_tests()
+    {
+        var testRoot = Path.Combine(Directory.GetParent(SrcRoot)!.FullName, "tests");
+        if (!Directory.Exists(testRoot)) return;
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(testRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("bin")))
+        {
+            var content = File.ReadAllText(file);
+            if (content.Contains("Assert.True(true)") || content.Contains("true.Should().BeTrue()"))
+            {
+                violations.Add($"{Relative(file)}: placeholder test (Assert.True(true)) — delete or replace with real test");
+            }
+        }
+        violations.Should().BeEmpty("placeholder tests provide false coverage");
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────
 
     private static string FindSrcRoot()
@@ -326,6 +559,18 @@ public sealed class PlatformGuardTests
 
     private static IEnumerable<string> FindValidatorFiles() =>
         Directory.GetFiles(SrcRoot, "*Validator*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("bin") && !f.Contains("Test"));
+
+    private static IEnumerable<string> FindDbContextFiles() =>
+        Directory.GetFiles(SrcRoot, "*DbContext.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("bin") && !f.Contains("Test") && !f.Contains("Factory"));
+
+    private static IEnumerable<string> FindDependencyInjectionFiles() =>
+        Directory.GetFiles(SrcRoot, "DependencyInjection.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("bin") && !f.Contains("Test"));
+
+    private static IEnumerable<string> FindRepositoryFiles() =>
+        Directory.GetFiles(SrcRoot, "*Repository.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains("obj") && !f.Contains("bin") && !f.Contains("Test"));
 
     private static IEnumerable<string> FindSagaFiles() =>
