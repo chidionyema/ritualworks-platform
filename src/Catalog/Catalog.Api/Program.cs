@@ -10,6 +10,8 @@ using Serilog;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.Services.AddHealthChecks()
+    .AddDbHealthCheck<CatalogDbContext>();
 
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddApplication(builder.Configuration);

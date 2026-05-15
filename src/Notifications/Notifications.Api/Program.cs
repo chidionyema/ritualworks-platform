@@ -13,6 +13,8 @@ using Serilog;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.Services.AddHealthChecks()
+    .AddDbHealthCheck<NotificationsDbContext>();
 
 if (builder.Configuration.GetValue("Vault:Enabled", false)
     && !builder.Environment.IsEnvironment("Test"))

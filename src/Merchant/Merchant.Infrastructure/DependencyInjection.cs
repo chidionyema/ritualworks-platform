@@ -31,8 +31,8 @@ public static class DependencyInjection
                 var rabbitMqConfig = configuration.GetSection("RabbitMq");
                 cfg.Host(rabbitMqConfig["Host"], "/", h =>
                 {
-                    h.Username(rabbitMqConfig["Username"] ?? "guest");
-                    h.Password(rabbitMqConfig["Password"] ?? "guest");
+                    h.Username(rabbitMqConfig["Username"] ?? throw new InvalidOperationException("RabbitMq:Username is required"));
+                    h.Password(rabbitMqConfig["Password"] ?? throw new InvalidOperationException("RabbitMq:Password is required"));
                 });
                 
                 cfg.ConfigureEndpoints(context);

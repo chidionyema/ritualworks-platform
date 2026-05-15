@@ -50,33 +50,30 @@ public static partial class DependencyInjection
                 npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "notifications");
             }));
 
-        services.AddMassTransit(x =>
+        if (!env.IsEnvironment("Test"))
         {
-            // Register the dispatch consumer here, inside the SINGLE
-            // AddMassTransit call. MT v8 throws ConfigurationException on a
-            // second AddMassTransit call per container — so the L3 extension
-            // method (NotificationConsumersServiceCollectionExtensions) is
-            // a no-op now; we wire the consumer directly here. Application
-            // owns the consumer type; Infrastructure owns the bus.
-            x.AddConsumer<Notifications.Application.Consumers.NotificationRequestConsumer>();
-            x.AddConsumer<Haworks.Notifications.Application.Webhooks.NotificationWebhookValidatedConsumer>();
-            x.AddConsumer<Notifications.Application.Consumers.RefundEmailConsumer>();
-            
-            x.AddEntityFrameworkOutbox<NotificationsDbContext>(o =>
+            services.AddMassTransit(x =>
             {
-                o.UsePostgres();
-                o.UseBusOutbox();
-            });
+                x.AddConsumer<Notifications.Application.Consumers.NotificationRequestConsumer>();
+                x.AddConsumer<Haworks.Notifications.Application.Webhooks.NotificationWebhookValidatedConsumer>();
+                x.AddConsumer<Notifications.Application.Consumers.RefundEmailConsumer>();
 
-            x.UsingRabbitMq((context, cfg) =>
-            {
-                var rabbitConn = configuration.GetConnectionString("RabbitMQ")
-                    ?? throw new InvalidOperationException("RabbitMQ connection string missing");
+                x.AddEntityFrameworkOutbox<NotificationsDbContext>(o =>
+                {
+                    o.UsePostgres();
+                    o.UseBusOutbox();
+                });
 
-                cfg.Host(new Uri(rabbitConn));
-                cfg.ConfigureEndpoints(context);
+                x.UsingRabbitMq((context, cfg) =>
+                {
+                    var rabbitConn = configuration.GetConnectionString("RabbitMQ")
+                        ?? throw new InvalidOperationException("RabbitMQ connection string missing");
+
+                    cfg.Host(new Uri(rabbitConn));
+                    cfg.ConfigureEndpoints(context);
+                });
             });
-        });
+        }
 
         return services;
     }

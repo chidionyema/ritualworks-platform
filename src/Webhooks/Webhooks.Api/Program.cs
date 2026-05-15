@@ -58,7 +58,10 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+}
 
+if (!app.Environment.IsEnvironment("Test"))
+{
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<WebhooksDbContext>();
     await db.Database.MigrateAsync();
