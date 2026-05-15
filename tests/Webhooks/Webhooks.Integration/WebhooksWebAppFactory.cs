@@ -67,15 +67,12 @@ public class WebhooksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
         _ = Services;
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<WebhooksDbContext>();
-        await db.Database.OpenConnectionAsync();
-        try
+        // EnsureCreated may no-op if DB already has stale tables from reused container
+        var created = await db.Database.EnsureCreatedAsync();
+        if (!created)
         {
-            await db.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS webhooks;");
+            await db.Database.EnsureDeletedAsync();
             await db.Database.EnsureCreatedAsync();
-        }
-        finally
-        {
-            await db.Database.CloseConnectionAsync();
         }
     }
 

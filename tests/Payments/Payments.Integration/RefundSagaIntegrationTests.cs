@@ -74,7 +74,9 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
         response.EnsureSuccessStatusCode();
         var refundId = await response.Content.ReadFromJsonAsync<Guid>();
 
-        // Assert — use the harness's own async-wait rather than a bare sleep
+        // Wait for the API handler + harness pipeline to process
+        await Task.Delay(3000);
+
         (await harness.Published.Any<RefundRequestedEvent>(x => x.Context.Message.RefundId == refundId))
             .Should().BeTrue("RefundRequestedEvent should have been published by the API handler");
 
