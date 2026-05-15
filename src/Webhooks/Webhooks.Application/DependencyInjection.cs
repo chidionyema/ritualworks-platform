@@ -1,21 +1,24 @@
 using FluentValidation;
 using Haworks.BuildingBlocks.Behaviors;
+using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Haworks.Webhooks.Application;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddWebhooksApplication(this IServiceCollection services)
+    public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        services.AddMediatR(cfg => 
-        {
-            cfg.RegisterServicesFromAssembly(typeof(DependencyInjection).Assembly);
-            cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
+        var assembly = typeof(DependencyInjection).Assembly;
+
+        services.AddMediatR(cfg => {
+            cfg.RegisterServicesFromAssembly(assembly);
+            cfg.AddOpenBehavior(typeof(TelemetryBehavior<,>));
+            cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         });
 
-        services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
-        
+        services.AddValidatorsFromAssembly(assembly);
+
         return services;
     }
 }

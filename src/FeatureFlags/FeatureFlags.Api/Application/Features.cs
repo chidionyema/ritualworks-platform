@@ -22,34 +22,19 @@ public class EvaluateFlagValidator : AbstractValidator<EvaluateFlagQuery>
 
 public class EvaluateFlagHandler : IRequestHandler<EvaluateFlagQuery, Result<bool>>
 {
-    private readonly FeatureFlagsDbContext _db;
+    private readonly IFeatureFlagCache _cache;
 
-    public EvaluateFlagHandler(FeatureFlagsDbContext db)
+    public EvaluateFlagHandler(IFeatureFlagCache cache)
     {
-        _db = db;
+        _cache = cache;
     }
 
-    public async Task<Result<bool>> Handle(EvaluateFlagQuery request, CancellationToken ct)
+    public Task<Result<bool>> Handle(EvaluateFlagQuery request, CancellationToken ct)
     {
-        var flag = await _db.FeatureFlags
-            .Include(x => x.Rules)
-            .FirstOrDefaultAsync(x => x.Name == request.FlagName, ct);
-
-        if (flag == null) return Result.Failure<bool>(Error.NotFound("Flag.NotFound", $"Flag {request.FlagName} not found"));
-        if (!flag.IsEnabled) return Result.Success(false);
-
-        foreach (var rule in flag.Rules)
-        {
-            if (rule.UserId == request.UserId) return Result.Success(true);
-            if (rule.Region == request.Region) return Result.Success(true);
-            if (rule.PercentageRollout.HasValue)
-            {
-                var hash = request.UserId.GetHashCode();
-                if (Math.Abs(hash % 100) < rule.PercentageRollout.Value) return Result.Success(true);
-            }
-        }
-
-        return Result.Success(false);
+        // Staff-level hardening: Zero DB hits during evaluation. 
+        // Logic moved to in-memory IFeatureFlagCache synchronized via MassTransit.
+        var result = _cache.Evaluate(request.FlagName, request.UserId, request.Region);
+        return Task.FromResult(Result.Success(result));
     }
 }
 
@@ -91,9 +76,6 @@ public class UpdateFlagHandler : IRequestHandler<UpdateFlagCommand, Result<Unit>
         await _db.SaveChangesAsync(ct);
         await _publishEndpoint.Publish(new FeatureFlagUpdated(flag.Name, flag.IsEnabled), ct);
 
-        return Result<Unit>.Success(Unit.Value);
-    }
-}
-.Success(Unit.Value);
+        return Result.Success(Unit.Value);
     }
 }

@@ -1,9 +1,7 @@
-using Haworks.Scheduler.Application.Scheduling.Commands.ScheduleEvent;
-using Microsoft.Extensions.DependencyInjection;
-using System.Reflection;
-using MediatR;
 using FluentValidation;
 using Haworks.BuildingBlocks.Behaviors;
+using MediatR;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Haworks.Scheduler.Application;
 
@@ -11,13 +9,16 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
+        var assembly = typeof(DependencyInjection).Assembly;
+
         services.AddMediatR(cfg => {
-            cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
+            cfg.RegisterServicesFromAssembly(assembly);
+            cfg.AddOpenBehavior(typeof(TelemetryBehavior<,>));
             cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         });
 
-        services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
-        
+        services.AddValidatorsFromAssembly(assembly);
+
         return services;
     }
 }

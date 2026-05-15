@@ -38,7 +38,7 @@ if (builder.Configuration.GetValue("Vault:Enabled", false)
 }
 
 builder.Services.AddNotificationsInfrastructure(builder.Configuration, builder.Environment);
-builder.Services.AddNotificationsApplication(builder.Configuration);
+builder.Services.AddApplication();
 builder.Services.AddPostgresIdempotency<NotificationsDbContext>();
 
 builder.Services.AddPlatformAuthentication(builder.Configuration);

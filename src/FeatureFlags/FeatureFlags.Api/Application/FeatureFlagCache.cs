@@ -1,0 +1,68 @@
+using System.Collections.Concurrent;
+using Haworks.FeatureFlags.Api.Domain;
+using Haworks.FeatureFlags.Api.Infrastructure;
+using Microsoft.EntityFrameworkCore;
+
+namespace Haworks.FeatureFlags.Api.Application;
+
+public interface IFeatureFlagCache
+{
+    bool Evaluate(string flagName, string userId, string region);
+    void Update(string flagName, bool isEnabled, List<FeatureFlagRule> rules);
+    Task WarmupAsync(CancellationToken ct);
+}
+
+public class FeatureFlagCache : IFeatureFlagCache
+{
+    private readonly ConcurrentDictionary<string, CachedFlag> _cache = new();
+    private readonly IServiceProvider _serviceProvider;
+
+    public FeatureFlagCache(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider;
+    }
+
+    public async Task WarmupAsync(CancellationToken ct)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FeatureFlagsDbContext>();
+        
+        var flags = await db.FeatureFlags.Include(x => x.Rules).ToListAsync(ct);
+        foreach (var flag in flags)
+        {
+            Update(flag.Name, flag.IsEnabled, flag.Rules);
+        }
+    }
+
+    public void Update(string flagName, bool isEnabled, List<FeatureFlagRule> rules)
+    {
+        _cache[flagName] = new CachedFlag(isEnabled, rules);
+    }
+
+    public bool Evaluate(string flagName, string userId, string region)
+    {
+        if (!_cache.TryGetValue(flagName, out var flag))
+        {
+            FeatureFlagMetrics.CacheMisses.Add(1);
+            return false;
+        }
+
+        FeatureFlagMetrics.CacheHits.Add(1);
+        if (!flag.IsEnabled) return false;
+
+        foreach (var rule in flag.Rules)
+        {
+            if (rule.UserId == userId) return true;
+            if (rule.Region == region) return true;
+            if (rule.PercentageRollout.HasValue)
+            {
+                var hash = Math.Abs(userId.GetHashCode());
+                if (hash % 100 < rule.PercentageRollout.Value) return true;
+            }
+        }
+
+        return false;
+    }
+
+    private sealed record CachedFlag(bool IsEnabled, List<FeatureFlagRule> Rules);
+}

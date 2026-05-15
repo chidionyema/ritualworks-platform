@@ -48,7 +48,7 @@ if (builder.Configuration.GetValue("Vault:Enabled", false)
 }
 
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
-builder.Services.AddApplication(builder.Configuration);
+builder.Services.AddApplication();
 builder.Services.AddPostgresIdempotency<PaymentDbContext>();
 
 builder.Services.AddPlatformAuthentication(builder.Configuration);

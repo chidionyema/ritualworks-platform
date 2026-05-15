@@ -22,6 +22,8 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.Configuration = builder.Configuration.GetConnectionString("redis");
 });
 
+builder.Services.AddSingleton<IFeatureFlagCache, FeatureFlagCache>();
+
 builder.Services.AddMassTransit(mt =>
 {
     mt.AddEntityFrameworkOutbox<FeatureFlagsDbContext>(o =>
@@ -29,6 +31,8 @@ builder.Services.AddMassTransit(mt =>
         o.UsePostgres();
         o.UseBusOutbox();
     });
+
+    mt.AddConsumer<FeatureFlagUpdatedConsumer>();
 
     mt.UsingInMemory((context, cfg) =>
     {
@@ -42,6 +46,23 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+// Staff-level hardening: Cache warmup on startup ensures sub-millisecond evaluation
+// from the very first request.
+using (var scope = app.Services.CreateScope())
+{
+    try 
+    {
+        var cache = scope.ServiceProvider.GetRequiredService<IFeatureFlagCache>();
+        await cache.WarmupAsync(default);
+    }
+    catch (Exception ex)
+    {
+        // Fail-open: log warning but don't prevent startup if DB is unreachable
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning(ex, "Failed to warmup feature flag cache. Service will start but evaluations may default to false.");
+    }
+}
 
 if (app.Environment.IsDevelopment())
 {

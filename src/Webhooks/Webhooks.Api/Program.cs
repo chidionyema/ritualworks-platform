@@ -19,7 +19,7 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
 
 builder.AddServiceDefaults();
 
-builder.Services.AddWebhooksApplication();
+builder.Services.AddApplication();
 builder.Services.AddWebhooksInfrastructure(builder.Configuration, builder.Environment);
 
 // Kafka Consumer for CDC (Industry Standard) - Webhook Fan-out

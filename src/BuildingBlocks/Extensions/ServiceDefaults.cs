@@ -92,7 +92,28 @@ public static class ServiceDefaults
                 metrics.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation()
-                    .AddMeter("Haworks.Catalog");
+                    // Core Platform Meters
+                    .AddMeter("Haworks.Catalog")
+                    .AddMeter("Haworks.Orders")
+                    .AddMeter("Haworks.Payments")
+                    .AddMeter("Haworks.Identity")
+                    .AddMeter("Haworks.CheckoutOrchestrator")
+                    .AddMeter("Haworks.BffWeb")
+                    .AddMeter("Haworks.Content")
+                    .AddMeter("Haworks.Search")
+                    .AddMeter("Haworks.Location")
+                    .AddMeter("Haworks.Scheduler")
+                    .AddMeter("Haworks.Webhooks")
+                    .AddMeter("Haworks.Audit")
+                    .AddMeter("Haworks.Privacy")
+                    .AddMeter("Haworks.MediatR")
+                    // Wave 3 Meters
+                    .AddMeter("Haworks.FeatureFlags")
+                    .AddMeter("Haworks.Analytics")
+                    .AddMeter("Haworks.Localization")
+                    .AddMeter("Haworks.Media")
+                    .AddMeter("Haworks.Realtime")
+                    .AddMeter("Haworks.RulesEngine");
             })
             .WithTracing(tracing =>
             {
@@ -103,10 +124,7 @@ public static class ServiceDefaults
                     .AddHttpClientInstrumentation()
                     .AddEntityFrameworkCoreInstrumentation()
                     .AddSource("MassTransit")
-                    // Custom business ActivitySources — one per service. OTel
-                    // requires exact source names (no glob), so each service's
-                    // <Service>Activities.SourceName is hard-coded here. New
-                    // services should add their source name to this chain.
+                    // Custom business ActivitySources — one per service.
                     .AddSource("Haworks.Catalog")
                     .AddSource("Haworks.Orders")
                     .AddSource("Haworks.Payments")
@@ -114,7 +132,20 @@ public static class ServiceDefaults
                     .AddSource("Haworks.BffWeb")
                     .AddSource("Haworks.Content")
                     .AddSource("Haworks.Search")
-                    .AddSource("Haworks.Identity");
+                    .AddSource("Haworks.Identity")
+                    .AddSource("Haworks.Location")
+                    .AddSource("Haworks.Scheduler")
+                    .AddSource("Haworks.Webhooks")
+                    .AddSource("Haworks.Audit")
+                    .AddSource("Haworks.Privacy")
+                    .AddSource("Haworks.MediatR")
+                    // Wave 3 Sources
+                    .AddSource("Haworks.FeatureFlags")
+                    .AddSource("Haworks.Analytics")
+                    .AddSource("Haworks.Localization")
+                    .AddSource("Haworks.Media")
+                    .AddSource("Haworks.Realtime")
+                    .AddSource("Haworks.RulesEngine");
             });
 
         builder.AddOpenTelemetryExporters();

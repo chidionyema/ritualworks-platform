@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Haworks.BuildingBlocks.Behaviors;
 
 namespace Haworks.BffWeb.Application;
 
@@ -11,7 +12,10 @@ public static class DependencyInjection
     {
         var assembly = typeof(DependencyInjection).Assembly;
 
-        services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(assembly));
+        services.AddMediatR(cfg => {
+            cfg.RegisterServicesFromAssembly(assembly);
+            cfg.AddOpenBehavior(typeof(TelemetryBehavior<,>));
+        });
         services.AddValidatorsFromAssembly(assembly);
 
         services.AddHttpContextAccessor();
