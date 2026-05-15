@@ -25,6 +25,7 @@ public sealed class RefundSaga : MassTransitStateMachine<RefundSagaState>
         Event(() => ProviderRefundSucceeded, e => e.CorrelateById(ctx => ctx.Message.RefundId));
         Event(() => ProviderRefundFailed, e => e.CorrelateById(ctx => ctx.Message.RefundId));
         Event(() => RefundCancelledByOperator, e => e.CorrelateById(ctx => ctx.Message.RefundId));
+        Event(() => RefundApprovedByOperator, e => e.CorrelateById(ctx => ctx.Message.RefundId));
 
         Initially(
             When(RefundRequested)
@@ -126,6 +127,27 @@ public sealed class RefundSaga : MassTransitStateMachine<RefundSagaState>
                 }))
                 .TransitionTo(RequiresReview));
 
+        During(RequiresReview,
+            When(RefundApprovedByOperator)
+                .Then(ctx =>
+                {
+                    ctx.Saga.FailureCategory = RefundFailureCategory.None;
+                    ctx.Saga.FailureDetail = null;
+                })
+                .PublishAsync(ctx => ctx.Init<ProviderRefundInitiationRequestedEvent>(new ProviderRefundInitiationRequestedEvent
+                {
+                    RefundId = ctx.Saga.CorrelationId,
+                    Provider = ctx.Saga.Provider,
+                    PaymentId = ctx.Saga.PaymentId,
+                    Amount = ctx.Saga.Amount,
+                    Currency = ctx.Saga.Currency
+                }))
+                .Schedule(RefundTimeoutSchedule, ctx => ctx.Init<RefundTimedOutEvent>(new RefundTimedOutEvent
+                {
+                    RefundId = ctx.Saga.CorrelationId
+                }))
+                .TransitionTo(AwaitingProviderConfirmation));
+
         // Idempotency: late-arriving duplicate events on a finalized saga
         // (Refunded / Cancelled) or a terminal-ish state (RequiresReview)
         // silently no-op rather than throwing.
@@ -180,6 +202,7 @@ public sealed class RefundSaga : MassTransitStateMachine<RefundSagaState>
     public Event<ProviderRefundSucceededEvent> ProviderRefundSucceeded { get; private set; } = null!;
     public Event<ProviderRefundFailedEvent> ProviderRefundFailed { get; private set; } = null!;
     public Event<RefundCancelledByOperatorEvent> RefundCancelledByOperator { get; private set; } = null!;
+    public Event<RefundApprovedByOperatorEvent> RefundApprovedByOperator { get; private set; } = null!;
 
     public Schedule<RefundSagaState, RefundTimedOutEvent> RefundTimeoutSchedule { get; private set; } = null!;
 

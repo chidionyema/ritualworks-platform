@@ -17,13 +17,16 @@ public sealed class RefundEmailConsumer(
     public async Task Consume(ConsumeContext<RefundCompletedEvent> context)
     {
         var msg = context.Message;
-        // In a real app, we'd fetch the recipient email from the Order/Payment service 
-        // or have it passed in the event. For this demo, we'll use a placeholder
-        // or assume the system can resolve it.
-        
+        var recipient = msg.CustomerEmail;
+        if (string.IsNullOrWhiteSpace(recipient))
+        {
+            logger.LogWarning("RefundCompletedEvent for {RefundId} has no CustomerEmail; skipping email notification", msg.RefundId);
+            return;
+        }
+
         await mediator.Send(new SendNotificationCommand(
-            UserId: null, // Transparent for now
-            Recipient: "customer@example.com", // Placeholder
+            UserId: null,
+            Recipient: recipient,
             Channel: NotificationChannel.Email,
             TemplateId: "refund-completed",
             Priority: NotificationPriority.High,
@@ -40,9 +43,16 @@ public sealed class RefundEmailConsumer(
     public async Task Consume(ConsumeContext<RefundFailedEvent> context)
     {
         var msg = context.Message;
+        var recipient = msg.CustomerEmail;
+        if (string.IsNullOrWhiteSpace(recipient))
+        {
+            logger.LogWarning("RefundFailedEvent for {RefundId} has no CustomerEmail; skipping email notification", msg.RefundId);
+            return;
+        }
+
         await mediator.Send(new SendNotificationCommand(
             UserId: null,
-            Recipient: "customer@example.com",
+            Recipient: recipient,
             Channel: NotificationChannel.Email,
             TemplateId: "refund-failed",
             Priority: NotificationPriority.High,
