@@ -1,0 +1,38 @@
+groups:
+  - name: saga-health
+    rules:
+      - alert: RefundStuckInReview
+        expr: increase(payments_refund_stuck_in_review_total[1h]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Refund saga stuck in RequiresReview"
+          description: "{{ $value }} refund sagas are stuck in RequiresReview state for over 1 hour"
+
+      - alert: CheckoutStuckInReview
+        expr: increase(checkout_saga_stuck_in_review_total[1h]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Checkout saga stuck in RequiresReview"
+          description: "{{ $value }} checkout sagas are stuck in RequiresReview state for over 1 hour"
+
+      - alert: PrivacyErasureStalled
+        expr: increase(privacy_erasure_stalled_total[1h]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "GDPR erasure request stalled"
+          description: "Privacy erasure stuck in Processing/Stalled — GDPR 30-day deadline at risk"
+
+      - alert: DunningExhausted
+        expr: increase(payments_subscription_dunning_exhausted_total[24h]) > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High dunning exhaustion rate"
+          description: "{{ $value }} subscriptions canceled by dunning exhaustion in the last 24 hours"

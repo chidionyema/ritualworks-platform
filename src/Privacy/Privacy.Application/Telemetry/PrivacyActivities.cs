@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 
 namespace Haworks.Privacy.Application.Telemetry;
 
@@ -11,4 +12,8 @@ public static class PrivacyActivities
 {
     public const string SourceName = "Haworks.Privacy";
     public static readonly ActivitySource Source = new(SourceName, "1.0.0");
+
+    public static readonly Meter Meter = new(SourceName, "1.0.0");
+    public static readonly Counter<long> ErasureStalled = Meter.CreateCounter<long>("privacy.erasure.stalled", description: "Privacy erasure requests stuck in Processing/Stalled state");
+    public static readonly Counter<long> ErasureFailed = Meter.CreateCounter<long>("privacy.erasure.failed", description: "Privacy erasure requests that failed");
 }
