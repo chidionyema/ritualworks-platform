@@ -134,6 +134,32 @@ public sealed class CatalogFlowsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ReserveStock_sets_IsInStock_false_when_exact_quantity_reserved()
+    {
+        var categoryId = await CreateCategoryAsync();
+        var productId = await CreateProductAsync(categoryId, initialStock: 5);
+
+        var orderId = Guid.NewGuid();
+        var reserveResp = await _client.PostAsJsonAsync($"/api/products/{productId}/reserve",
+            new
+            {
+                quantity = 5,
+                orderId,
+                sagaId = Guid.NewGuid(),
+                userId = "u1",
+                totalAmount = 50m,
+                currency = "USD",
+                customerEmail = "u1@example.com",
+                idempotencyKey = "key-exact-" + Guid.NewGuid().ToString("N"),
+            });
+        reserveResp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var get = await _client.GetFromJsonAsync<ProductDto>($"/api/products/{productId}");
+        get!.StockQuantity.Should().Be(0);
+        get.IsInStock.Should().BeFalse("reserving the exact stock quantity must set IsInStock to false");
+    }
+
+    [Fact]
     public async Task Reserve_more_than_stock_returns_409_and_does_not_publish()
     {
         var categoryId = await CreateCategoryAsync();

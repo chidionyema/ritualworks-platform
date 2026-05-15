@@ -177,6 +177,14 @@ public class CatalogDbContext : DbContext
             entity.Property(r => r.ItemsJson).HasColumnType("jsonb").IsRequired();
             entity.Property(r => r.RowVersion).HasDefaultValueSql("'\\x0000000000000000'::bytea");
 
+            // Optimistic concurrency via Postgres xmin system column —
+            // prevents double-release races on the same reservation row.
+            entity.Property<uint>("xmin")
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+
             // Sweeper hot path: WHERE Status = Pending AND ExpiresAt <= now
             // ORDER BY ExpiresAt LIMIT N. Composite index keeps the scan
             // bounded as the table grows.
