@@ -64,27 +64,26 @@ public static class JwksAuthenticationExtensions
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, bearer =>
             {
-                // Resolve dependencies via a temporary provider.
-                // This runs once during auth scheme initialization.
-                using var tempSp = services.BuildServiceProvider();
-                var jwks = tempSp.GetRequiredService<IOptions<JwksOptions>>().Value;
-                var manager = tempSp.GetRequiredService<IConfigurationManager<OpenIdConnectConfiguration>>();
-                var loggerFactory = tempSp.GetRequiredService<ILoggerFactory>();
-                var logger = loggerFactory.CreateLogger("Haworks.BuildingBlocks.Authentication.Jwks");
+                var jwksSection = configuration.GetSection(JwksOptions.SectionName);
+                var jwksUri = jwksSection["JwksUri"] ?? throw new InvalidOperationException("JwksOptions:JwksUri required");
+                var issuer = jwksSection["Issuer"] ?? throw new InvalidOperationException("JwksOptions:Issuer required");
+                var audience = jwksSection["Audience"] ?? throw new InvalidOperationException("JwksOptions:Audience required");
 
                 bearer.MapInboundClaims = false;
+                bearer.Authority = issuer;
+                bearer.Audience = audience;
+                bearer.RequireHttpsMetadata = !jwksUri.StartsWith("http://localhost", StringComparison.Ordinal);
                 bearer.TokenValidationParameters = new TokenValidationParameters
                 {
-                    ValidIssuer = jwks.Issuer,
-                    ValidAudience = jwks.Audience,
+                    ValidIssuer = issuer,
+                    ValidAudience = audience,
                     ValidateIssuer = true,
                     ValidateAudience = true,
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
                     ClockSkew = TimeSpan.FromSeconds(30),
-                    IssuerSigningKeyResolver = (token, securityToken, kid, parameters) =>
-                        ResolveKeys(manager, kid, logger),
                 };
+                bearer.MetadataAddress = jwksUri;
             });
 
         return services;
