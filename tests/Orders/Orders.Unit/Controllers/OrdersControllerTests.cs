@@ -61,15 +61,6 @@ public class OrdersControllerTests : TestBase
 
         var result = await _controller.Get(orderId, CancellationToken.None);
 
-<<<<<<< HEAD
-        var ok = Assert.IsType<OkObjectResult>(result);
-        Assert.NotNull(ok.Value);
-        _mediatorMock.Verify(
-            m => m.Send(
-                It.Is<GetOrderByIdQuery>(q => q.Id == orderId),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
-=======
         var okResult = Assert.IsType<OkObjectResult>(result);
         var response = Assert.IsType<OrderDto>(okResult.Value);
         Assert.Equal(orderId, response.Id);
@@ -111,6 +102,5 @@ public class OrdersControllerTests : TestBase
         var result = await _controller.Get(orderId, CancellationToken.None);
 
         Assert.IsType<ForbidResult>(result);
->>>>>>> worktree-agent-a1268af7
     }
 }
