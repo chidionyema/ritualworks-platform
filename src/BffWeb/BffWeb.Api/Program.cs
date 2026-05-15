@@ -18,7 +18,7 @@ builder.AddServiceDefaults();
 // validates the bearer token (AddPlatformAuthentication), and the BFF
 // forwards the user identity as X-User-Id (UserIdentityForwardingHandler).
 builder.Services.AddPlatformAuthentication(builder.Configuration);
-builder.Services.AddTransient<Haworks.BuildingBlocks.Authentication.UserIdentityForwardingHandler>();
+builder.Services.AddTransient<Haworks.BuildingBlocks.Authentication.UserIdentityForwardingHandler>(sp => new Haworks.BuildingBlocks.Authentication.UserIdentityForwardingHandler(sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(), sp.GetService<Haworks.BuildingBlocks.Authentication.IServiceTokenProvider>()));
 
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddApplication(builder.Configuration);
