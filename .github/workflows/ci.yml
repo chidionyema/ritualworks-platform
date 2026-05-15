@@ -30,7 +30,19 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       shared: ${{ steps.filter.outputs.shared }}
-      services: ${{ steps.filter.outputs.services }}
+      Audit: ${{ steps.filter.outputs.Audit }}
+      BffWeb: ${{ steps.filter.outputs.BffWeb }}
+      Catalog: ${{ steps.filter.outputs.Catalog }}
+      CheckoutOrchestrator: ${{ steps.filter.outputs.CheckoutOrchestrator }}
+      Content: ${{ steps.filter.outputs.Content }}
+      Identity: ${{ steps.filter.outputs.Identity }}
+      Notifications: ${{ steps.filter.outputs.Notifications }}
+      Orders: ${{ steps.filter.outputs.Orders }}
+      Payments: ${{ steps.filter.outputs.Payments }}
+      Payouts: ${{ steps.filter.outputs.Payouts }}
+      Scheduler: ${{ steps.filter.outputs.Scheduler }}
+      Search: ${{ steps.filter.outputs.Search }}
+      Webhooks: ${{ steps.filter.outputs.Webhooks }}
     steps:
       - uses: actions/checkout@v6
       - id: filter
@@ -81,16 +93,6 @@ jobs:
             Webhooks:
               - 'src/Webhooks/**'
               - 'tests/Webhooks/**'
-      - id: collect
-        run: |
-          services='[]'
-          for svc in Audit BffWeb Catalog CheckoutOrchestrator Content Identity Notifications Orders Payments Payouts Scheduler Search Webhooks; do
-            val=$(echo '${{ toJson(steps.filter.outputs) }}' | jq -r ".\"$svc\" // \"false\"")
-            if [ "$val" = "true" ] || [ "${{ steps.filter.outputs.shared }}" = "true" ]; then
-              services=$(echo "$services" | jq --arg s "$svc" '. + [$s]')
-            fi
-          done
-          echo "services=$services" >> "$GITHUB_OUTPUT"
 
   # Fast path — builds the solution and runs everything that doesn't need
   # Docker. Fails the PR in <2 minutes if the build, unit, architecture,
@@ -168,8 +170,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [build-and-fast-tests, changes]
-    # Only run integration tests for services with changed files (or shared code changes)
-    if: needs.changes.outputs.shared == 'true' || needs.changes.outputs.services != '[]'
+    # Skip integration test if neither the service nor shared code changed
+    if: >-
+      needs.changes.outputs.shared == 'true' ||
+      needs.changes.outputs[matrix.suite] == 'true'
     strategy:
       fail-fast: false
       matrix:
