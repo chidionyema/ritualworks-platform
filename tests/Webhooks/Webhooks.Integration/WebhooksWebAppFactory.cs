@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 using Haworks.BuildingBlocks.Testing.Authentication;
@@ -68,16 +70,12 @@ public class WebhooksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
         _ = Services;
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<WebhooksDbContext>();
-        await db.Database.OpenConnectionAsync();
-        try
-        {
-            await db.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS webhooks;");
-            await db.Database.EnsureCreatedAsync();
-        }
-        finally
-        {
-            await db.Database.CloseConnectionAsync();
-        }
+        await db.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS webhooks;");
+        // EnsureCreatedAsync returns false when DB has Hangfire/other tables.
+        // CreateTablesAsync creates only the model's tables regardless.
+        var creator = db.Database.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalDatabaseCreator>();
+        try { await creator.CreateTablesAsync(); }
+        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P07") { /* tables already exist */ }
     }
 
     async Task IAsyncLifetime.DisposeAsync()
