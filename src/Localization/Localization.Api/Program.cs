@@ -13,6 +13,7 @@ builder.Services.AddLocalizationService(builder.Configuration, builder.Environme
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHealthChecks().AddDbHealthCheck<LocalizationDbContext>();
 
 builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 {
@@ -38,6 +39,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 

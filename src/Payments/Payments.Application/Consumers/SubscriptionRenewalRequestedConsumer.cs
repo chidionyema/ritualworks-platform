@@ -48,6 +48,8 @@ public sealed class SubscriptionRenewalRequestedConsumer(
                 ErrorCode = ex.GetType().Name,
                 ErrorMessage = ex.Message
             });
+
+            throw;
         }
     }
 }

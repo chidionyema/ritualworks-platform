@@ -100,7 +100,7 @@ public class WebhooksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
             });
         });
 
-        builder.ConfigureServices(services =>
+        builder.ConfigureTestServices(services =>
         {
             // Suppress PendingModelChangesWarning so EnsureCreatedAsync works
             services.AddDbContext<WebhooksDbContext>((sp, options) =>

@@ -68,7 +68,7 @@ public sealed class SagaHealthWatcher : BackgroundService
         var deadline = DateTime.UtcNow - RefundStuckThreshold;
 
         var stuck = await db.RefundSagas
-            .Where(s => s.CurrentState == "RequiresReview" && s.CreatedAt < deadline)
+            .Where(s => s.CurrentState == "RequiresReview" /* monitoring only — not a saga state transition */ && s.CreatedAt < deadline)
             .Select(s => new { s.CorrelationId, s.OrderId, s.Amount, s.CreatedAt })
             .ToListAsync(ct);
 

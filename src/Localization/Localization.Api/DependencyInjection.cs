@@ -11,8 +11,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddLocalizationService(this IServiceCollection services, IConfiguration configuration, IHostEnvironment env)
     {
-        var connectionString = configuration.GetConnectionString("localization") 
-            ?? "Host=localhost;Database=localization;Username=postgres;Password=postgres";
+        var connectionString = configuration.GetConnectionString("localization")
+            ?? throw new InvalidOperationException("ConnectionStrings:localization is required");
 
         services.AddDbContext<LocalizationDbContext>(options =>
             options.UseNpgsql(connectionString));
@@ -34,7 +34,7 @@ public static class DependencyInjection
                 mt.SetKebabCaseEndpointNameFormatter();
                 mt.UsingRabbitMq((context, cfg) =>
                 {
-                    var rabbitConn = configuration.GetConnectionString("rabbitmq") ?? "amqp://guest:guest@localhost:5672";
+                    var rabbitConn = configuration.GetConnectionString("rabbitmq") ?? throw new InvalidOperationException("RabbitMq:Username is required");
                     cfg.Host(new Uri(rabbitConn));
                     cfg.ConfigureEndpoints(context);
                 });

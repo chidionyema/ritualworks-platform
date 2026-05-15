@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Haworks.Analytics.Api.Application.Commands;
 
 namespace Haworks.Analytics.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public sealed class EventsController(IMediator mediator) : ControllerBase
 {

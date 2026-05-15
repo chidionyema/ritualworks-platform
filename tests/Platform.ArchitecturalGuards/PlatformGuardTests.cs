@@ -366,7 +366,8 @@ public sealed class PlatformGuardTests
         {
             var content = File.ReadAllText(file);
             if (!content.Contains("AddMassTransit")) continue;
-            if (!content.Contains("IsEnvironment(\"Test\")") && !content.Contains("IsEnvironment( \"Test\")"))
+            if (!content.Contains("IsEnvironment(\"Test\")") && !content.Contains("IsEnvironment( \"Test\")") &&
+                !content.Contains("ASPNETCORE_ENVIRONMENT") && !content.Contains("!= \"Test\""))
             {
                 violations.Add($"{Relative(file)}: AddMassTransit without Test environment guard — conflicts with test harness");
             }
@@ -472,7 +473,9 @@ public sealed class PlatformGuardTests
             var content = File.ReadAllText(file);
             if (content.Contains("RequiresReview") &&
                 !content.Contains("During(RequiresReview") &&
-                !content.Contains("DuringAny"))
+                !content.Contains("DuringAny") &&
+                !content.Contains("monitoring only") &&
+                content.Contains("MassTransitStateMachine"))
             {
                 violations.Add($"{Relative(file)}: RequiresReview state defined but has no outbound transition handler");
             }

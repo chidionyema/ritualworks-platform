@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -47,7 +48,7 @@ public class LocationWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
             });
         });
 
-        builder.ConfigureServices(services =>
+        builder.ConfigureTestServices(services =>
         {
             var currentUserMock = new Mock<ICurrentUserService>();
             currentUserMock.Setup(x => x.UserId).Returns("test-user");

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Haworks.FeatureFlags.Api.Application;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -5,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Haworks.FeatureFlags.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class FeatureFlagsController : ControllerBase
 {

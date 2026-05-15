@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Cryptography;
+using Haworks.BuildingBlocks.Testing.Authentication;
 using Haworks.BuildingBlocks.Testing.Containers;
 using Xunit;
 
@@ -32,6 +34,8 @@ public sealed class IdentityWebAppFactory : WebApplicationFactory<Program>, IAsy
         Environment.SetEnvironmentVariable("Authentication__Facebook__AppId",         "test-facebook-app-id");
         Environment.SetEnvironmentVariable("Authentication__Facebook__AppSecret",     "test-facebook-app-secret");
         Environment.SetEnvironmentVariable("Security__AllowedRedirectHosts__0", "localhost");
+
+        JwtTestDefaults.SetTestEnvironmentVariables();
     }
 
     async Task IAsyncLifetime.DisposeAsync()
@@ -55,7 +59,7 @@ public sealed class IdentityWebAppFactory : WebApplicationFactory<Program>, IAsy
             });
         });
 
-        builder.ConfigureServices(services =>
+        builder.ConfigureTestServices(services =>
         {
             var existing = services.SingleOrDefault(d =>
                 d.ServiceType == typeof(Haworks.BuildingBlocks.Vault.IJwtSigningKeyProvider));

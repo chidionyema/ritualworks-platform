@@ -8,6 +8,8 @@ public class MediaDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasDefaultSchema("media");
+
         modelBuilder.Entity<MediaFile>(entity =>
         {
             entity.HasKey(e => e.Id);

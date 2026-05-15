@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.TestHost;
 using MassTransit;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -56,7 +57,7 @@ public sealed class CheckoutWebAppFactory : WebApplicationFactory<Program>, IAsy
             });
         });
 
-        builder.ConfigureServices(services =>
+        builder.ConfigureTestServices(services =>
         {
             services.AddMassTransitTestHarness(mt =>
             {
