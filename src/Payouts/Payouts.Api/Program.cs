@@ -42,6 +42,9 @@ app.MapControllers();
 app.MapDefaultEndpoints();
 if (app.Environment.IsDevelopment()) { app.UseHangfireDashboard(); }
 
+// M2-14: Prevent concurrent execution of disbursement/mature-funds jobs
+GlobalJobFilters.Filters.Add(new Hangfire.DisableConcurrentExecutionAttribute(timeoutInSeconds: 300));
+
 if (!app.Environment.IsEnvironment("Test"))
 {
     using var scope = app.Services.CreateScope();

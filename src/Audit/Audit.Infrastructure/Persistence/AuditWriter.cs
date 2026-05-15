@@ -11,7 +11,11 @@ namespace Haworks.Audit.Infrastructure.Persistence;
 
 public sealed class AuditWriter : IAuditWriter, IAsyncDisposable
 {
-    private readonly Channel<AuditRow> _channel;
+    private const int MaxRetries = 3;
+
+    private readonly record struct PendingRow(AuditRow Row, int RetryCount);
+
+    private readonly Channel<PendingRow> _channel;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<AuditWriter> _logger;
     private readonly Task _workerTask;
@@ -21,7 +25,7 @@ public sealed class AuditWriter : IAuditWriter, IAsyncDisposable
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
-        _channel = Channel.CreateUnbounded<AuditRow>(new UnboundedChannelOptions
+        _channel = Channel.CreateUnbounded<PendingRow>(new UnboundedChannelOptions
         {
             SingleReader = true
         });
@@ -30,7 +34,7 @@ public sealed class AuditWriter : IAuditWriter, IAsyncDisposable
 
     public async ValueTask WriteAsync(AuditRow row, CancellationToken ct)
     {
-        await _channel.Writer.WriteAsync(row, ct);
+        await _channel.Writer.WriteAsync(new PendingRow(row, 0), ct);
     }
 
     public async Task FlushAsync(CancellationToken ct)
@@ -41,14 +45,14 @@ public sealed class AuditWriter : IAuditWriter, IAsyncDisposable
 
     private async Task ProcessBatchAsync()
     {
-        var batch = new List<AuditRow>(50);
+        var batch = new List<PendingRow>(50);
         try
         {
             while (await _channel.Reader.WaitToReadAsync(_cts.Token))
             {
-                while (batch.Count < 50 && _channel.Reader.TryRead(out var row))
+                while (batch.Count < 50 && _channel.Reader.TryRead(out var pending))
                 {
-                    batch.Add(row);
+                    batch.Add(pending);
                 }
 
                 if (batch.Count > 0)
@@ -67,9 +71,9 @@ public sealed class AuditWriter : IAuditWriter, IAsyncDisposable
         }
         finally
         {
-            while (_channel.Reader.TryRead(out var row))
+            while (_channel.Reader.TryRead(out var pending))
             {
-                batch.Add(row);
+                batch.Add(pending);
                 if (batch.Count >= 50)
                 {
                     await WriteBatchAsync(batch);
@@ -83,44 +87,77 @@ public sealed class AuditWriter : IAuditWriter, IAsyncDisposable
         }
     }
 
-    private async Task WriteBatchAsync(List<AuditRow> batch)
+    private async Task WriteBatchAsync(List<PendingRow> batch)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
-        var connection = (NpgsqlConnection)dbContext.Database.GetDbConnection();
-
-        if (connection.State != System.Data.ConnectionState.Open)
-        {
-            await connection.OpenAsync();
-        }
-
-        await using var writer = await connection.BeginBinaryImportAsync(
-            "COPY audit_events (id, occurred_at, received_at, event_type, entity_type, entity_id, actor_id, actor_type, correlation_id, payload, metadata) FROM STDIN (FORMAT BINARY)");
-
         try
         {
-            foreach (var row in batch)
+            using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
+            var connection = (NpgsqlConnection)dbContext.Database.GetDbConnection();
+
+            if (connection.State != System.Data.ConnectionState.Open)
             {
-                await writer.StartRowAsync();
-                await writer.WriteAsync(Guid.NewGuid(), NpgsqlTypes.NpgsqlDbType.Uuid);
-                await writer.WriteAsync(row.OccurredAt, NpgsqlTypes.NpgsqlDbType.TimestampTz);
-                await writer.WriteAsync(DateTimeOffset.UtcNow, NpgsqlTypes.NpgsqlDbType.TimestampTz);
-                await writer.WriteAsync(row.EventType, NpgsqlTypes.NpgsqlDbType.Text);
-                await writer.WriteAsync(row.EntityType, NpgsqlTypes.NpgsqlDbType.Text);
-                await writer.WriteAsync(row.EntityId, NpgsqlTypes.NpgsqlDbType.Text);
-                await writer.WriteAsync(row.ActorId, NpgsqlTypes.NpgsqlDbType.Text);
-                await writer.WriteAsync(row.ActorType, NpgsqlTypes.NpgsqlDbType.Text);
-                await writer.WriteAsync(row.CorrelationId, NpgsqlTypes.NpgsqlDbType.Text);
-                await writer.WriteAsync(JsonSerializer.Serialize(row.Payload), NpgsqlTypes.NpgsqlDbType.Jsonb);
-                await writer.WriteAsync(JsonSerializer.Serialize(row.Metadata), NpgsqlTypes.NpgsqlDbType.Jsonb);
+                await connection.OpenAsync();
             }
 
-            await writer.CompleteAsync();
+            await using var writer = await connection.BeginBinaryImportAsync(
+                "COPY audit_events (id, occurred_at, received_at, event_type, entity_type, entity_id, actor_id, actor_type, correlation_id, payload, metadata) FROM STDIN (FORMAT BINARY)");
+
+            try
+            {
+                foreach (var pending in batch)
+                {
+                    var row = pending.Row;
+                    await writer.StartRowAsync();
+                    await writer.WriteAsync(Guid.NewGuid(), NpgsqlTypes.NpgsqlDbType.Uuid);
+                    await writer.WriteAsync(row.OccurredAt, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                    await writer.WriteAsync(DateTimeOffset.UtcNow, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                    await writer.WriteAsync(row.EventType, NpgsqlTypes.NpgsqlDbType.Text);
+                    await writer.WriteAsync(row.EntityType, NpgsqlTypes.NpgsqlDbType.Text);
+                    await writer.WriteAsync(row.EntityId, NpgsqlTypes.NpgsqlDbType.Text);
+                    await writer.WriteAsync(row.ActorId, NpgsqlTypes.NpgsqlDbType.Text);
+                    await writer.WriteAsync(row.ActorType, NpgsqlTypes.NpgsqlDbType.Text);
+                    await writer.WriteAsync(row.CorrelationId, NpgsqlTypes.NpgsqlDbType.Text);
+                    await writer.WriteAsync(JsonSerializer.Serialize(row.Payload), NpgsqlTypes.NpgsqlDbType.Jsonb);
+                    await writer.WriteAsync(JsonSerializer.Serialize(row.Metadata), NpgsqlTypes.NpgsqlDbType.Jsonb);
+                }
+
+                await writer.CompleteAsync();
+            }
+            catch
+            {
+                try { await writer.CloseAsync(); } catch { }
+                throw;
+            }
         }
-        catch
+        catch (PostgresException ex)
         {
-            try { await writer.CloseAsync(); } catch { }
-            throw;
+            // Re-queue items that have not yet exceeded the retry limit; dead-letter the rest.
+            var requeued = 0;
+            var dropped = 0;
+            foreach (var pending in batch)
+            {
+                var nextRetry = pending.RetryCount + 1;
+                if (nextRetry >= MaxRetries)
+                {
+                    dropped++;
+                    _logger.LogError(ex,
+                        "AuditWriter: dropping audit row after {MaxRetries} failed attempts. EventType={EventType} EntityId={EntityId}",
+                        MaxRetries, pending.Row.EventType, pending.Row.EntityId);
+                }
+                else
+                {
+                    requeued++;
+                    _channel.Writer.TryWrite(new PendingRow(pending.Row, nextRetry));
+                }
+            }
+
+            if (requeued > 0)
+            {
+                _logger.LogWarning(ex,
+                    "AuditWriter: COPY batch failed, re-queued {Requeued} rows, dropped {Dropped} rows (max retries exhausted)",
+                    requeued, dropped);
+            }
         }
     }
 

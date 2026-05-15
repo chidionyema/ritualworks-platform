@@ -71,9 +71,9 @@ public sealed class PaymentSessionRequestedConsumer(
             // 1. Create the Payment aggregate (Status = Pending)
             var payment = Haworks.Payments.Domain.Payment.Create(
                 evt.OrderId,
-                evt.CustomerEmail, // Using email as UserId for now if UserId not in event, but event has it?
+                evt.UserId,
                 evt.Amount,
-                0m, // Tax not in event?
+                evt.Tax,
                 evt.Currency,
                 Haworks.Contracts.Payments.PaymentProvider.Stripe,
                 evt.SagaId);

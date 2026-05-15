@@ -8,6 +8,7 @@ using Hangfire;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace Haworks.Webhooks.Infrastructure.Workers;
 
@@ -40,7 +41,14 @@ public class CdcFanOutWorker(
 
                 await ProcessMessageAsync(result, stoppingToken);
 
-                consumer.Commit(result);
+                try
+                {
+                    consumer.Commit(result);
+                }
+                catch (Exception commitEx)
+                {
+                    logger.LogWarning(commitEx, "Kafka commit failed for {Topic} offset {Offset}; will re-deliver on restart", result.Topic, result.Offset);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -55,7 +63,17 @@ public class CdcFanOutWorker(
 
     private async Task ProcessMessageAsync(ConsumeResult<string, string> result, CancellationToken ct)
     {
-        var message = JsonSerializer.Deserialize<DebeziumEnvelope>(result.Message.Value);
+        DebeziumEnvelope? message;
+        try
+        {
+            message = JsonSerializer.Deserialize<DebeziumEnvelope>(result.Message.Value);
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or FormatException or ArgumentNullException)
+        {
+            logger.LogError(ex, "Skipping malformed CDC message on {Topic} offset {Offset}", result.Topic, result.Offset);
+            consumer.Commit(result);
+            return;
+        }
         if (message == null) return;
 
         using var scope = serviceProvider.CreateScope();
@@ -89,7 +107,18 @@ public class CdcFanOutWorker(
             deliveries.Add(delivery);
         }
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
+        {
+            // Duplicate delivery rows — this message was already processed (crash after save, before commit).
+            // Log and continue so Kafka offset can be committed; Hangfire jobs are idempotent.
+            logger.LogWarning("Duplicate CDC message detected (unique constraint 23505) for topic {Topic} key {Key} — skipping re-insert",
+                result.Topic, result.Message.Key);
+            return;
+        }
 
         foreach (var delivery in deliveries)
         {

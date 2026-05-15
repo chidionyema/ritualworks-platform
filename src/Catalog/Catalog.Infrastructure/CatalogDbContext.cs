@@ -184,7 +184,7 @@ public class CatalogDbContext : DbContext
                 .ValueGeneratedOnAddOrUpdate()
                 .IsConcurrencyToken();
 
-            entity.HasIndex(r => r.OrderId).HasDatabaseName("IX_StockReservations_OrderId");
+            entity.HasIndex(r => r.OrderId).HasDatabaseName("IX_StockReservations_OrderId").IsUnique();
             entity.HasIndex(r => r.SagaId).HasDatabaseName("IX_StockReservations_SagaId");
 
             // Sweeper hot path: WHERE Status = Pending AND ExpiresAt <= now

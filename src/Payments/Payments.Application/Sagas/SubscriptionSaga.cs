@@ -162,6 +162,14 @@ public sealed class SubscriptionSaga : MassTransitStateMachine<SubscriptionSagaS
                             EmitSpan(ctx.Saga.CorrelationId, ctx.Saga.ProviderSubscriptionId, "canceled_dunning_exhausted");
                             logger.LogError("Dunning exhausted for {SubscriptionId}. Terminating access.", ctx.Saga.ProviderSubscriptionId);
                         })
+                        .PublishAsync(ctx => ctx.Init<SubscriptionCancelledEvent>(new SubscriptionCancelledEvent
+                        {
+                            SubscriptionId = ctx.Saga.ProviderSubscriptionId,
+                            UserId = ctx.Saga.UserId,
+                            Provider = PaymentProvider.Stripe,
+                            Reason = "dunning_exhausted",
+                            CancelledAt = DateTime.UtcNow
+                        }))
                         .TransitionTo(Canceled)
                         .Finalize()));
 
@@ -202,9 +210,9 @@ public sealed class SubscriptionSaga : MassTransitStateMachine<SubscriptionSagaS
         SetCompletedWhenFinalized();
     }
 
-    // SS-04: Guard against negative TimeSpan from past PeriodEnd
+    // SS-04: Guard against negative/zero TimeSpan from past PeriodEnd; floor at 1 min to avoid immediate firing
     private static TimeSpan GuardDelay(TimeSpan delay) =>
-        delay < TimeSpan.Zero ? TimeSpan.Zero : delay;
+        delay < TimeSpan.FromMinutes(1) ? TimeSpan.FromMinutes(1) : delay;
 
     /// <summary>
     /// Emits a discrete <c>subscription.saga.transition</c> span on key

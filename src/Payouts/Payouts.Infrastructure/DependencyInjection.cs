@@ -28,6 +28,7 @@ public static class DependencyInjection
                     o.UsePostgres();
                     o.UseBusOutbox();
                     o.QueryDelay = TimeSpan.FromSeconds(1);
+                    o.DuplicateDetectionWindow = TimeSpan.FromMinutes(30);
                 });
                 x.UsingRabbitMq((context, cfg) => {
                     var rabbitMqConfig = configuration.GetSection("RabbitMq");

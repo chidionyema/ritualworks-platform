@@ -85,9 +85,7 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                     sagaState.UserId = msg.UserId;
                     sagaState.CustomerEmail = msg.CustomerEmail;
                     sagaState.TotalAmount = msg.TotalAmount;
-                    // TODO: propagate Currency from CheckoutInitiatedEvent once field is added
-                    var defaultCurrency = "USD"; // configurable fallback
-                    sagaState.Currency = msg.Currency ?? defaultCurrency;
+                    sagaState.Currency = msg.Currency ?? "USD";
                     sagaState.IdempotencyKey = msg.IdempotencyKey;
                     sagaState.LineItemsJson = JsonSerializer.Serialize(msg.Items);
                     sagaState.CreatedAt = DateTime.UtcNow;
@@ -117,6 +115,7 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                     SagaId = ctx.Saga.CorrelationId,
                     Amount = ctx.Saga.TotalAmount,
                     Currency = ctx.Saga.Currency,
+                    UserId = ctx.Saga.UserId,
                     CustomerEmail = ctx.Saga.CustomerEmail,
                     LineItems = ctx.Message.OrderLineItems
                         .Select(li => new PaymentLineItemData

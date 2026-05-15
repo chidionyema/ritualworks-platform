@@ -43,38 +43,64 @@ public class DisbursementService : IDisbursementService
             if (!profile.PayoutsEnabled || string.IsNullOrEmpty(profile.ExternalProviderId)) continue;
             if (account.Balance < profile.PayoutThreshold) continue;
 
-            // Re-load tracked for mutation
-            var trackedAccount = await _context.LedgerAccounts.FirstAsync(a => a.Id == account.Id);
-            await ExecutePayout(trackedAccount, profile);
+            await ExecutePayout(account.Id, profile);
         }
     }
 
-    private async Task ExecutePayout(LedgerAccount account, SellerProfile profile)
+    private async Task ExecutePayout(Guid accountId, SellerProfile profile)
     {
-        var payoutAmount = account.Balance;
-        var payout = Payout.Create(profile.SellerId, payoutAmount, account.Currency);
-        _context.Payouts.Add(payout);
-        await _context.SaveChangesAsync();
-
+        var dbContext = (Microsoft.EntityFrameworkCore.DbContext)_context;
+        await using var tx = await dbContext.Database.BeginTransactionAsync();
         try
         {
-            var (externalId, status) = await _payoutGateway.InitiatePayoutAsync(profile.ExternalProviderId!, payoutAmount, account.Currency, $"Payout for {profile.SellerId}");
-            if (status == PayoutStatus.Succeeded)
+            // FOR UPDATE lock prevents concurrent payouts against the same account
+            var account = await _context.LedgerAccounts
+                .FromSqlRaw("SELECT * FROM payouts.ledger_accounts WHERE id = {0} FOR UPDATE", accountId)
+                .FirstAsync();
+
+            var payoutAmount = account.Balance;
+
+            if (payoutAmount <= 0 || payoutAmount < profile.PayoutThreshold)
             {
-                payout.MarkInTransit(externalId);
-                payout.MarkSucceeded();
-                var transactionId = Guid.NewGuid();
-                account.UpdateBalance(payoutAmount, EntryType.Debit);
-                var entry = LedgerEntry.Create(account.Id, transactionId, payoutAmount, EntryType.Debit, "Payout processed", payout.Id.ToString());
-                _context.LedgerEntries.Add(entry);
+                await tx.RollbackAsync();
+                return;
             }
-            else payout.MarkFailed("Gateway returned non-success status");
+
+            var payout = Payout.Create(profile.SellerId, payoutAmount, account.Currency);
+            _context.Payouts.Add(payout);
+            await _context.SaveChangesAsync();
+
+            try
+            {
+                var (externalId, status) = await _payoutGateway.InitiatePayoutAsync(
+                    profile.ExternalProviderId!, payoutAmount, account.Currency, $"Payout for {profile.SellerId}");
+
+                if (status == PayoutStatus.Succeeded)
+                {
+                    payout.MarkInTransit(externalId);
+                    payout.MarkSucceeded();
+                    account.UpdateBalance(payoutAmount, EntryType.Debit);
+                    var entry = LedgerEntry.Create(account.Id, Guid.NewGuid(), payoutAmount, EntryType.Debit, "Payout processed", payout.Id.ToString());
+                    _context.LedgerEntries.Add(entry);
+                }
+                else
+                {
+                    payout.MarkFailed("Gateway returned non-success status");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to process payout for seller {SellerId}", profile.SellerId);
+                payout.MarkFailed(ex.Message);
+            }
+
+            await _context.SaveChangesAsync();
+            await tx.CommitAsync();
         }
-        catch (Exception ex)
+        catch
         {
-            _logger.LogError(ex, "Failed to process payout for seller {SellerId}", profile.SellerId);
-            payout.MarkFailed(ex.Message);
+            await tx.RollbackAsync();
+            throw;
         }
-        await _context.SaveChangesAsync();
     }
 }
