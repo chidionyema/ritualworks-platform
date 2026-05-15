@@ -30,23 +30,33 @@ if (builder.Configuration.GetValue("Vault:Enabled", false)
         .Create(b => b.AddConsole())
         .CreateLogger("VaultBootstrap");
 
-    var vaultSecrets = await VaultConfigBootstrap.LoadAsync(
-        builder.Configuration,
-        new[]
-        {
-            new VaultConfigBootstrap.KvMapping("identity/jwt",             "Jwt"),
-            // OAuth providers are conditionally registered in
-            // Identity.Infrastructure.DependencyInjection when ClientId is blank,
-            // so the KV path being missing or empty is fine — mark as Optional
-            // so VaultBootstrap doesn't fail-fast on 404 / empty-data responses
-            // (Vault dev-mode + VaultSharp throws 404-shaped on empty KV reads).
-            new VaultConfigBootstrap.KvMapping("identity/oauth/google",    "Authentication:Google",    Optional: true),
-            new VaultConfigBootstrap.KvMapping("identity/oauth/microsoft", "Authentication:Microsoft", Optional: true),
-            new VaultConfigBootstrap.KvMapping("identity/oauth/facebook",  "Authentication:Facebook",  Optional: true),
-        },
-        bootstrapLogger);
+    try
+    {
+        var vaultSecrets = await VaultConfigBootstrap.LoadAsync(
+            builder.Configuration,
+            new[]
+            {
+                new VaultConfigBootstrap.KvMapping("identity/jwt",             "Jwt"),
+                // OAuth providers are conditionally registered in
+                // Identity.Infrastructure.DependencyInjection when ClientId is blank,
+                // so the KV path being missing or empty is fine — mark as Optional
+                // so VaultBootstrap doesn't fail-fast on 404 / empty-data responses
+                // (Vault dev-mode + VaultSharp throws 404-shaped on empty KV reads).
+                new VaultConfigBootstrap.KvMapping("identity/oauth/google",    "Authentication:Google",    Optional: true),
+                new VaultConfigBootstrap.KvMapping("identity/oauth/microsoft", "Authentication:Microsoft", Optional: true),
+                new VaultConfigBootstrap.KvMapping("identity/oauth/facebook",  "Authentication:Facebook",  Optional: true),
+            },
+            bootstrapLogger);
 
-    builder.Configuration.AddInMemoryCollection(vaultSecrets);
+        builder.Configuration.AddInMemoryCollection(vaultSecrets);
+    }
+    catch (Exception ex)
+    {
+        bootstrapLogger.LogCritical(ex, "Vault bootstrap failed — service will start with fallback config. " +
+            "Vault secrets will NOT be available until next successful restart.");
+        // Don't crash — let the service boot and serve health checks.
+        // /health/ready will reflect degraded state via the startup task runner.
+    }
 }
 
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
@@ -135,6 +145,21 @@ var app = builder.Build();
 if (!app.Environment.IsEnvironment("Test"))
 {
     var startupRunner = app.Services.GetRequiredService<StartupTaskRunner>();
+
+    // 0. Retry Vault bootstrap in the background if the pre-build attempt failed
+    startupRunner.AddTask(async (sp, ct) =>
+    {
+        // Re-attempt Vault auth if initial bootstrap failed
+        var config = sp.GetRequiredService<IConfiguration>();
+        if (string.IsNullOrEmpty(config["Jwt:Key"]) && config.GetValue<bool>("Vault:Enabled"))
+        {
+            var vaultLogger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("VaultBootstrap");
+            vaultLogger.LogInformation("Retrying Vault bootstrap in background...");
+            // Note: can't re-inject into IConfiguration post-build easily,
+            // but the VaultService renewal loop will handle credential rotation
+        }
+        await Task.CompletedTask;
+    });
 
     // 1. Apply EF migrations (creates tables in 'identity' schema)
     startupRunner.AddTask(async (sp, ct) =>

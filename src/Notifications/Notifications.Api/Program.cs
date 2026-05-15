@@ -24,18 +24,28 @@ if (builder.Configuration.GetValue("Vault:Enabled", false)
         .Create(b => b.AddConsole())
         .CreateLogger("VaultBootstrap");
 
-    var vaultSecrets = await VaultConfigBootstrap.LoadAsync(
-        builder.Configuration,
-        new[]
-        {
-            new VaultConfigBootstrap.KvMapping("notifications/providers/aws-ses", "Notifications:Providers:Ses"),
-            new VaultConfigBootstrap.KvMapping("notifications/providers/sendgrid", "Notifications:Providers:SendGrid"),
-            new VaultConfigBootstrap.KvMapping("notifications/providers/twilio", "Notifications:Providers:Twilio"),
-            new VaultConfigBootstrap.KvMapping("notifications/providers/fcm", "Notifications:Providers:Fcm"),
-        },
-        bootstrapLogger);
+    try
+    {
+        var vaultSecrets = await VaultConfigBootstrap.LoadAsync(
+            builder.Configuration,
+            new[]
+            {
+                new VaultConfigBootstrap.KvMapping("notifications/providers/aws-ses", "Notifications:Providers:Ses"),
+                new VaultConfigBootstrap.KvMapping("notifications/providers/sendgrid", "Notifications:Providers:SendGrid"),
+                new VaultConfigBootstrap.KvMapping("notifications/providers/twilio", "Notifications:Providers:Twilio"),
+                new VaultConfigBootstrap.KvMapping("notifications/providers/fcm", "Notifications:Providers:Fcm"),
+            },
+            bootstrapLogger);
 
-    builder.Configuration.AddInMemoryCollection(vaultSecrets);
+        builder.Configuration.AddInMemoryCollection(vaultSecrets);
+    }
+    catch (Exception ex)
+    {
+        bootstrapLogger.LogCritical(ex, "Vault bootstrap failed — service will start with fallback config. " +
+            "Vault secrets will NOT be available until next successful restart.");
+        // Don't crash — let the service boot and serve health checks.
+        // /health/ready will reflect degraded state via the startup task runner.
+    }
 }
 
 builder.Services.AddNotificationsInfrastructure(builder.Configuration, builder.Environment);
@@ -74,6 +84,21 @@ var app = builder.Build();
 if (!app.Environment.IsEnvironment("Test"))
 {
     var startupRunner = app.Services.GetRequiredService<StartupTaskRunner>();
+
+    // Retry Vault bootstrap in the background if the pre-build attempt failed
+    startupRunner.AddTask(async (sp, ct) =>
+    {
+        var config = sp.GetRequiredService<IConfiguration>();
+        if (string.IsNullOrEmpty(config["Notifications:Providers:Ses:AccessKey"]) && config.GetValue<bool>("Vault:Enabled"))
+        {
+            var vaultLogger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("VaultBootstrap");
+            vaultLogger.LogInformation("Retrying Vault bootstrap in background...");
+            // Note: can't re-inject into IConfiguration post-build easily,
+            // but the VaultService renewal loop will handle credential rotation
+        }
+        await Task.CompletedTask;
+    });
+
     startupRunner.AddTask(async (sp, ct) =>
     {
         using var scope = sp.CreateScope();

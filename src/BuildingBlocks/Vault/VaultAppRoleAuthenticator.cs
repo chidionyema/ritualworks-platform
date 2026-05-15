@@ -41,8 +41,10 @@ public sealed class VaultAppRoleAuthenticator : IVaultAppRoleAuthenticator
         if (string.IsNullOrWhiteSpace(secretId))
             throw new ArgumentException("Secret ID required.", nameof(secretId));
 
-        var http = _httpClientFactory?.CreateClient(nameof(VaultAppRoleAuthenticator))
-                   ?? throw new InvalidOperationException("IHttpClientFactory is required — register a named client for VaultAppRoleAuthenticator");
+        // At bootstrap (before DI is built), IHttpClientFactory is unavailable.
+        var factoryClient = _httpClientFactory?.CreateClient(nameof(VaultAppRoleAuthenticator));
+        using var fallbackClient = factoryClient == null ? new HttpClient() : null;
+        var http = factoryClient ?? fallbackClient!;
         {
             http.BaseAddress ??= new Uri(vaultAddress);
 

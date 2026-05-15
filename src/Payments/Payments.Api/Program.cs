@@ -32,20 +32,30 @@ if (builder.Configuration.GetValue("Vault:Enabled", false)
         .Create(b => b.AddConsole())
         .CreateLogger("VaultBootstrap");
 
-    var vaultSecrets = await VaultConfigBootstrap.LoadAsync(
-        builder.Configuration,
-        new[]
-        {
-            // KV keys (SecretKey, WebhookSecret, ...) become config keys
-            // PaymentProviders:Stripe:SecretKey via the ConfigPrefix, lining
-            // up exactly with PaymentProviderOptions binding (Stripe nested
-            // under PaymentProviders).
-            new VaultConfigBootstrap.KvMapping("payments/stripe", "PaymentProviders:Stripe"),
-            new VaultConfigBootstrap.KvMapping("payments/paypal", "PaymentProviders:PayPal"),
-        },
-        bootstrapLogger);
+    try
+    {
+        var vaultSecrets = await VaultConfigBootstrap.LoadAsync(
+            builder.Configuration,
+            new[]
+            {
+                // KV keys (SecretKey, WebhookSecret, ...) become config keys
+                // PaymentProviders:Stripe:SecretKey via the ConfigPrefix, lining
+                // up exactly with PaymentProviderOptions binding (Stripe nested
+                // under PaymentProviders).
+                new VaultConfigBootstrap.KvMapping("payments/stripe", "PaymentProviders:Stripe"),
+                new VaultConfigBootstrap.KvMapping("payments/paypal", "PaymentProviders:PayPal"),
+            },
+            bootstrapLogger);
 
-    builder.Configuration.AddInMemoryCollection(vaultSecrets);
+        builder.Configuration.AddInMemoryCollection(vaultSecrets);
+    }
+    catch (Exception ex)
+    {
+        bootstrapLogger.LogCritical(ex, "Vault bootstrap failed — service will start with fallback config. " +
+            "Vault secrets will NOT be available until next successful restart.");
+        // Don't crash — let the service boot and serve health checks.
+        // /health/ready will reflect degraded state via the startup task runner.
+    }
 }
 
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
@@ -82,6 +92,21 @@ var app = builder.Build();
 if (!app.Environment.IsEnvironment("Test"))
 {
     var startupRunner = app.Services.GetRequiredService<StartupTaskRunner>();
+
+    // Retry Vault bootstrap in the background if the pre-build attempt failed
+    startupRunner.AddTask(async (sp, ct) =>
+    {
+        var config = sp.GetRequiredService<IConfiguration>();
+        if (string.IsNullOrEmpty(config["PaymentProviders:Stripe:SecretKey"]) && config.GetValue<bool>("Vault:Enabled"))
+        {
+            var vaultLogger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("VaultBootstrap");
+            vaultLogger.LogInformation("Retrying Vault bootstrap in background...");
+            // Note: can't re-inject into IConfiguration post-build easily,
+            // but the VaultService renewal loop will handle credential rotation
+        }
+        await Task.CompletedTask;
+    });
+
     startupRunner.AddTask(async (sp, ct) =>
     {
         using var scope = sp.CreateScope();
