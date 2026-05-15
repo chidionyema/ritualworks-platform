@@ -66,7 +66,23 @@ public class CreateOrderCommandHandlerTests : TestBase
 
         // Assert
         Assert.True(result.IsSuccess);
-        _orderRepositoryMock.Verify(x => x.AddAsync(It.IsAny<Order>(), It.IsAny<CancellationToken>()), Times.Once);
-        _eventPublisherMock.Verify(x => x.PublishAsync(It.IsAny<OrderCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _orderRepositoryMock.Verify(
+            x => x.AddAsync(
+                It.Is<Order>(o =>
+                    o.UserId == command.UserId &&
+                    o.SagaId == command.SagaId &&
+                    o.IdempotencyKey == command.IdempotencyKey &&
+                    o.CustomerEmail == command.CustomerEmail &&
+                    o.TotalAmount == command.TotalAmount &&
+                    o.Items.Count == 1),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        _eventPublisherMock.Verify(
+            x => x.PublishAsync(
+                It.Is<OrderCreatedEvent>(e =>
+                    e.CustomerEmail == command.CustomerEmail &&
+                    e.TotalAmount == command.TotalAmount),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }

@@ -7,6 +7,7 @@ using Haworks.Catalog.Domain;
 using Haworks.Catalog.Domain.Interfaces;
 using Haworks.BuildingBlocks.Testing;
 using Haworks.Catalog.UnitTests.Helpers;
+using Haworks.Contracts.Catalog;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
@@ -78,6 +79,13 @@ public class UpdateProductCommandHandlerTests : TestBase
         Assert.True(result.IsSuccess);
         Assert.Equal("New Name", result.Value.Name);
         Assert.True(product.IsListed);
+        _eventPublisherMock.Verify(
+            x => x.PublishAsync(
+                It.Is<ProductCacheInvalidatedEvent>(e =>
+                    e.ProductId == product.Id &&
+                    e.Reason == "updated"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

@@ -127,9 +127,17 @@ public sealed class DynamicCredentialsConnectionInterceptor : DbConnectionInterc
         await base.ConnectionFailedAsync(connection, eventData, cancellationToken).ConfigureAwait(false);
     }
 
-    private static bool IsAuthError(Exception? ex) =>
-        ex?.Message.Contains("password", StringComparison.OrdinalIgnoreCase) == true ||
-        ex?.Message.Contains("authentication", StringComparison.OrdinalIgnoreCase) == true;
+    private static bool IsAuthError(Exception? ex)
+    {
+        while (ex is not null)
+        {
+            if (ex.Message.Contains("password authentication failed", StringComparison.OrdinalIgnoreCase)
+                || ex.Message.Contains("28P01", StringComparison.Ordinal))
+                return true;
+            ex = ex.InnerException;
+        }
+        return false;
+    }
 
     public void Dispose()
     {

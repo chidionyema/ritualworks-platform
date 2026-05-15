@@ -30,11 +30,19 @@ public class OrdersControllerTests : TestBase
         var orderDto = new OrderDto(orderId, "user", Guid.NewGuid(), "email", 100m, "USD", "Pending", null, null, DateTime.UtcNow, new List<OrderItemDto>());
 
         _mediatorMock
-            .Setup(m => m.Send(It.IsAny<GetOrderByIdQuery>(), It.IsAny<CancellationToken>()))
+            .Setup(m => m.Send(
+                It.Is<GetOrderByIdQuery>(q => q.Id == orderId),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(orderDto));
 
         var result = await _controller.Get(orderId, CancellationToken.None);
 
-        Assert.IsType<OkObjectResult>(result);
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.NotNull(ok.Value);
+        _mediatorMock.Verify(
+            m => m.Send(
+                It.Is<GetOrderByIdQuery>(q => q.Id == orderId),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }

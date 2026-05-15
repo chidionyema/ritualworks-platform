@@ -22,6 +22,7 @@ public sealed class HybridCache : IHybridCache, IDisposable
     private readonly SemaphoreSlim[] _lockPool;
 
     private readonly ConcurrentDictionary<string, byte> _l1Keys = new();
+    private const int L1KeysMaxSize = 10_000;
     private static readonly TimeSpan DefaultL1Duration = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(30);
 
@@ -204,6 +205,15 @@ public sealed class HybridCache : IHybridCache, IDisposable
     {
         _l1Cache.Set(key, value, duration);
         _l1Keys.TryAdd(key, 0);
+
+        // Guard against unbounded growth. When the key set exceeds the cap, clear it entirely.
+        // The MemoryCache has its own eviction policy; _l1Keys is only a tracking set so
+        // losing it is safe — the next miss will repopulate from L2 as normal.
+        if (_l1Keys.Count > L1KeysMaxSize)
+        {
+            _l1Keys.Clear();
+            _logger.LogDebug("HybridCache: _l1Keys exceeded {Max} entries and was cleared.", L1KeysMaxSize);
+        }
     }
 
     private async Task SetInternalAsync<T>(string key, T value, HybridCacheOptions options, CancellationToken ct) where T : class

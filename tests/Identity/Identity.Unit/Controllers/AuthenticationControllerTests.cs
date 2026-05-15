@@ -42,11 +42,21 @@ public class AuthenticationControllerTests : TestBase
         };
 
         _mediatorMock
-            .Setup(m => m.Send(It.IsAny<LoginCommand>(), It.IsAny<CancellationToken>()))
+            .Setup(m => m.Send(It.Is<LoginCommand>(c =>
+                c.Username == request.Username &&
+                c.Password == request.Password), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(authResponseDto));
 
         var result = await _controller.Login(request, CancellationToken.None);
 
-        Assert.IsType<OkObjectResult>(result);
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.NotNull(ok.Value);
+        _mediatorMock.Verify(
+            m => m.Send(
+                It.Is<LoginCommand>(c =>
+                    c.Username == request.Username &&
+                    c.Password == request.Password),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }

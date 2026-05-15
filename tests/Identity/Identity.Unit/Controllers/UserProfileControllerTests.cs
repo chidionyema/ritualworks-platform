@@ -34,11 +34,19 @@ public class UserProfileControllerTests : TestBase
         var dto = new UserProfileDto { FirstName = "John" };
 
         _mediatorMock
-            .Setup(m => m.Send(It.IsAny<GetUserProfileQuery>(), It.IsAny<CancellationToken>()))
+            .Setup(m => m.Send(
+                It.Is<GetUserProfileQuery>(q => q.UserId == "user-id"),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(dto));
 
         var result = await _controller.GetProfile(CancellationToken.None);
 
-        Assert.IsType<OkObjectResult>(result);
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.NotNull(ok.Value);
+        _mediatorMock.Verify(
+            m => m.Send(
+                It.Is<GetUserProfileQuery>(q => q.UserId == "user-id"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }

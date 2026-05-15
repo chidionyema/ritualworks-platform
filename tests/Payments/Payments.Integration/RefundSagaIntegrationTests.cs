@@ -74,10 +74,7 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
         response.EnsureSuccessStatusCode();
         var refundId = await response.Content.ReadFromJsonAsync<Guid>();
 
-        // Assert
-        // Give MassTransit time to process
-        await Task.Delay(2000);
-
+        // Assert — use the harness's own async-wait rather than a bare sleep
         (await harness.Published.Any<RefundRequestedEvent>(x => x.Context.Message.RefundId == refundId))
             .Should().BeTrue("RefundRequestedEvent should have been published by the API handler");
 
@@ -368,8 +365,16 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
             CompletedAt = DateTime.UtcNow,
         });
 
-        // Give MassTransit time to process the duplicate
-        await Task.Delay(2000);
+        // Poll briefly so MT has a chance to (mis-)process the duplicate before we assert count is unchanged.
+        // We expect the count to stay the same, so a TimeoutException here is the success case.
+        try
+        {
+            await PollUntilAsync(
+                () => harness.Published.Select<RefundCompletedEvent>()
+                          .Count(p => p.Context.Message.RefundId == refundId) > completedCountBefore,
+                TimeSpan.FromSeconds(3));
+        }
+        catch (TimeoutException) { /* expected — duplicate was correctly discarded */ }
 
         // No additional RefundCompletedEvent should have been published
         var completedCountAfter = harness.Published.Select<RefundCompletedEvent>()

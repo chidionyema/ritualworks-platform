@@ -6,6 +6,7 @@ using Haworks.Catalog.Domain;
 using Haworks.Catalog.Domain.Interfaces;
 using Haworks.BuildingBlocks.Testing;
 using Haworks.Catalog.UnitTests.Helpers;
+using Haworks.Contracts.Catalog;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
@@ -55,6 +56,13 @@ public class DeleteProductCommandHandlerTests : TestBase
         var result = await _handler.Handle(command, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
+        _eventPublisherMock.Verify(
+            x => x.PublishAsync(
+                It.Is<ProductCacheInvalidatedEvent>(e =>
+                    e.ProductId == product.Id &&
+                    e.Reason == "deleted"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

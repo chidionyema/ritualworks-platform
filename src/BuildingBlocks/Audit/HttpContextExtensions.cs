@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.AspNetCore.Http;
 
 namespace Haworks.BuildingBlocks.Audit;
@@ -36,8 +37,12 @@ public static class HttpContextExtensions
         var forwardedFor = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
         if (!string.IsNullOrEmpty(forwardedFor))
         {
-            // Take the first IP in the list (original client)
-            return forwardedFor.Split(',').FirstOrDefault()?.Trim();
+            // Take the first IP in the list (original client) and validate format
+            var candidate = forwardedFor.Split(',').FirstOrDefault()?.Trim();
+            if (candidate is not null && IPAddress.TryParse(candidate, out _))
+            {
+                return candidate;
+            }
         }
 
         return context.Connection.RemoteIpAddress?.ToString();
