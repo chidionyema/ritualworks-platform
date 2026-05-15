@@ -3,6 +3,7 @@ using Haworks.Audit.Application.Capture;
 using Haworks.Audit.Infrastructure.Persistence;
 using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
+using Haworks.BuildingBlocks.Messaging;
 using Haworks.BuildingBlocks.Startup;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -24,21 +25,22 @@ builder.Services.AddDbContext<AuditDbContext>(options =>
 builder.Services.AddAuditApplication();
 builder.Services.AddStartupTaskRunner();
 
-// MassTransit + RabbitMQ. L1.B fills in AuditMassTransit.RegisterConsumers
-// (an empty static stub from L0) — this gives L1.B a write seam without
-// requiring any change to Program.cs at L1.B time.
-builder.Services.AddMassTransit(cfg =>
+// MassTransit + RabbitMQ — gated behind Test env to allow test harness override
+if (!builder.Environment.IsEnvironment("Test"))
 {
-    AuditMassTransit.RegisterConsumers(cfg);
-
-    cfg.UsingRabbitMq((ctx, rabbit) =>
+    builder.Services.AddMassTransit(cfg =>
     {
-        var amqp = builder.Configuration.GetConnectionString("rabbitmq")
-                   ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is required");
-        rabbit.Host(amqp);
-        rabbit.ConfigureEndpoints(ctx);
+        AuditMassTransit.RegisterConsumers(cfg);
+
+        cfg.UsingRabbitMq((ctx, rabbit) =>
+        {
+            var amqp = builder.Configuration.GetConnectionString("rabbitmq")
+                       ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is required");
+            rabbit.Host(amqp);
+            rabbit.ConfigureStandardRabbitMq(ctx);
+        });
     });
-});
+}
 
 builder.Services.AddPlatformAuthentication(builder.Configuration);
 

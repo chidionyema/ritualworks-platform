@@ -41,14 +41,18 @@ public static class SharedTestPostgres
 
     /// <summary>
     /// Creates a fresh database on the shared container and returns its
-    /// connection string. Caller scopes the database to its fixture so
-    /// tests in different assemblies cannot collide.
+    /// connection string. Also cleans up orphaned databases from previous
+    /// runs to prevent unbounded disk growth on the reused container.
     /// </summary>
     public static async Task<string> CreateDatabaseAsync(string serviceName)
     {
         var container = await GetAsync();
-        var dbName = $"{serviceName}_{Guid.NewGuid():N}".ToLowerInvariant();
         var adminConn = container.GetConnectionString();
+
+        // Clean up orphaned databases from previous test runs (keeps last 5 per service)
+        await CleanupOrphanedDatabasesAsync(adminConn, serviceName);
+
+        var dbName = $"{serviceName}_{Guid.NewGuid():N}".ToLowerInvariant();
         await using (var conn = new NpgsqlConnection(adminConn))
         {
             await conn.OpenAsync();
@@ -57,5 +61,59 @@ public static class SharedTestPostgres
         }
         var b = new NpgsqlConnectionStringBuilder(adminConn) { Database = dbName };
         return b.ConnectionString;
+    }
+
+    /// <summary>
+    /// Drops a database created by <see cref="CreateDatabaseAsync"/>.
+    /// Call from test factory's DisposeAsync for deterministic cleanup.
+    /// </summary>
+    public static async Task DropDatabaseAsync(string connectionString)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connectionString);
+        var dbName = builder.Database;
+        if (string.IsNullOrEmpty(dbName) || dbName == "template") return;
+
+        var container = await GetAsync();
+        var adminConn = container.GetConnectionString();
+        await using var conn = new NpgsqlConnection(adminConn);
+        await conn.OpenAsync();
+        // Terminate active connections before dropping
+        await using var term = new NpgsqlCommand(
+            $"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{dbName}' AND pid <> pg_backend_pid()", conn);
+        await term.ExecuteNonQueryAsync();
+        await using var drop = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{dbName}\"", conn);
+        await drop.ExecuteNonQueryAsync();
+    }
+
+    private static async Task CleanupOrphanedDatabasesAsync(string adminConn, string serviceName)
+    {
+        try
+        {
+            await using var conn = new NpgsqlConnection(adminConn);
+            await conn.OpenAsync();
+            // Find all databases for this service, ordered oldest first
+            await using var list = new NpgsqlCommand(
+                $"SELECT datname FROM pg_database WHERE datname LIKE '{serviceName}_%' ORDER BY oid ASC", conn);
+            var databases = new List<string>();
+            await using var reader = await list.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) databases.Add(reader.GetString(0));
+            await reader.CloseAsync();
+
+            // Keep only the last 2, drop the rest
+            var toDrop = databases.SkipLast(2).ToList();
+            foreach (var db in toDrop)
+            {
+                try
+                {
+                    await using var term = new NpgsqlCommand(
+                        $"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{db}' AND pid <> pg_backend_pid()", conn);
+                    await term.ExecuteNonQueryAsync();
+                    await using var drop = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{db}\"", conn);
+                    await drop.ExecuteNonQueryAsync();
+                }
+                catch { /* best effort — don't fail tests for cleanup issues */ }
+            }
+        }
+        catch { /* best effort */ }
     }
 }

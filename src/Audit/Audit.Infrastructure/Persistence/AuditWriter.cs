@@ -101,7 +101,7 @@ public sealed class AuditWriter : IAuditWriter, IAsyncDisposable
             }
 
             await using var writer = await connection.BeginBinaryImportAsync(
-                "COPY audit_events (id, occurred_at, received_at, event_type, entity_type, entity_id, actor_id, actor_type, correlation_id, payload, metadata) FROM STDIN (FORMAT BINARY)");
+                "COPY audit.audit_events (id, occurred_at, received_at, event_type, entity_type, entity_id, actor_id, actor_type, correlation_id, payload, metadata) FROM STDIN (FORMAT BINARY)");
 
             try
             {

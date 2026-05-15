@@ -59,9 +59,7 @@ public class PaymentsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
         await db.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS payments;");
-        var creator = db.Database.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalDatabaseCreator>();
-        try { await creator.CreateTablesAsync(); }
-        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P07") { }
+        await db.Database.EnsureCreatedAsync();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

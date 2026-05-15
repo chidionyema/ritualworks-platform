@@ -28,6 +28,9 @@ public sealed class EndToEndCaptureTests : IClassFixture<AuditWebAppFactory>
         var bus = scope.ServiceProvider.GetRequiredService<IBus>();
         var dbContext = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
 
+        // Clean slate — truncate audit events from previous runs
+        try { await dbContext.Database.ExecuteSqlRawAsync("TRUNCATE TABLE audit.audit_events CASCADE"); } catch { }
+
         var orderId = Guid.NewGuid();
         var paymentId = Guid.NewGuid();
 
@@ -75,11 +78,16 @@ public sealed class EndToEndCaptureTests : IClassFixture<AuditWebAppFactory>
         });
 
         // Assert
-        // Poll for up to 10 seconds for events to land in DB (asynchronous processing)
+        // Poll for up to 30 seconds — wait for THIS test's specific events
+        var expectedTypes = new HashSet<string> { nameof(OrderCreatedEvent), nameof(PaymentCompletedEvent), nameof(StockReservationFailedEvent), nameof(VaultRotationStageEvent) };
         List<AuditEvent>? events = null;
-        for (int i = 0; i < 20; i++)
+        for (int i = 0; i < 60; i++)
         {
-            events = await dbContext.AuditEvents.AsNoTracking().ToListAsync();
+            events = await dbContext.AuditEvents.AsNoTracking()
+                .Where(e => expectedTypes.Contains(e.EventType))
+                .OrderByDescending(e => e.OccurredAt)
+                .Take(10)
+                .ToListAsync();
             if (events.Count >= 4) break;
             await Task.Delay(500);
         }

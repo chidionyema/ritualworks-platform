@@ -21,6 +21,7 @@ public static partial class DependencyInjection
         services.AddScoped<Common.Idempotency.IIdempotencyKeyGenerator, Common.Idempotency.IdempotencyKeyGenerator>();
         services.AddScoped<Preferences.IPreferencesService, Preferences.PreferencesService>();
         services.AddScoped<Suppression.ISuppressionService, Suppression.SuppressionService>();
+        services.AddNotificationTemplates();
 
         return services;
     }

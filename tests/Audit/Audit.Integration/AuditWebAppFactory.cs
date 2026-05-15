@@ -47,6 +47,19 @@ public class AuditWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
         var creator = db.Database.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalDatabaseCreator>();
         try { await creator.CreateTablesAsync(); }
         catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P07") { }
+
+        // Create monthly partition — EnsureCreated/CreateTables can't create partitions
+        var now = DateTime.UtcNow;
+        var partName = $"audit_events_{now:yyyy_MM}";
+        var rangeStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var rangeEnd = rangeStart.AddMonths(1);
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync($@"
+                CREATE TABLE IF NOT EXISTS audit.{partName} PARTITION OF audit.audit_events
+                FOR VALUES FROM ('{rangeStart:yyyy-MM-dd}') TO ('{rangeEnd:yyyy-MM-dd}')");
+        }
+        catch { /* partition may already exist */ }
     }
 
     async Task IAsyncLifetime.DisposeAsync()
@@ -78,6 +91,11 @@ public class AuditWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
             services.AddSingleton<IAuditWriter, AuditWriter>();
             services.AddSingleton(typeof(IAuditExtractor<>), typeof(TestStubExtractor<>));
             services.AddSingleton<ISecretRedactor, TestStubRedactor>();
+
+            services.AddMassTransitTestHarness(mt =>
+            {
+                AuditMassTransit.RegisterConsumers(mt);
+            });
         });
     }
 }
