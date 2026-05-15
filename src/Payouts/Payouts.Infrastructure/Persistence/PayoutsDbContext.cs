@@ -1,5 +1,6 @@
 using Haworks.Payouts.Domain.Aggregates;
 using Haworks.Payouts.Application.Common.Interfaces;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 
 namespace Haworks.Payouts.Infrastructure.Persistence;
@@ -17,10 +18,17 @@ public class PayoutsDbContext : DbContext, IPayoutsDbContext
     {
         base.OnModelCreating(builder);
 
+        builder.HasDefaultSchema("payouts");
+
+        builder.AddInboxStateEntity();
+        builder.AddOutboxStateEntity();
+        builder.AddOutboxMessageEntity();
+
         builder.Entity<LedgerAccount>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.OwnerId, e.Type, e.Currency }).IsUnique();
+            entity.Property<uint>("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
         });
 
         builder.Entity<LedgerEntry>(entity =>

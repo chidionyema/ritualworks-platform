@@ -21,6 +21,12 @@ public static class DependencyInjection
         services.AddScoped<IPayoutGateway, StripePayoutGateway>();
         services.AddMassTransit(x => {
             x.AddConsumer<PaymentCompletedConsumer>();
+            x.AddEntityFrameworkOutbox<PayoutsDbContext>(o =>
+            {
+                o.UsePostgres();
+                o.UseBusOutbox();
+                o.QueryDelay = TimeSpan.FromSeconds(1);
+            });
             x.UsingRabbitMq((context, cfg) => {
                 var rabbitMqConfig = configuration.GetSection("RabbitMq");
                 cfg.Host(rabbitMqConfig["Host"], "/", h => {
