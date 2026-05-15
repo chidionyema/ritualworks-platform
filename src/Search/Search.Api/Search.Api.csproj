@@ -5,7 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Search.Infrastructure/Search.Infrastructure.csproj" />
-    <PackageReference Include="Aspire.Confluent.Kafka" Version="9.2.0" />
+    <PackageReference Include="Aspire.Confluent.Kafka" Version="13.3.2" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
   </ItemGroup>
 </Project>
