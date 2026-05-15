@@ -24,4 +24,5 @@ ENV ASPNETCORE_URLS=http://+:8080 \
     DOTNET_gcServer=1
 EXPOSE 8080
 
+USER $APP_UID
 ENTRYPOINT ["dotnet", "Search.Api.dll"]
