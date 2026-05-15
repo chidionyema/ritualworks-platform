@@ -12,8 +12,9 @@ public sealed class PaymentDbContextFactory : IDesignTimeDbContextFactory<Paymen
 {
     public PaymentDbContext CreateDbContext(string[] args)
     {
-        var connectionString = Environment.GetEnvironmentVariable("DOTNET_EF_CONNECTION")
-            ?? "Host=localhost;Port=5432;Database=payments;Username=postgres;Password=postgres;SslMode=Disable";
+        // Design-time only — production uses Vault dynamic credentials
+        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__payments")
+            ?? "Host=localhost;Database=payments;Username=postgres;Password=postgres";
 
         var optionsBuilder = new DbContextOptionsBuilder<PaymentDbContext>();
         optionsBuilder.UseNpgsql(connectionString);

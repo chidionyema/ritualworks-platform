@@ -64,7 +64,7 @@ public sealed class DemoConcurrencyController(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Inventory read failed for {ProductId}", productId);
-            return StatusCode(503, new { error = "catalog db unreachable", message = ex.Message });
+            return StatusCode(500, new { error = "An internal error occurred" });
         }
     }
 
@@ -147,8 +147,7 @@ public sealed class DemoConcurrencyController(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Inventory update failed for {ProductId}", productId);
-            // Postgres paused / connection dropped / etc. Surface as 503.
-            return StatusCode(503, new { error = "catalog db unreachable", message = ex.Message });
+            return StatusCode(500, new { error = "An internal error occurred" });
         }
     }
 

@@ -1,3 +1,4 @@
+// SignalR bridge consumers — translate saga events to SignalR pushes. No resource acquisition.
 using Haworks.BffWeb.Application.Interfaces;
 using Haworks.Contracts.Catalog;
 using Haworks.Contracts.Payments;

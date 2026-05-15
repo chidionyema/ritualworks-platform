@@ -17,6 +17,8 @@ public class PrivacyDbContext : DbContext, IPrivacyDbContext
     {
         base.OnModelCreating(builder);
 
+        builder.HasDefaultSchema("privacy");
+
         builder.AddInboxStateEntity();
         builder.AddOutboxStateEntity();
         builder.AddOutboxMessageEntity();
