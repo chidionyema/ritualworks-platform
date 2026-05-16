@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using Haworks.Content.Application.Interfaces;
 using Haworks.Content.Domain.ValueObjects;
@@ -16,6 +17,16 @@ public class FileSignatureValidator : IFileSignatureValidator
     {
         _logger = logger;
     }
+
+    // Signatures that identify executable/dangerous file types — checked BEFORE
+    // the allowlist so that a renamed executable never slips through.
+    private static readonly (string Label, byte[] Signature)[] DangerousSignatures =
+    [
+        ("PE/MZ Windows executable",  new byte[] { 0x4D, 0x5A }),
+        ("ELF Linux executable",      new byte[] { 0x7F, 0x45, 0x4C, 0x46 }),
+        ("Shell script shebang",      new byte[] { 0x23, 0x21 }),
+        ("Java class file",           new byte[] { 0xCA, 0xFE, 0xBA, 0xBE }),
+    ];
 
     private static readonly Dictionary<string, List<byte[]>> FileSignatures = new()
     {
@@ -50,6 +61,21 @@ public class FileSignatureValidator : IFileSignatureValidator
             return new FileSignatureValidationResult(false, "Unknown");
         }
 
+        // --- Layer 1: explicit executable/dangerous signature detection ---
+        foreach (var (label, sig) in DangerousSignatures)
+        {
+            if (sig.Length > read) continue;
+            if (head.AsSpan(0, sig.Length).SequenceEqual(sig))
+            {
+                var headHash = Convert.ToHexString(SHA256.HashData(head.AsSpan(0, read)));
+                _logger.LogCritical(
+                    "SECURITY: Executable file upload blocked. SignatureType={SignatureType} HeadHash={HeadHash}",
+                    label, headHash);
+                return new FileSignatureValidationResult(false, "application/octet-stream");
+            }
+        }
+
+        // --- Layer 2: allowlist-based rejection ---
         foreach (var (mime, signatures) in FileSignatures)
         {
             foreach (var sig in signatures)

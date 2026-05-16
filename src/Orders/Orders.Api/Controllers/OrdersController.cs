@@ -64,8 +64,13 @@ public sealed class OrdersController(IMediator mediator) : ControllerBase
     [Authorize]
     public async Task<IActionResult> Create([FromBody] CreateOrderCommand command, CancellationToken ct)
     {
-        var result = await mediator.Send(command, ct);
-        // Map Result<Guid> to Result<OrderDto> or just use ToActionResult if it handles Guid
+        // SECURITY: always take UserId from the JWT, never trust the request body.
+        var userId = HttpContext.GetForwardedUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var safeCommand = command with { UserId = userId };
+        var result = await mediator.Send(safeCommand, ct);
         return result.ToCreatedActionResult(nameof(Get), new { id = result.IsSuccess ? result.Value : Guid.Empty });
     }
 }

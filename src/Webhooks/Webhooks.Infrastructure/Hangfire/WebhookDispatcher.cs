@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using Hangfire;
+using Haworks.Webhooks.Application.Common;
 using Haworks.Webhooks.Application.Interfaces;
 using Haworks.Webhooks.Domain;
 using Haworks.Webhooks.Infrastructure.Persistence;
@@ -29,6 +30,42 @@ public sealed class WebhookDispatcher(
         var sub = await db.Subscriptions.FindAsync([delivery.SubscriptionId], ct);
         if (sub == null || !sub.IsActive || sub.DeletedAt != null)
         {
+            return;
+        }
+
+        // DNS rebinding guard: re-resolve at dispatch time, not just at subscription creation.
+        if (!Uri.TryCreate(sub.Url, UriKind.Absolute, out var targetUri))
+        {
+            logger.LogWarning(
+                "[SSRF] Delivery {DeliveryId}: subscription {SubscriptionId} has unparseable URL '{Url}'; skipping.",
+                delivery.Id, sub.Id, sub.Url);
+            delivery.RecordAttempt(0, null, "DNS resolved to private IP", false, null);
+            await db.SaveChangesAsync(ct);
+            return;
+        }
+
+        bool resolvesToPrivate;
+        try
+        {
+            resolvesToPrivate = await WebhookSsrfGuard.ResolvesToPrivateIpAsync(targetUri.Host, ct);
+        }
+        catch (Exception dnsEx)
+        {
+            logger.LogWarning(dnsEx,
+                "[SSRF] Delivery {DeliveryId}: DNS resolution failed for host '{Host}'; skipping.",
+                delivery.Id, targetUri.Host);
+            delivery.RecordAttempt(0, null, "DNS resolved to private IP", false, null);
+            await db.SaveChangesAsync(ct);
+            return;
+        }
+
+        if (resolvesToPrivate)
+        {
+            logger.LogWarning(
+                "[SSRF] Delivery {DeliveryId}: host '{Host}' resolved to a private IP address — possible DNS rebinding attack; dispatch blocked.",
+                delivery.Id, targetUri.Host);
+            delivery.RecordAttempt(0, null, "DNS resolved to private IP", false, null);
+            await db.SaveChangesAsync(ct);
             return;
         }
 
