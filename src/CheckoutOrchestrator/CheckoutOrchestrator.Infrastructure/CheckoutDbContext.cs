@@ -71,7 +71,7 @@ public class CheckoutDbContext : DbContext, ICheckoutDbContext
                 .ValueGeneratedOnAddOrUpdate()
                 .IsConcurrencyToken();
 
-            entity.HasIndex(s => s.OrderId).HasDatabaseName("IX_CheckoutSagas_OrderId");
+            entity.HasIndex(s => s.OrderId).IsUnique().HasDatabaseName("IX_CheckoutSagas_OrderId");
             entity.HasIndex(s => s.CurrentState).HasDatabaseName("IX_CheckoutSagas_CurrentState");
         });
 
