@@ -1,6 +1,8 @@
 using Amazon.S3;
 using Haworks.BuildingBlocks.Behaviors;
 using Haworks.BuildingBlocks.Extensions;
+using Haworks.BuildingBlocks.Messaging;
+using MassTransit;
 using Haworks.BuildingBlocks.Persistence;
 using Haworks.BuildingBlocks.Startup;
 using Haworks.Media.Api.Infrastructure;
@@ -130,6 +132,36 @@ if (!builder.Environment.IsEnvironment("Test"))
         builder.Services.AddHostedService<S3EventConsumer>();
     }
 }
+
+// ── MassTransit + outbox (event publishing) ──
+if (!builder.Environment.IsEnvironment("Test"))
+{
+    builder.Services.AddMassTransit(mt =>
+    {
+        mt.SetKebabCaseEndpointNameFormatter();
+        mt.AddDelayedMessageScheduler();
+        mt.AddConsumer<Haworks.BuildingBlocks.Messaging.GlobalFaultConsumer>();
+
+        mt.AddEntityFrameworkOutbox<MediaDbContext>(o =>
+        {
+            o.UsePostgres();
+            o.UseBusOutbox();
+            o.QueryDelay = TimeSpan.FromMilliseconds(100);
+            o.DuplicateDetectionWindow = TimeSpan.FromMinutes(30);
+        });
+
+        mt.UsingRabbitMq((context, cfg) =>
+        {
+            var rabbitConn = builder.Configuration.GetConnectionString("rabbitmq")
+                ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is missing.");
+            cfg.Host(new Uri(rabbitConn));
+            cfg.UseDelayedMessageScheduler();
+            cfg.ConfigureStandardRabbitMq(context);
+        });
+    });
+}
+
+builder.Services.AddDomainEventPublisher();
 
 // ── Startup task runner (EF migrations with retry) ──
 builder.Services.AddStartupTaskRunner();

@@ -14,6 +14,7 @@ public interface IS3Service
     Task AbortMultipartUploadAsync(string key, string uploadId, CancellationToken ct);
     Task UploadAsync(string key, string mimeType, Stream content, CancellationToken ct);
     string GeneratePresignedGetUrl(string key);
+    Task<string> DownloadToFileAsync(string key, string destinationPath, CancellationToken ct);
 }
 
 /// <summary>
@@ -58,6 +59,19 @@ public class S3Service : IS3Service
             || _opts.ServiceUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
             ? Protocol.HTTPS
             : Protocol.HTTP;
+    }
+
+    public async Task<string> DownloadToFileAsync(string key, string destinationPath, CancellationToken ct)
+    {
+        var response = await _s3.GetObjectAsync(new GetObjectRequest
+        {
+            BucketName = _opts.BucketName,
+            Key = key,
+        }, ct);
+
+        await using var fs = File.Create(destinationPath);
+        await response.ResponseStream.CopyToAsync(fs, ct);
+        return destinationPath;
     }
 
     public async Task<Stream> DownloadAsync(string key, CancellationToken ct)
