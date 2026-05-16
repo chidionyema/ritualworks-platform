@@ -16,7 +16,7 @@ public sealed class OrdersController(IMediator mediator) : ControllerBase
     [Authorize]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
-        var authenticatedUserId = HttpContext.GetForwardedUserId() ?? string.Empty;
+        var authenticatedUserId = HttpContext.GetForwardedUserId();
         var result = await mediator.Send(new GetOrderByIdQuery(id, authenticatedUserId), ct);
         return result.ToActionResult();
     }

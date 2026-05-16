@@ -16,14 +16,14 @@ internal sealed class GetOrderByIdQueryHandler(IOrderRepository orders)
             return Result.Failure<OrderDto>(Error.Orders.NotFoundWithId(request.Id));
         }
 
-        if (!string.Equals(order.UserId, request.UserId, StringComparison.Ordinal))
+        if (order.UserId != request.UserId)
         {
             return Result.Failure<OrderDto>(Error.Orders.Forbidden);
         }
 
         return Result.Success(MapToDto(order));
     }
-
+...
     internal static OrderDto MapToDto(Order order) => new(
         order.Id,
         order.UserId,
