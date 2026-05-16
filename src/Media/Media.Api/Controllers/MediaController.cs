@@ -46,8 +46,7 @@ public class MediaController(IMediator mediator) : ControllerBase
     [HttpPost("{id}/complete-multipart")]
     public async Task<IActionResult> CompleteMultipartUpload(Guid id, [FromBody] CompleteMultipartRequest body)
     {
-        var parts = body.Parts.Select(p => new PartETagDto(p.PartNumber, p.ETag)).ToList();
-        var result = await mediator.Send(new CompleteMultipartUploadCommand(id, parts));
+        var result = await mediator.Send(new CompleteMultipartUploadCommand(id, body.Parts));
         return result.ToActionResult();
     }
 
@@ -115,5 +114,4 @@ public class MediaController(IMediator mediator) : ControllerBase
     }
 }
 
-public sealed record CompleteMultipartRequest(IReadOnlyList<PartETagRequest> Parts);
-public sealed record PartETagRequest(int PartNumber, string ETag);
+public sealed record CompleteMultipartRequest(IReadOnlyList<PartETagDto> Parts);
