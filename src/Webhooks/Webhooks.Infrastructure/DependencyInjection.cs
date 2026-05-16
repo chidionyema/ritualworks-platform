@@ -49,8 +49,17 @@ public static class DependencyInjection
 
         services.AddScoped<IWebhookDispatcher, WebhookDispatcher>();
         
-        services.AddHttpClient("WebhookValidator");
+        services.AddHttpClient("WebhookValidator")
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = false,
+            })
+            .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddHttpClient("WebhookDispatcher")
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = false,
+            })
             .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
 
         return services;

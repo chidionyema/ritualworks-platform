@@ -33,12 +33,33 @@ public sealed class CreateWebhookSubscriptionValidator : AbstractValidator<Creat
     internal static bool IsPrivateIp(string host)
     {
         if (!System.Net.IPAddress.TryParse(host, out var ip)) return false;
+
+        // IPv6: block loopback (::1), link-local (fe80::/10), unique-local (fc00::/7)
+        if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+        {
+            if (System.Net.IPAddress.IsLoopback(ip)) return true;
+            var bytes6 = ip.GetAddressBytes();
+            if ((bytes6[0] & 0xFE) == 0xFC) return true;  // fc00::/7 (unique-local)
+            if ((bytes6[0] == 0xFE) && (bytes6[1] & 0xC0) == 0x80) return true; // fe80::/10 (link-local)
+            return false;
+        }
+
         var bytes = ip.GetAddressBytes();
-        return bytes.Length == 4 && (
-            bytes[0] == 10 ||
-            (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
-            (bytes[0] == 192 && bytes[1] == 168) ||
-            bytes[0] == 127);
+        if (bytes.Length != 4) return false;
+
+        return bytes[0] == 10 ||                                         // 10.0.0.0/8
+            (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||     // 172.16.0.0/12
+            (bytes[0] == 192 && bytes[1] == 168) ||                      // 192.168.0.0/16
+            bytes[0] == 127 ||                                           // 127.0.0.0/8
+            (bytes[0] == 169 && bytes[1] == 254) ||                      // 169.254.0.0/16 (link-local)
+            (bytes[0] == 100 && bytes[1] >= 64 && bytes[1] <= 127) ||   // 100.64.0.0/10 (CGNAT)
+            bytes[0] == 0 ||                                             // 0.0.0.0/8
+            (bytes[0] == 198 && bytes[1] >= 18 && bytes[1] <= 19) ||    // 198.18.0.0/15 (benchmark)
+            (bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 0) ||      // 192.0.0.0/24 (IETF protocol)
+            (bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 2) ||      // 192.0.2.0/24 (TEST-NET-1)
+            (bytes[0] == 198 && bytes[1] == 51 && bytes[2] == 100) ||   // 198.51.100.0/24 (TEST-NET-2)
+            (bytes[0] == 203 && bytes[1] == 0 && bytes[2] == 113) ||    // 203.0.113.0/24 (TEST-NET-3)
+            bytes[0] >= 224;                                             // 224.0.0.0/4+ (multicast+reserved)
     }
 }
 

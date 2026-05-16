@@ -145,11 +145,15 @@ namespace Haworks.Localization.Api.Migrations
                 table: "Translations",
                 column: "Key",
                 unique: true);
+
+            migrationBuilder.Sql(
+                "CREATE INDEX IX_Translations_Values ON localization.\"Translations\" USING GIN (\"Values\" jsonb_path_ops);");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("DROP INDEX IF EXISTS localization.\"IX_Translations_Values\";");
             migrationBuilder.DropTable(name: "OutboxMessage", schema: "localization");
             migrationBuilder.DropTable(name: "InboxState", schema: "localization");
             migrationBuilder.DropTable(name: "OutboxState", schema: "localization");
