@@ -37,8 +37,8 @@ public class PaymentDbContext : DbContext, IPaymentDbContext
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);
-        optionsBuilder.UseLoggerFactory(_loggerFactory);
         ChangeTracker.LazyLoadingEnabled = false;
+        optionsBuilder.UseLoggerFactory(_loggerFactory);
         if (_environment.IsDevelopment()) optionsBuilder.EnableSensitiveDataLogging();
     }
 
