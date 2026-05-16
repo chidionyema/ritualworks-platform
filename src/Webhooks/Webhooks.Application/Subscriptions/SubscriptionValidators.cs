@@ -1,4 +1,6 @@
 using FluentValidation;
+using Haworks.Webhooks.Application.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 namespace Haworks.Webhooks.Application.Subscriptions;
 
@@ -9,10 +11,11 @@ public sealed class CreateWebhookSubscriptionValidator : AbstractValidator<Creat
         "localhost", "127.0.0.1", "::1", "0.0.0.0"
     };
 
-    public CreateWebhookSubscriptionValidator()
+    public CreateWebhookSubscriptionValidator(IWebhooksDbContext db)
     {
         RuleFor(x => x.PartnerId).NotEmpty();
         RuleFor(x => x.Url).NotEmpty()
+            .MaximumLength(2048).WithMessage("URL must not exceed 2048 characters.")
             .Must(uri => Uri.TryCreate(uri, UriKind.Absolute, out _))
             .WithMessage("A valid absolute URL is required.")
             .Must(url =>
@@ -28,6 +31,15 @@ public sealed class CreateWebhookSubscriptionValidator : AbstractValidator<Creat
             })
             .WithMessage("Private or internal URLs are not allowed.");
         RuleFor(x => x.Events).NotEmpty().WithMessage("At least one event must be selected.");
+
+        RuleFor(x => x.PartnerId)
+            .MustAsync(async (partnerId, ct) =>
+            {
+                var count = await db.Subscriptions
+                    .CountAsync(s => s.PartnerId == partnerId && s.DeletedAt == null, ct);
+                return count < 50;
+            })
+            .WithMessage("Maximum of 50 subscriptions per partner exceeded.");
     }
 
     internal static bool IsPrivateIp(string host)
@@ -74,6 +86,7 @@ public sealed class UpdateWebhookSubscriptionValidator : AbstractValidator<Updat
     {
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.Url).NotEmpty()
+            .MaximumLength(2048).WithMessage("URL must not exceed 2048 characters.")
             .Must(uri => Uri.TryCreate(uri, UriKind.Absolute, out _))
             .WithMessage("A valid absolute URL is required.")
             .Must(url =>
