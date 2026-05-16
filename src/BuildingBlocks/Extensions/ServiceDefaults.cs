@@ -39,6 +39,9 @@ public static class ServiceDefaults
         builder.Services.AddOptions<Resilience.HttpClientTimeoutOptions>()
             .Bind(builder.Configuration.GetSection(Resilience.HttpClientTimeoutOptions.SectionName));
 
+        // Platform-wide white-labeling — every service gets BrandOptions bound from config.
+        builder.Services.AddBrandConfiguration(builder.Configuration);
+
         builder.ConfigureOpenTelemetry();
 
         builder.AddDefaultHealthChecks();

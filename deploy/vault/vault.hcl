@@ -1,10 +1,10 @@
 # Vault prod-mode config. Replaces `vault server -dev` so state persists
 # across container restarts. Reachable on Fly's 6PN at
-# http://ritualworks-vault.internal:8200; not exposed publicly.
+# http://haworks-vault.internal:8200; not exposed publicly.
 
 storage "raft" {
   path    = "/vault/data"
-  node_id = "ritualworks-vault-1"
+  node_id = "haworks-vault-1"
 }
 
 # Bind to IPv6 wildcard so the .internal DNS (IPv6-only) can reach us.

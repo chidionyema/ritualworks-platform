@@ -24,7 +24,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_DIR="$ROOT_DIR/deploy/fly"
 ENV_FILE="$ENV_DIR/.env.local"
 EXAMPLE="$ENV_DIR/.env.example"
-REPO="${GITHUB_REPO:-chidionyema/ritualworks-platform}"
+REPO="${GITHUB_REPO:-chidionyema/haworks-platform}"
 
 # ─── colors / helpers ─────────────────────────────────────────────────────
 bold()   { printf '\033[1m%s\033[0m\n' "$*"; }
@@ -182,15 +182,15 @@ SERVICES=(identity catalog orders payments checkout bffweb)
 [[ "${DEPLOY_CONTENT:-false}" == "true" ]] && SERVICES+=(content)
 
 for svc in "${SERVICES[@]}"; do
-  app="ritualworks-$svc"
+  app="haworks-$svc"
   status=$(flyctl status -a "$app" --json 2>/dev/null | grep -o '"Status":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "?")
   printf '  %-28s %s\n' "$app" "$status"
 done
 
 echo
-bold "Public URL:  https://ritualworks-bffweb.fly.dev"
-echo "Logs:        flyctl logs -a ritualworks-<svc>"
-echo "Rollback:    flyctl releases rollback -a ritualworks-<svc>"
+bold "Public URL:  https://haworks-bffweb.fly.dev"
+echo "Logs:        flyctl logs -a haworks-<svc>"
+echo "Rollback:    flyctl releases rollback -a haworks-<svc>"
 echo "Auto-deploy: every green-CI push to main now lands on Fly via .github/workflows/deploy.yml"
 echo
 ok "Done."

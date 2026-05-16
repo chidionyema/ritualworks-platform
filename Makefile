@@ -10,7 +10,7 @@ k8s-up: ## Provision kind cluster + ArgoCD + sync everything
 	./scripts/k8s-up.sh
 
 k8s-down: ## Tear down the kind cluster
-	kind delete cluster --name ritualworks
+	kind delete cluster --name haworks
 
 k8s-smoke: ## Run cross-system smoke against kind cluster
 	./scripts/k8s-smoke.sh

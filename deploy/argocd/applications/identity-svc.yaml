@@ -8,14 +8,14 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/chidionyema/ritualworks-platform.git
+    repoURL: https://github.com/chidionyema/haworks-platform.git
     targetRevision: HEAD
     path: deploy/helm/identity-svc
     helm:
       releaseName: identity-svc
   destination:
     server: https://kubernetes.default.svc
-    namespace: ritualworks
+    namespace: haworks
   syncPolicy:
     automated:
       prune: true

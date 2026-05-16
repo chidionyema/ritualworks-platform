@@ -24,7 +24,7 @@ public sealed class EnvironmentAgnosticFixture : IAsyncLifetime
         }
         else
         {
-            _appBuilder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.RitualworksPlatform_AppHost>();
+            _appBuilder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.HaworksPlatform_AppHost>();
             _app = await _appBuilder.BuildAsync();
             await _app.StartAsync();
 

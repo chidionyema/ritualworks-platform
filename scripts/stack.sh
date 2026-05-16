@@ -27,7 +27,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 COMPOSE_FILE="$REPO_ROOT/deploy/compose/docker-compose.yml"
-ASPIRE_PROJECT="$REPO_ROOT/deploy/aspire/RitualworksPlatform.AppHost.csproj"
+ASPIRE_PROJECT="$REPO_ROOT/deploy/aspire/HaworksPlatform.AppHost.csproj"
 ASPIRE_PIDFILE="/tmp/rw-aspire.pid"
 COMPOSE="docker compose -f $COMPOSE_FILE"
 
@@ -81,7 +81,7 @@ cmd_aspire() {
     # had changed. If the AppHost binary is missing or stale, the user
     # runs `./scripts/stack.sh prebuild` once — that's an explicit step,
     # not a hidden cost on every boot.
-    local apphost_dll="$REPO_ROOT/deploy/aspire/bin/Release/net9.0/RitualworksPlatform.AppHost.dll"
+    local apphost_dll="$REPO_ROOT/deploy/aspire/bin/Release/net9.0/HaworksPlatform.AppHost.dll"
     if [ ! -f "$apphost_dll" ]; then
         warn "AppHost not built. Run './scripts/stack.sh prebuild' first (warms .NET + Docker images)."
         return 1
@@ -219,7 +219,7 @@ cmd_cleanup() {
     #                       images + old (>72h) builder cache + orphan
     #                       networks.
     #   `cleanup --deep`  — Same + drops project volumes (compose_*,
-    #                       ritualworks-platform-*). DB state gone; next
+    #                       haworks-platform-*). DB state gone; next
     #                       `up` re-runs migrations on empty schemas.
     local mode="${1:-shallow}"
 
@@ -271,7 +271,7 @@ cmd_cleanup() {
         # belonging to another project on this Docker host.
         local proj_volumes
         proj_volumes="$(docker volume ls --format '{{.Name}}' \
-            | grep -E '^(compose_|ritualworks-platform-)' \
+            | grep -E '^(compose_|haworks-platform-)' \
             || true)"
         if [ -n "$proj_volumes" ]; then
             log "Removing $(echo "$proj_volumes" | wc -l | tr -d ' ') project volumes"
@@ -298,8 +298,8 @@ cmd_ci_check() {
     cd "$REPO_ROOT"
 
     log "Restore + build (Release)"
-    dotnet restore RitualworksPlatform.sln >/dev/null
-    dotnet build RitualworksPlatform.sln --no-restore -c Release --nologo --verbosity quiet || fail=1
+    dotnet restore HaworksPlatform.sln >/dev/null
+    dotnet build HaworksPlatform.sln --no-restore -c Release --nologo --verbosity quiet || fail=1
     [ $fail -eq 1 ] && { warn "Build failed — fix before pushing."; return 1; }
 
     log "Unit tests"
@@ -337,7 +337,7 @@ cmd_ci_check() {
 
 cmd_prebuild() {
     log "Pre-building solution + pulling images (used by both compose and aspire)"
-    (cd "$REPO_ROOT" && dotnet build RitualworksPlatform.sln -c Release --nologo --verbosity quiet) &
+    (cd "$REPO_ROOT" && dotnet build HaworksPlatform.sln -c Release --nologo --verbosity quiet) &
     local build_pid=$!
     # compose tags (postgres:16-alpine etc.) AND Aspire-default tags
     # (postgres:17.6 etc.) — warm both so neither mode pays the pull cost.

@@ -140,25 +140,25 @@ if [[ -z "${VAULT_PG_PASSWORD:-}" ]]; then
   echo "    written to $ENV_FILE (gitignored)"
 fi
 
-PUBLIC_APP="ritualworks-bffweb"
-VAULT_APP="ritualworks-vault"
-VAULT_PG_APP="ritualworks-vault-pg"
+PUBLIC_APP="haworks-bffweb"
+VAULT_APP="haworks-vault"
+VAULT_PG_APP="haworks-vault-pg"
 INTERNAL_APPS=(
-  ritualworks-identity
-  ritualworks-catalog
-  ritualworks-orders
-  ritualworks-payments
-  ritualworks-checkout
-  ritualworks-search
-  ritualworks-elasticsearch
-  ritualworks-notifications
-  ritualworks-audit
-  ritualworks-webhooks
-  ritualworks-kafka
-  ritualworks-debezium
+  haworks-identity
+  haworks-catalog
+  haworks-orders
+  haworks-payments
+  haworks-checkout
+  haworks-search
+  haworks-elasticsearch
+  haworks-notifications
+  haworks-audit
+  haworks-webhooks
+  haworks-kafka
+  haworks-debezium
 )
 if [[ "$DEPLOY_CONTENT" == "true" ]]; then
-  INTERNAL_APPS+=(ritualworks-content)
+  INTERNAL_APPS+=(haworks-content)
 fi
 # Vault + vault-pg are created here but kept out of INTERNAL_APPS because
 # they don't take the standard common secrets (no RabbitMQ/Redis, and
@@ -211,11 +211,11 @@ common=(
   "ConnectionStrings__rabbitmq=$RABBITMQ_URL"
   "ConnectionStrings__redis=$REDIS_URL"
   "Vault__Enabled=true"
-  "Vault__Address=http://ritualworks-vault.internal:8200"
+  "Vault__Address=http://haworks-vault.internal:8200"
   "Vault__RequireHmacValidation=false"
-  "Authentication__Jwks__JwksUri=http://ritualworks-identity.internal:8080/.well-known/jwks.json"
-  "Authentication__Jwks__Issuer=${JWT_ISSUER:-https://ritualworks-identity.fly.dev}"
-  "Authentication__Jwks__Audience=${JWT_AUDIENCE:-ritualworks-bffweb}"
+  "Authentication__Jwks__JwksUri=http://haworks-identity.internal:8080/.well-known/jwks.json"
+  "Authentication__Jwks__Issuer=${JWT_ISSUER:-https://haworks-identity.fly.dev}"
+  "Authentication__Jwks__Audience=${JWT_AUDIENCE:-haworks-bffweb}"
 )
 
 # Parse POSTGRES_BASE (postgres://USER:PASS@HOST) into components for
@@ -242,25 +242,25 @@ jwt_secrets=(
 [[ -n "${JWT_AUDIENCE:-}" ]] && jwt_secrets+=("Jwt__Audience=$JWT_AUDIENCE")
 
 for app in "${INTERNAL_APPS[@]}"; do
-  if [[ "$app" == "ritualworks-elasticsearch" ]]; then
+  if [[ "$app" == "haworks-elasticsearch" ]]; then
     continue
   fi
-  db="${app#ritualworks-}"
+  db="${app#haworks-}"
   conn="Host=${PG_HOST};Port=5432;Database=${db};Username=${PG_USER};Password=${PG_PASS};SslMode=Require;Trust Server Certificate=true"
   set_secrets "$app" "${common[@]}" "${jwt_secrets[@]}" "ConnectionStrings__${db}=$conn"
 done
 
 # Elasticsearch volume setup.
 echo "==> Elasticsearch setup"
-if ! flyctl volumes list -a ritualworks-elasticsearch 2>/dev/null | grep -q "elasticsearch_data"; then
+if ! flyctl volumes list -a haworks-elasticsearch 2>/dev/null | grep -q "elasticsearch_data"; then
   echo "    creating elasticsearch_data volume"
-  flyctl volumes create elasticsearch_data --size 5 --region "$REGION" -a ritualworks-elasticsearch --yes
+  flyctl volumes create elasticsearch_data --size 5 --region "$REGION" -a haworks-elasticsearch --yes
 else
   echo "    elasticsearch_data volume exists"
 fi
 
-set_secrets ritualworks-elasticsearch "ELASTIC_PASSWORD=$ELASTICSEARCH_PASSWORD" "discovery.type=single-node" "xpack.security.enabled=false"
-set_secrets ritualworks-search "Elasticsearch__Url=http://ritualworks-elasticsearch.internal:9200"
+set_secrets haworks-elasticsearch "ELASTIC_PASSWORD=$ELASTICSEARCH_PASSWORD" "discovery.type=single-node" "xpack.security.enabled=false"
+set_secrets haworks-search "Elasticsearch__Url=http://haworks-elasticsearch.internal:9200"
 
 # BFF: only secrets here. Service-discovery overrides for the BFF's
 # HttpClients (Services__<svc>__http__0=...flycast:8080) live in
@@ -274,7 +274,7 @@ bff_extra=()
 if [[ -n "${PORTFOLIO_SITE_URL:-}" ]]; then
   bff_extra+=(
     "Cors__AllowedOrigins__0=http://localhost:4321"
-    "Cors__AllowedOrigins__1=https://ritualworks.pages.dev"
+    "Cors__AllowedOrigins__1=https://haworks.pages.dev"
     "Cors__AllowedOrigins__2=https://portfolio-showcase.pages.dev"
     "Cors__AllowedOrigins__3=$PORTFOLIO_SITE_URL"
   )
@@ -312,7 +312,7 @@ set_secrets "$VAULT_PG_APP" \
 # (different agent owns it) can wire up the database secrets engine
 # without re-deriving credentials.
 set_secrets "$VAULT_APP" \
-  "VAULT_PG_CONNECTION_URL=postgres://postgres:$VAULT_PG_PASSWORD@ritualworks-vault-pg.internal:5432/postgres?sslmode=disable"
+  "VAULT_PG_CONNECTION_URL=postgres://postgres:$VAULT_PG_PASSWORD@haworks-vault-pg.internal:5432/postgres?sslmode=disable"
 
 echo "==> Vault setup"
 
@@ -397,7 +397,7 @@ id_extra=(
   "Jwt__SigningKeyPem=$JWT_SIGNING_KEY_PEM"
   "Jwt__KeyId=${JWT_KEY_ID:-fly-1}"
   "Vault__Enabled=true"
-  "Vault__Address=http://ritualworks-vault.internal:8200"
+  "Vault__Address=http://haworks-vault.internal:8200"
   "Vault__RequireHmacValidation=false"
   "Vault__CaCertPath="
 )
@@ -421,16 +421,16 @@ fi
   "Authentication__Facebook__AppId=$OAUTH_FACEBOOK_APP_ID"
   "Authentication__Facebook__AppSecret=$OAUTH_FACEBOOK_APP_SECRET"
 )
-set_secrets ritualworks-identity "${id_extra[@]}"
+set_secrets haworks-identity "${id_extra[@]}"
 
 # Payments-specific
 [[ -n "${STRIPE_WEBHOOK_SECRET:-}" ]] && \
-  set_secrets ritualworks-payments "Webhooks__Stripe__WebhookSecret=$STRIPE_WEBHOOK_SECRET"
+  set_secrets haworks-payments "Webhooks__Stripe__WebhookSecret=$STRIPE_WEBHOOK_SECRET"
 
 # Content-specific (only when DEPLOY_CONTENT=true).
 # Storage backend on Fly is Tigris (S3-compatible). Same Storage__* env shape
 # as local-dev/test (LocalStack) — only ServiceUrl/Region/ForcePathStyle vary.
-# Tigris credentials come from `flyctl storage create -a ritualworks-content`
+# Tigris credentials come from `flyctl storage create -a haworks-content`
 # (printed once as AWS_*); stash them in .env.local under TIGRIS_* slots.
 if [[ "$DEPLOY_CONTENT" == "true" ]]; then
   content_extra=()
@@ -443,7 +443,7 @@ if [[ "$DEPLOY_CONTENT" == "true" ]]; then
     "Storage__ForcePathStyle=false"
   )
   [[ -n "${CLAMAV_REST_URL:-}" ]] && content_extra+=("ClamAV__RestApiUrl=$CLAMAV_REST_URL")
-  [[ ${#content_extra[@]} -gt 0 ]] && set_secrets ritualworks-content "${content_extra[@]}"
+  [[ ${#content_extra[@]} -gt 0 ]] && set_secrets haworks-content "${content_extra[@]}"
 fi
 
 echo

@@ -42,7 +42,7 @@ public sealed class E2EEnvironmentFixture : IAsyncLifetime
         }
         else
         {
-            _appBuilder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.RitualworksPlatform_AppHost>();
+            _appBuilder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.HaworksPlatform_AppHost>();
             _app = await _appBuilder.BuildAsync();
 
             // Give services more time to start — the full stack (16 services

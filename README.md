@@ -2,8 +2,8 @@
 
 A production-grade .NET 9 microservices platform built on Clean Architecture principles. Sixteen deployed services communicate via async messaging (MassTransit/RabbitMQ), Change Data Capture (Debezium/Kafka), and synchronous REST. Every service has its own PostgreSQL schema, transactional outbox/inbox, and Polly-backed resilience. The entire stack runs locally via .NET Aspire or Docker Compose and deploys to Fly.io through a fully automated CI/CD pipeline.
 
-[![CI](https://github.com/chidionyema/ritualworks-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/chidionyema/ritualworks-platform/actions/workflows/ci.yml)
-[![Deploy](https://github.com/chidionyema/ritualworks-platform/actions/workflows/deploy.yml/badge.svg)](https://github.com/chidionyema/ritualworks-platform/actions/workflows/deploy.yml)
+[![CI](https://github.com/chidionyema/haworks-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/chidionyema/haworks-platform/actions/workflows/ci.yml)
+[![Deploy](https://github.com/chidionyema/haworks-platform/actions/workflows/deploy.yml/badge.svg)](https://github.com/chidionyema/haworks-platform/actions/workflows/deploy.yml)
 [![.NET 9](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -192,8 +192,8 @@ graph TD
 ### Clone
 
 ```bash
-git clone https://github.com/chidionyema/ritualworks-platform.git
-cd ritualworks-platform
+git clone https://github.com/chidionyema/haworks-platform.git
+cd haworks-platform
 ```
 
 ### Option A — .NET Aspire (recommended for development)
@@ -242,7 +242,7 @@ curl http://localhost:5050/api/catalog/products
 ### Project structure
 
 ```
-ritualworks-platform/
+haworks-platform/
   src/
     {Service}/
       {Service}.Domain/          # Entities, value objects, domain events
@@ -323,10 +323,10 @@ Containers use `WithReuse(true)` — one Docker container per type is shared acr
 
 ```bash
 # All unit tests
-dotnet test RitualworksPlatform.sln --filter "Category=Unit"
+dotnet test HaworksPlatform.sln --filter "Category=Unit"
 
 # All architecture tests
-dotnet test RitualworksPlatform.sln --filter "Category=Architecture"
+dotnet test HaworksPlatform.sln --filter "Category=Architecture"
 
 # Single service integration tests (requires Docker)
 dotnet test tests/Catalog/Catalog.Integration/Catalog.Integration.csproj

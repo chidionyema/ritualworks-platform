@@ -4,7 +4,7 @@
     <RootNamespace>Haworks.BuildingBlocks</RootNamespace>
     <AssemblyName>Haworks.BuildingBlocks</AssemblyName>
     <PackageId>Haworks.BuildingBlocks</PackageId>
-    <Description>Cross-cutting infrastructure: Result&lt;T&gt;, MediatR pipeline behaviors, transactional outbox base wiring, IDomainEventPublisher, Vault dynamic credentials, OpenTelemetry registration. Shared across all Ritualworks microservices.</Description>
+    <Description>Cross-cutting infrastructure: Result&lt;T&gt;, MediatR pipeline behaviors, transactional outbox base wiring, IDomainEventPublisher, Vault dynamic credentials, OpenTelemetry registration. Shared across all Haworks microservices.</Description>
     <Version>1.0.0</Version>
   </PropertyGroup>
 

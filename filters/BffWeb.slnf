@@ -1,6 +1,6 @@
 {
   "solution": {
-    "path": "../RitualworksPlatform.sln",
+    "path": "../HaworksPlatform.sln",
     "projects": [
       "src/BffWeb/BffWeb.Api/BffWeb.Api.csproj",
       "src/BffWeb/BffWeb.Application/BffWeb.Application.csproj",

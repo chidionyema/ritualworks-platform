@@ -9,7 +9,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APPHOST_PROJECT="$REPO_ROOT/deploy/aspire/RitualworksPlatform.AppHost.csproj"
+APPHOST_PROJECT="$REPO_ROOT/deploy/aspire/HaworksPlatform.AppHost.csproj"
 LOGS_DIR="$REPO_ROOT/logs"
 mkdir -p "$LOGS_DIR"
 
@@ -64,7 +64,7 @@ fi
 # Service patterns for cleaning
 SERVICE_BIN_PATTERN="${REPO_ROOT}/src/(Catalog|Orders|Identity|Payments|CheckoutOrchestrator|BffWeb)/[^/]+\.Api/bin/Debug"
 DOTNET_RUN_PATTERN="dotnet run --no-build --project ${REPO_ROOT}/src"
-APPHOST_PATTERN="${REPO_ROOT}/deploy/aspire/(bin/Debug/[^/]+/RitualworksPlatform\\.AppHost|RitualworksPlatform\\.AppHost\\.csproj)"
+APPHOST_PATTERN="${REPO_ROOT}/deploy/aspire/(bin/Debug/[^/]+/HaworksPlatform\\.AppHost|HaworksPlatform\\.AppHost\\.csproj)"
 DCPCTRL_PATTERN="aspire\\.hosting\\.orchestration\\.[^/]+/[^/]+/tools/ext/dcpctrl"
 
 clean_orphans() {

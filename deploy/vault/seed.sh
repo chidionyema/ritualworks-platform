@@ -28,7 +28,7 @@
 #     first generated signing key without hitting "path does not exist"
 #     metadata edge cases.
 #   * Database creation_statements are simpler: the prod sandbox Postgres
-#     (ritualworks-vault-pg) is a single instance with one shared user;
+#     (haworks-vault-pg) is a single instance with one shared user;
 #     it does NOT have the per-database <db>_owner group roles that the
 #     dev init-postgres.sql creates. So issued users get CONNECT + USAGE
 #     on the default schema, no INHERIT IN ROLE.
@@ -127,7 +127,7 @@ fi
 # Database secrets engine: dynamic short-TTL Postgres credentials.
 #
 # Vault issues per-request Postgres users for every haworks-<svc> role,
-# scoped to the prod sandbox Postgres (ritualworks-vault-pg). The operator
+# scoped to the prod sandbox Postgres (haworks-vault-pg). The operator
 # credentials Vault uses to CREATE ROLE on demand are supplied via env
 # vars staged by deploy/fly/bootstrap.sh:
 #
@@ -143,7 +143,7 @@ VAULT_PG_OPERATOR_USERNAME="${VAULT_PG_OPERATOR_USERNAME:-postgres}"
 if [ -z "${VAULT_PG_OPERATOR_PASSWORD:-}" ]; then
   echo "[seed] WARN: VAULT_PG_OPERATOR_PASSWORD not set — skipping database"
   echo "[seed]       secrets engine setup. Stage the secret via bootstrap.sh"
-  echo "[seed]       once ritualworks-vault-pg is deployed, then redeploy."
+  echo "[seed]       once haworks-vault-pg is deployed, then redeploy."
 else
   echo "[seed] enabling database secrets engine (if missing)..."
   if ! vault secrets list -format=json | jq -e '."database/"' >/dev/null 2>&1; then
@@ -163,7 +163,7 @@ else
   vault write database/config/vault-pg \
     plugin_name=postgresql-database-plugin \
     allowed_roles="$DB_ALLOWED_ROLES" \
-    connection_url="postgresql://{{username}}:{{password}}@ritualworks-vault-pg.internal:5432/postgres?sslmode=disable" \
+    connection_url="postgresql://{{username}}:{{password}}@haworks-vault-pg.internal:5432/postgres?sslmode=disable" \
     username="$VAULT_PG_OPERATOR_USERNAME" \
     password="$VAULT_PG_OPERATOR_PASSWORD" >/dev/null
 

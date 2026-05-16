@@ -16,8 +16,8 @@
 #   ./scripts/fly-set-otel-endpoint.sh https://api.honeycomb.io:443
 #   ./scripts/fly-set-otel-endpoint.sh http://otel-gw.internal:4317
 #
-# Skips infra apps (ritualworks-vault, ritualworks-vault-pg,
-# ritualworks-meilisearch) — they have no .NET runtime and no OTel SDK loaded.
+# Skips infra apps (haworks-vault, haworks-vault-pg,
+# haworks-meilisearch) — they have no .NET runtime and no OTel SDK loaded.
 #
 # Each `fly secrets set` call triggers a rolling redeploy of that app's
 # machines. Expect ~30s per app while machines roll. Run from a host with
@@ -62,26 +62,26 @@ fi
 
 # ---- app list --------------------------------------------------------------
 #
-# Logical service names map to Fly app names with the `ritualworks-` prefix
+# Logical service names map to Fly app names with the `haworks-` prefix
 # (cf. fly.*.toml `app =` line). Keep this list in sync with the .NET apps
 # that have OTel auto-instrumentation wired in BuildingBlocks.Observability.
 #
 # Skipped on purpose:
-#   ritualworks-vault, ritualworks-vault-pg  — Hashicorp Vault + Postgres,
+#   haworks-vault, haworks-vault-pg  — Hashicorp Vault + Postgres,
 #                                              no .NET, no OTel SDK.
-#   ritualworks-meilisearch                  — vendor image, emits its own
+#   haworks-meilisearch                  — vendor image, emits its own
 #                                              telemetry on a different path.
 APPS=(
-    ritualworks-bffweb
-    ritualworks-catalog
-    ritualworks-checkout
-    ritualworks-content
-    ritualworks-identity
-    ritualworks-notifications
-    ritualworks-orders
-    ritualworks-payments
-    ritualworks-search
-    ritualworks-audit
+    haworks-bffweb
+    haworks-catalog
+    haworks-checkout
+    haworks-content
+    haworks-identity
+    haworks-notifications
+    haworks-orders
+    haworks-payments
+    haworks-search
+    haworks-audit
 )
 
 # ---- main loop -------------------------------------------------------------

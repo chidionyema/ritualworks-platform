@@ -28,7 +28,7 @@ var vaultManifestsHostDir = Path.GetFullPath(Path.Combine(builder.AppHostDirecto
 // Aspire reattaches on the next boot and skips startup entirely.
 var postgres = builder.AddPostgres("postgres")
     .WithLifetime(ContainerLifetime.Persistent)
-    .WithDataVolume("ritualworks-platform-postgres-data")
+    .WithDataVolume("haworks-platform-postgres-data")
     .WithBindMount("./init-postgres.sql", "/docker-entrypoint-initdb.d/init.sql")
     .WithPgAdmin()
     .WithArgs("-c", "wal_level=logical", "-c", "max_replication_slots=10", "-c", "max_wal_senders=10");
@@ -49,7 +49,7 @@ var privacyDb       = postgres.AddDatabase("privacy");
 var merchantDb      = postgres.AddDatabase("merchant");
 var redis = builder.AddRedis("redis")
     .WithLifetime(ContainerLifetime.Persistent)
-    .WithDataVolume("ritualworks-platform-redis-data")
+    .WithDataVolume("haworks-platform-redis-data")
     .WithRedisCommander();
 
 var rabbitmq = builder.AddRabbitMQ("rabbitmq", port: 5672)
@@ -58,7 +58,7 @@ var rabbitmq = builder.AddRabbitMQ("rabbitmq", port: 5672)
 
 var kafka = builder.AddKafka("kafka")
     .WithLifetime(ContainerLifetime.Persistent)
-    .WithDataVolume("ritualworks-platform-kafka-data");
+    .WithDataVolume("haworks-platform-kafka-data");
 
 // Debezium Connect — watches Postgres WAL and writes change events to Kafka.
 // Connector configs are registered via the init script on first boot.
@@ -96,7 +96,7 @@ var debeziumInit = builder.AddContainer("debezium-init", "curlimages/curl", "lat
 
 var pactDb = builder.AddPostgres("pact-db", port: null, password: null)
     .WithLifetime(ContainerLifetime.Persistent)
-    .WithDataVolume("ritualworks-platform-pact-db-data");
+    .WithDataVolume("haworks-platform-pact-db-data");
 var pactBroker = builder.AddContainer("pact-broker", "pactfoundation/pact-broker", "latest")
     .WithLifetime(ContainerLifetime.Persistent)
     .WaitFor(pactDb)
@@ -119,7 +119,7 @@ var localstack = builder.AddContainer("localstack", "localstack/localstack", "3"
     .WithLifetime(ContainerLifetime.Persistent)
     .WithEnvironment("SERVICES", "s3")
     .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1")
-    .WithVolume("ritualworks-platform-localstack-data", "/var/lib/localstack")
+    .WithVolume("haworks-platform-localstack-data", "/var/lib/localstack")
     .WithHttpEndpoint(targetPort: 4566, name: "edge");
 
 var clamav = builder.AddContainer("clamav", "clamav/clamav", "latest")
@@ -128,7 +128,7 @@ var clamav = builder.AddContainer("clamav", "clamav/clamav", "latest")
 
 var elasticsearch = builder.AddElasticsearch("elasticsearch")
     .WithLifetime(ContainerLifetime.Persistent)
-    .WithDataVolume("ritualworks-platform-elasticsearch-data")
+    .WithDataVolume("haworks-platform-elasticsearch-data")
     .WithEnvironment("ES_JAVA_OPTS", "-Xms512m -Xmx512m");
 
 // Tempo needs a config file to start — without /etc/tempo.yaml it exits
@@ -200,7 +200,7 @@ static IResourceBuilder<T> AddJwksConfig<T, U>(
         var url = identitySvc.GetEndpoint("http").Url;
         ctx.EnvironmentVariables["Authentication__Jwks__JwksUri"] = $"{url}/.well-known/jwks.json";
         ctx.EnvironmentVariables["Authentication__Jwks__Issuer"]   = "http://localhost";
-        ctx.EnvironmentVariables["Authentication__Jwks__Audience"] = "ritualworks-dev";
+        ctx.EnvironmentVariables["Authentication__Jwks__Audience"] = "haworks-dev";
     });
 
 // --- catalog-svc -----------------------------------------------------------
