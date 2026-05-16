@@ -2,8 +2,13 @@ using FluentAssertions;
 using Haworks.BuildingBlocks.CurrentUser;
 using Haworks.Media.Api.Application;
 using Haworks.Media.Api.Infrastructure;
+using Haworks.Media.Api.Infrastructure.Processing;
 using Haworks.Media.Api.Domain;
+using Haworks.Media.Api.Options;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
 
@@ -12,6 +17,8 @@ namespace Haworks.Media.Unit;
 public class ProcessVirusScanTests
 {
     private const string OwnerId = "test-owner-456";
+    // SHA-256 of bytes { 0x01, 0x02, 0x03 } used in the mock S3 download
+    private const string TestFileHash = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81";
     private readonly MediaDbContext _context;
     private readonly Mock<IVirusScanner> _scannerMock;
     private readonly Mock<ICurrentUserService> _currentUserMock;
@@ -31,13 +38,20 @@ public class ProcessVirusScanTests
         _s3Mock = new Mock<IS3Service>();
         _s3Mock.Setup(x => x.DownloadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MemoryStream(new byte[] { 1, 2, 3 }));
-        _handler = new ProcessVirusScanHandler(_context, _scannerMock.Object, _currentUserMock.Object, _s3Mock.Object);
+        var orchestrator = new MediaProcessingOrchestrator(
+            Array.Empty<IMediaProcessor>(),
+            Options.Create(new TranscodeOptions()),
+            NullLogger<MediaProcessingOrchestrator>.Instance);
+        var publisherMock = new Mock<IPublishEndpoint>();
+        _handler = new ProcessVirusScanHandler(
+            _context, _scannerMock.Object, _currentUserMock.Object, _s3Mock.Object,
+            orchestrator, publisherMock.Object);
     }
 
     [Fact]
     public async Task Handle_CleanFile_ShouldUpdateStatusToActive()
     {
-        var mediaFile = MediaFile.Create("test.png", new string('c', 64), 1024, "image/png", OwnerId);
+        var mediaFile = MediaFile.Create("test.png", TestFileHash, 1024, "image/png", OwnerId);
         _context.MediaFiles.Add(mediaFile);
         await _context.SaveChangesAsync();
 
@@ -54,7 +68,7 @@ public class ProcessVirusScanTests
     [Fact]
     public async Task Handle_InfectedFile_ShouldUpdateStatusToRejected()
     {
-        var mediaFile = MediaFile.Create("bad.exe", new string('d', 64), 2048, "application/octet-stream", OwnerId);
+        var mediaFile = MediaFile.Create("bad.exe", TestFileHash, 2048, "application/octet-stream", OwnerId);
         _context.MediaFiles.Add(mediaFile);
         await _context.SaveChangesAsync();
 
