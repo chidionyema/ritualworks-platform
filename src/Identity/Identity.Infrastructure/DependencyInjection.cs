@@ -4,11 +4,11 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MassTransit;
-using Haworks.BuildingBlocks.Persistence;
 using Haworks.BuildingBlocks.Caching;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.BuildingBlocks.Vault;
 using Haworks.Identity.Infrastructure.Authentication;
+using Npgsql;
 
 namespace Haworks.Identity.Infrastructure;
 
@@ -19,18 +19,6 @@ public static class DependencyInjection
         IConfiguration configuration,
         IHostEnvironment env)
     {
-        // Vault DI: registers IVaultService + supporting types from
-        // BuildingBlocks.Vault. Required for the demo vault-rotation
-        // endpoint to do real per-stage RefreshCredentials calls
-        // through the registered IVaultService instance.
-        services.AddVaultIntegration(configuration);
-
-        // L1+L2 hybrid cache used by TokenRevocationService for fast JTI lookups.
-        // L2 backing: in-memory fallback for now (single-process dev). When Aspire
-        // injects ConnectionStrings__redis, swap to AddStackExchangeRedisCache.
-        services.AddInMemoryDistributedCache();
-        services.AddHybridCache();
-
         // Connection string resolution order:
         //   1. Aspire-injected ConnectionStrings__identity (preferred — Aspire owns the lifecycle)
         //   2. Standard ConnectionStrings:DefaultConnection (override / standalone runs)
@@ -40,19 +28,33 @@ public static class DependencyInjection
                 "No identity database connection string. Expected 'ConnectionStrings:identity' " +
                 "(Aspire-injected) or 'ConnectionStrings:DefaultConnection'.");
 
+        // Vault DI: registers IVaultService + supporting types from
+        // BuildingBlocks.Vault. Required for the demo vault-rotation
+        // endpoint to do real per-stage RefreshCredentials calls
+        // through the registered IVaultService instance.
+        var vaultEnabled = configuration.GetValue("Vault:Enabled", false)
+            && !env.IsEnvironment("Test");
+        if (vaultEnabled)
+        {
+            services.AddVaultIntegration(configuration);
+            services.AddVaultNpgsqlDataSource(connectionString, "haworks-identity");
+        }
+
+        // L1+L2 hybrid cache used by TokenRevocationService for fast JTI lookups.
+        // L2 backing: in-memory fallback for now (single-process dev). When Aspire
+        // injects ConnectionStrings__redis, swap to AddStackExchangeRedisCache.
+        services.AddInMemoryDistributedCache();
+        services.AddHybridCache();
+
         services.AddDbContext<AppIdentityDbContext>((sp, options) =>
         {
-            options.UseNpgsql(connectionString);
-
-            // Vault dynamic credentials interceptor — optional for now. When the
-            // VaultService stack is wired in (Phase 1 follow-up), the interceptor
-            // is registered via services.AddVaultIntegration() and resolved here
-            // to swap the static password for an issued one. Until then, plain
-            // Aspire-injected creds work fine for dev.
-            var interceptor = sp.GetService<DynamicCredentialsConnectionInterceptor>();
-            if (interceptor is not null)
+            if (vaultEnabled)
             {
-                options.AddInterceptors(interceptor);
+                options.UseNpgsql(sp.GetRequiredService<NpgsqlDataSource>());
+            }
+            else
+            {
+                options.UseNpgsql(connectionString);
             }
         });
 
@@ -185,7 +187,7 @@ public static class DependencyInjection
         //                          path — restart picks up new config.
         // Singleton — keypair / ring lives for the process lifetime.
         services.AddSingleton<IVaultAppRoleAuthenticator, VaultAppRoleAuthenticator>();
-        if (configuration.GetValue("Vault:Enabled", false))
+        if (vaultEnabled)
         {
             // The rotating ring depends on IVaultService (already registered
             // by AddVaultIntegration above). Register it as both the ring

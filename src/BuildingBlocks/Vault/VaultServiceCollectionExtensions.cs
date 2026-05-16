@@ -2,6 +2,8 @@ using Haworks.BuildingBlocks.Resilience;
 using Haworks.BuildingBlocks.Vault.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
+using System;
 
 namespace Haworks.BuildingBlocks.Vault;
 
@@ -80,6 +82,30 @@ public static class VaultServiceCollectionExtensions
         // before the token's natural TTL expires.
         services.AddHostedService<VaultTokenRevocationHostedService>();
 
+        return services;
+    }
+
+    /// <summary>
+    /// Registers an NpgsqlDataSource that automatically rotates its password
+    /// using Vault static roles.
+    /// </summary>
+    public static IServiceCollection AddVaultNpgsqlDataSource(
+        this IServiceCollection services,
+        string connectionString,
+        string roleName)
+    {
+        services.AddSingleton(sp => 
+        {
+            var vault = sp.GetRequiredService<IVaultService>();
+            var builder = new NpgsqlDataSourceBuilder(connectionString);
+            builder.UsePeriodicPasswordProvider(async (sb, ct) => 
+            {
+                var (_, securePass) = await vault.GetDatabaseCredentialsAsync(roleName, ct);
+                var pass = new System.Net.NetworkCredential(string.Empty, securePass).Password;
+                return pass;
+            }, TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(30));
+            return builder.Build();
+        });
         return services;
     }
 }

@@ -1,16 +1,15 @@
 {
-  "_comment": "Per-bounded-context dynamic database roles. Each issued user joins the matching <db>_owner group role (created by init-postgres.sql) so its objects are owned by the group, not the ephemeral user. Adding a new bounded context = add a row here + an entry in init-postgres.sql + a 'has_db: true' entry in services.json.",
+  "_comment": "Per-bounded-context static database roles. Each static role has a fixed username (created by init-postgres.sql) but Vault rotates its password periodically. Adding a new bounded context = add a row here + an entry in init-postgres.sql + a 'has_db: true' entry in services.json.",
   "connection_name": "postgres-haworks",
   "plugin_name":     "postgresql-database-plugin",
-  "default_ttl":     "1h",
-  "max_ttl":         "24h",
+  "rotation_period": "1h",
   "roles": [
-    { "role_name": "haworks-identity",              "owner_group": "identity_owner", "db_name": "identity" },
-    { "role_name": "haworks-catalog",               "owner_group": "catalog_owner",  "db_name": "catalog"  },
-    { "role_name": "haworks-orders",                "owner_group": "orders_owner",   "db_name": "orders"   },
-    { "role_name": "haworks-payments",              "owner_group": "payments_owner", "db_name": "payments" },
-    { "role_name": "haworks-content",               "owner_group": "content_owner",  "db_name": "content"  },
-    { "role_name": "haworks-checkout-orchestrator", "owner_group": "checkout_owner", "db_name": "checkout" },
-    { "role_name": "haworks-notifications",         "owner_group": "notifications_owner", "db_name": "notifications" }
+    { "role_name": "haworks-identity",              "username": "identity_owner" },
+    { "role_name": "haworks-catalog",               "username": "catalog_owner"  },
+    { "role_name": "haworks-orders",                "username": "orders_owner"   },
+    { "role_name": "haworks-payments",              "username": "payments_owner" },
+    { "role_name": "haworks-content",               "username": "content_owner"  },
+    { "role_name": "haworks-checkout-orchestrator", "username": "checkout_owner" },
+    { "role_name": "haworks-notifications",         "username": "notifications_owner" }
   ]
 }

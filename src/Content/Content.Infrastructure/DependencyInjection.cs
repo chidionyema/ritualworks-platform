@@ -1,5 +1,4 @@
 using Amazon.S3;
-using Haworks.BuildingBlocks.Persistence;
 using Haworks.BuildingBlocks.Resilience;
 using Haworks.BuildingBlocks.Telemetry;
 using Haworks.BuildingBlocks.Vault;
@@ -17,6 +16,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace Haworks.Content.Infrastructure;
 
@@ -33,30 +33,25 @@ public static class DependencyInjection
                 "No content database connection string. Expected 'ConnectionStrings:content' " +
                 "(Aspire-injected) or 'ConnectionStrings:DefaultConnection'.");
 
-        // Vault: dynamic Postgres creds. When enabled, the
-        // DynamicCredentialsConnectionInterceptor swaps the static username/
-        // password in the connection string for short-TTL Vault-issued
-        // credentials on every connection open. Role haworks-content matches
-        // infra/vault/database/roles.json.
+        // Vault: dynamic Postgres creds via NpgsqlDataSource with PeriodicPasswordProvider.
+        // Role haworks-content matches infra/vault/database/roles.json.
         var vaultEnabled = configuration.GetValue("Vault:Enabled", false)
             && !env.IsEnvironment("Test");
         if (vaultEnabled)
         {
             services.AddVaultIntegration(configuration);
-            services.AddSingleton<DynamicCredentialsConnectionInterceptor>(sp =>
-                new DynamicCredentialsConnectionInterceptor(
-                    sp.GetRequiredService<IVaultService>(),
-                    roleName: "haworks-content",
-                    sp.GetRequiredService<ILogger<DynamicCredentialsConnectionInterceptor>>()));
+            services.AddVaultNpgsqlDataSource(connectionString, "haworks-content");
         }
 
         services.AddDbContext<ContentDbContext>((sp, options) =>
         {
-            options.UseNpgsql(connectionString);
-            var interceptor = sp.GetService<DynamicCredentialsConnectionInterceptor>();
-            if (interceptor is not null)
+            if (vaultEnabled)
             {
-                options.AddInterceptors(interceptor);
+                options.UseNpgsql(sp.GetRequiredService<NpgsqlDataSource>());
+            }
+            else
+            {
+                options.UseNpgsql(connectionString);
             }
         });
 

@@ -245,7 +245,7 @@ public class VaultService : IVaultService
         await store.RefreshAsync(async innerCt =>
         {
             var client = await GetClientAsync(innerCt);
-            var resp = await client.V1.Secrets.Database.GetCredentialsAsync(roleName);
+            var resp = await client.V1.Secrets.Database.GetStaticCredentialsAsync(roleName);
             var securePwd = new SecureString();
             foreach (var c in resp.Data.Password)
                 securePwd.AppendChar(c);

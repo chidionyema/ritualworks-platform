@@ -353,7 +353,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpPost("events/relay-pause")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Service")]
     public async Task<IActionResult> SetRelayPause([FromBody] RelayPauseRequest request, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient(BackendClients.Payments);
@@ -596,7 +596,7 @@ public class DemoController : ControllerBase
     }
 
     [HttpPost("vault/rotate")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Service")]
     public async Task<IActionResult> RotateVault(
         [FromHeader(Name = "X-Demo-Session")] Guid? demoSession,
         CancellationToken ct)

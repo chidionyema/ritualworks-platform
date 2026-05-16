@@ -22,22 +22,22 @@ SELECT 'CREATE DATABASE scheduler'     WHERE NOT EXISTS (SELECT FROM pg_database
 SELECT 'CREATE DATABASE privacy'       WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'privacy')\gexec
 SELECT 'CREATE DATABASE merchant'      WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'merchant')\gexec
 
--- 2. Per-DB owner group roles (NOLOGIN — they're groups Vault users join).
+-- 2. Per-DB owner roles (LOGIN — Vault rotates their passwords as Static Roles).
 
-SELECT 'CREATE ROLE catalog_owner  NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'catalog_owner')\gexec
-SELECT 'CREATE ROLE orders_owner   NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'orders_owner')\gexec
-SELECT 'CREATE ROLE payments_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'payments_owner')\gexec
-SELECT 'CREATE ROLE content_owner  NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'content_owner')\gexec
-SELECT 'CREATE ROLE identity_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'identity_owner')\gexec
-SELECT 'CREATE ROLE checkout_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'checkout_owner')\gexec
-SELECT 'CREATE ROLE notifications_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'notifications_owner')\gexec
-SELECT 'CREATE ROLE audit_owner    NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'audit_owner')\gexec
-SELECT 'CREATE ROLE location_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'location_owner')\gexec
-SELECT 'CREATE ROLE webhooks_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'webhooks_owner')\gexec
-SELECT 'CREATE ROLE payouts_owner  NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'payouts_owner')\gexec
-SELECT 'CREATE ROLE scheduler_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'scheduler_owner')\gexec
-SELECT 'CREATE ROLE privacy_owner   NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'privacy_owner')\gexec
-SELECT 'CREATE ROLE merchant_owner  NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'merchant_owner')\gexec
+SELECT 'CREATE ROLE catalog_owner  LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'catalog_owner')\gexec
+SELECT 'CREATE ROLE orders_owner   LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'orders_owner')\gexec
+SELECT 'CREATE ROLE payments_owner LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'payments_owner')\gexec
+SELECT 'CREATE ROLE content_owner  LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'content_owner')\gexec
+SELECT 'CREATE ROLE identity_owner LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'identity_owner')\gexec
+SELECT 'CREATE ROLE checkout_owner LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'checkout_owner')\gexec
+SELECT 'CREATE ROLE notifications_owner LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'notifications_owner')\gexec
+SELECT 'CREATE ROLE audit_owner    LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'audit_owner')\gexec
+SELECT 'CREATE ROLE location_owner LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'location_owner')\gexec
+SELECT 'CREATE ROLE webhooks_owner LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'webhooks_owner')\gexec
+SELECT 'CREATE ROLE payouts_owner  LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'payouts_owner')\gexec
+SELECT 'CREATE ROLE scheduler_owner LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'scheduler_owner')\gexec
+SELECT 'CREATE ROLE privacy_owner   LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'privacy_owner')\gexec
+SELECT 'CREATE ROLE merchant_owner  LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'merchant_owner')\gexec
 
 -- 3. Transfer database ownership + grant ALL.
 ALTER DATABASE catalog       OWNER TO catalog_owner;

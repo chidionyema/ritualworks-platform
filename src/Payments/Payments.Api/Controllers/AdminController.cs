@@ -19,7 +19,7 @@ namespace Haworks.Payments.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("admin")]
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Admin,Service")]
 public sealed class AdminController(
     PaymentDbContext db,
     IDomainEventPublisher eventPublisher,

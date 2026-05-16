@@ -31,7 +31,7 @@ public sealed class VaultProbeClient
 /// </summary>
 [ApiController]
 [Route("admin")]
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Admin,Service")]
 public sealed class AdminController(
     // IServiceProvider so we can resolve Vault deps at action time instead
     // of constructor time. When Vault:Enabled=false (which the bootstrap
