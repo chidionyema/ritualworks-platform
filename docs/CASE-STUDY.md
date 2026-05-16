@@ -1,4 +1,4 @@
-# Case Study: Ritualworks Monolith → 7-Service Microservices Platform
+# Case Study: Haworks Monolith → 7-Service Microservices Platform
 
 **Stack:** .NET 9, Aspire, MassTransit + RabbitMQ, Postgres 16, Vault, OpenTelemetry, Helm, ArgoCD, kind
 **Outcome:** A production-shape distributed system with 240+ tests, including a chaos test that proves saga compensation works end-to-end against real infrastructure.
@@ -7,7 +7,7 @@
 
 ## The Problem
 
-A working .NET monolith — `ritualworks` — had grown into seven loosely-bounded contexts (catalog, orders, payments, identity, content, checkout, BFF). Cross-context calls were synchronous DB joins; deploys were all-or-nothing; one slow checkout request tied up worker threads for the entire app. The codebase had defensive patterns (idempotency keys, optimistic concurrency, manual compensation) that were *fighting the procedural orchestration* — proof that the system wanted to be event-driven but was wired against it. See [`event-integration-rationale.md`](../.claude/rules/event-integration-rationale.md).
+A working .NET monolith — `haworks` — had grown into seven loosely-bounded contexts (catalog, orders, payments, identity, content, checkout, BFF). Cross-context calls were synchronous DB joins; deploys were all-or-nothing; one slow checkout request tied up worker threads for the entire app. The codebase had defensive patterns (idempotency keys, optimistic concurrency, manual compensation) that were *fighting the procedural orchestration* — proof that the system wanted to be event-driven but was wired against it. See [`event-integration-rationale.md`](../.claude/rules/event-integration-rationale.md).
 
 The goal: split into independently-deployable services without losing the consistency guarantees the monolith leaned on.
 
@@ -25,7 +25,7 @@ The checkout flow involves orders, catalog stock, and payments. The temptation w
 Every service writes outbox rows in the same DB transaction as its state changes. MassTransit's `EntityFrameworkOutboxBusOutbox` flushes them. This is the "exactly one publish per state transition" guarantee we couldn't have gotten by publishing directly to RabbitMQ from a handler.
 
 ### Greenfield platform repo ([ADR-0008](./microservices-migration/adr/0008-clean-slate-greenfield.md), [ADR-0009](./microservices-migration/adr/0009-monolith-as-reference-not-source.md))
-The monolith stayed at `ritualworks/`. The platform built up at `ritualworks-platform/` from an empty `Foundation` phase. The monolith is read-only reference: when a behavior is unclear, we read its implementation, but we do not import its code. This avoided dragging in the procedural patterns the migration was meant to escape.
+The monolith stayed at `haworks/`. The platform built up at `haworks-platform/` from an empty `Foundation` phase. The monolith is read-only reference: when a behavior is unclear, we read its implementation, but we do not import its code. This avoided dragging in the procedural patterns the migration was meant to escape.
 
 ---
 

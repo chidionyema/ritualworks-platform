@@ -73,7 +73,7 @@ User id pulled from `User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Find
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/Payments.Unit -c Release
 dotnet test tests/Payments.Integration -c Release --filter "FullyQualifiedName~SubscriptionEndpointTests"
 dotnet test tests/Payments.Integration -c Release   # full suite — no regressions

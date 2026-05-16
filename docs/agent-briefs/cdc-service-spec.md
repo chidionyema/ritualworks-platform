@@ -99,13 +99,13 @@ The application is unaware of CDC. Services just write to their tables. The DB d
 
 ### 4.1 Topology — see `database-topology.md`
 
-The full production DB topology, capacity limits, and Vault dynamic-credential flow are documented separately in [`../architecture/database-topology.md`](../architecture/database-topology.md). One-line summary for this spec: today, all 8 service databases live in one Fly Postgres instance (`ritualworks-vault-pg`); tomorrow (per k8s-platform-spec), each gets its own CNPG cluster.
+The full production DB topology, capacity limits, and Vault dynamic-credential flow are documented separately in [`../architecture/database-topology.md`](../architecture/database-topology.md). One-line summary for this spec: today, all 8 service databases live in one Fly Postgres instance (`haworks-vault-pg`); tomorrow (per k8s-platform-spec), each gets its own CNPG cluster.
 
 **Both topologies look the same to cdc-svc** — each `(host, database)` pair is one source. Today: 8 entries on one host. Tomorrow: 8 distinct hosts. The relay, publications, and consumers don't know or care which.
 
 ### 4.2 Cluster-wide configuration (one change, all services covered)
 
-`wal_level=logical` is a server-wide Postgres setting — flipping it once on `ritualworks-vault-pg` enables CDC for every database on that instance. Single change, all services covered.
+`wal_level=logical` is a server-wide Postgres setting — flipping it once on `haworks-vault-pg` enables CDC for every database on that instance. Single change, all services covered.
 
 Same for `max_replication_slots` — defaults to 10 on Fly Postgres. We need 8 slots (one per database) plus headroom for ad-hoc replays. Bump to 20.
 
@@ -116,7 +116,7 @@ fly postgres config update \
   --wal-level=logical \
   --max-replication-slots=20 \
   --max-wal-senders=20 \
-  -a ritualworks-vault-pg
+  -a haworks-vault-pg
 # requires a brief Postgres restart — schedule during low traffic
 ```
 
@@ -327,7 +327,7 @@ fly postgres config update \
   --wal-level=logical \
   --max-replication-slots=20 \
   --max-wal-senders=20 \
-  -a ritualworks-vault-pg
+  -a haworks-vault-pg
 # requires brief restart of the shared Postgres — schedule in low-traffic window
 ```
 
@@ -348,7 +348,7 @@ fly postgres config update \
 
 Total producer integration: **~30 minutes of operator time** (one config update + 8 SQL statements committed to `infra/stateful/cdc-publications/`). The CI workflow that applies these is part of the cdc-svc rollout (T3 in § 11).
 
-When the platform moves to per-service CNPG clusters (per `k8s-platform-spec.md` § 12 P2), the same publication SQL files apply unchanged — only the connection target changes from "ritualworks-vault-pg + database name" to "<service>-pg cluster".
+When the platform moves to per-service CNPG clusters (per `k8s-platform-spec.md` § 12 P2), the same publication SQL files apply unchanged — only the connection target changes from "haworks-vault-pg + database name" to "<service>-pg cluster".
 
 ### 7.2 Existing consumers — what changes
 
@@ -705,7 +705,7 @@ The spec above describes the runtime architecture. This section is the operator-
 ### 12.1 Current prod DB topology — what we're working with
 
 Today (May 2026), every service has its own Postgres on Fly:
-- `ritualworks-<service>-pg` Fly app per service (per `fly.<service>-pg.toml` if present, else stand-alone Fly Postgres app)
+- `haworks-<service>-pg` Fly app per service (per `fly.<service>-pg.toml` if present, else stand-alone Fly Postgres app)
 - `wal_level` defaults to `replica` (Postgres standard) — needs upgrade to `logical` for CDC
 - Vault dynamic credentials issue per-connection roles
 - Connection strings injected via `ConnectionStrings__<service>` env in each service
@@ -767,7 +767,7 @@ ALTER TABLE inventory_items     REPLICA IDENTITY FULL;
 ```
 
 The CI workflow (`.github/workflows/cdc-publications.yml`) applies these on every merge to main:
-1. Fly target: `flyctl postgres connect -a ritualworks-<svc>-pg < infra/stateful/cdc-publications/<svc>.sql`
+1. Fly target: `flyctl postgres connect -a haworks-<svc>-pg < infra/stateful/cdc-publications/<svc>.sql`
 2. CNPG target: `kubectl exec -n postgres-<svc> -c postgres -- psql -U postgres -f /tmp/cdc.sql` (after kubectl-cp'ing the file)
 
 Same source file works for both topologies — that's the seamlessness.
@@ -794,7 +794,7 @@ The shared-Postgres topology (see `architecture/database-topology.md`) means the
 platform db cdc enable-cluster              # under the hood:
                                             #   fly postgres config update --wal-level=logical
                                             #     --max-replication-slots=20 --max-wal-senders=20
-                                            #     -a ritualworks-vault-pg
+                                            #     -a haworks-vault-pg
                                             # then runs every infra/stateful/cdc-publications/*.sql
                                             # against its target logical DB. Idempotent.
 

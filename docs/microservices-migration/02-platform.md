@@ -88,7 +88,7 @@ kind cluster (single-node, ~3 GB RAM)
 └── namespaces:
     ├── argocd                 ← ArgoCD itself + App-of-Apps
     ├── vault                  ← Vault server (StatefulSet)
-    ├── ritualworks            ← all 7 services + 7 Postgres StatefulSets
+    ├── haworks            ← all 7 services + 7 Postgres StatefulSets
     ├── observability          ← OTel collector, Tempo, Loki, Prometheus, Grafana
     └── pact                   ← Pact broker + its Postgres
 ```

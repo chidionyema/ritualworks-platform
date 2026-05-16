@@ -16,7 +16,7 @@ Phase L0. Blocks-on: none. Branch: `feat/audit-service` already exists in this w
 6. `deploy/aspire/Program.cs` — find where `var notifications = builder.AddProject<Projects.Notifications_Api>("notifications-svc")` is wired; the audit registration sits next to it.
 7. `deploy/aspire/init-postgres.sql` — confirm the `CREATE DATABASE` block; `audit` must be added.
 8. `deploy/compose/docker-compose.yml` — find `notifications-svc:`; the audit entry mirrors it.
-9. `RitualworksPlatform.sln` — confirm where Notifications projects are listed; Audit projects go in the same group.
+9. `HaworksPlatform.sln` — confirm where Notifications projects are listed; Audit projects go in the same group.
 
 ## Deliverable
 
@@ -64,7 +64,7 @@ These four sibling DI files are how parallelism works — each L1 phase owns ONE
 - `tests/Audit.Integration/AuditWebAppFactory.cs` — `WebApplicationFactory<Program>` mirroring `tests/Notifications.Integration/NotificationsWebAppFactory.cs`; uses `SharedTestPostgres.CreateDatabaseAsync("audit")`. **L1.B will refine this** but the skeleton must boot.
 
 ### Modified files
-- `RitualworksPlatform.sln` — add the 4 Audit projects + 2 test projects (Unit, Integration) to the same solution folder as Notifications. **L1.A and L1.B do NOT touch the .sln.**
+- `HaworksPlatform.sln` — add the 4 Audit projects + 2 test projects (Unit, Integration) to the same solution folder as Notifications. **L1.A and L1.B do NOT touch the .sln.**
 - `deploy/aspire/Program.cs` — add `var auditDb = postgres.AddDatabase("audit");` and the `audit-svc` project registration mirroring `notifications-svc`. Wire OTLP env (`tempo.GetEndpoint("grpc")`), JWKS via `AddJwksConfig`, RabbitMQ + auditDb refs.
 - `deploy/aspire/init-postgres.sql` — add `audit` to the CREATE DATABASE iterator (or as a new block, matching the existing style).
 - `deploy/compose/docker-compose.yml` — add `audit-svc` mirroring `notifications-svc`.
@@ -81,7 +81,7 @@ dotnet build src/Audit/Audit.Infrastructure/Audit.Infrastructure.csproj -c Relea
 dotnet build src/Audit/Audit.Api/Audit.Api.csproj               -c Release --nologo --verbosity quiet
 
 # AppHost compiles (verifies Aspire wiring)
-dotnet build deploy/aspire/RitualworksPlatform.AppHost.csproj   -c Release --nologo --verbosity quiet
+dotnet build deploy/aspire/HaworksPlatform.AppHost.csproj   -c Release --nologo --verbosity quiet
 
 # Solution metadata is valid
 dotnet sln list | grep -c "Audit\." | awk '$1==4{exit 0} {exit 1}'
@@ -110,7 +110,7 @@ Per docs/agent-briefs/audit-service-spec.md."
 - Do NOT touch BuildingBlocks. If audit needs a building-block change, file a blocker.
 - Do NOT create `tests/Audit.*` projects yet — each test project is created by the phase that needs it (L1.A → `tests/Audit.Unit`, L1.B → `tests/Audit.Integration`).
 - Do NOT add fly.audit.toml — that's outside the in-scope build (the operator can add it later via the existing fly pattern; not blocking).
-- Do NOT do a solution-wide build (`dotnet build RitualworksPlatform.sln`).
+- Do NOT do a solution-wide build (`dotnet build HaworksPlatform.sln`).
 
 ## Done-report format
 

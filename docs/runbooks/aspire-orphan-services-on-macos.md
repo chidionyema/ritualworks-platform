@@ -2,7 +2,7 @@
 
 ## Symptom
 
-Several minutes into a session you start `dotnet run --project deploy/aspire/RitualworksPlatform.AppHost.csproj` and everything appears to come up — Aspire dashboard reports all services Ready — but BffWeb's HttpClient calls to `catalog-svc` (or any other service) start timing out with `TaskCanceledException` from `ResolvingHttpDelegatingHandler`. The service health endpoints (`http://localhost:5050/health`, etc.) work; the per-demo endpoints that fan out to downstream services hang.
+Several minutes into a session you start `dotnet run --project deploy/aspire/HaworksPlatform.AppHost.csproj` and everything appears to come up — Aspire dashboard reports all services Ready — but BffWeb's HttpClient calls to `catalog-svc` (or any other service) start timing out with `TaskCanceledException` from `ResolvingHttpDelegatingHandler`. The service health endpoints (`http://localhost:5050/health`, etc.) work; the per-demo endpoints that fan out to downstream services hang.
 
 `ps -ef | grep <ServiceName>.Api` shows multiple copies of the same service — e.g. three `Catalog.Api` processes, four `BffWeb.Api`. They're orphans from prior Aspire runs.
 

@@ -1,6 +1,6 @@
 # Saga State Machine Audit Report
 
-**Platform:** RitualWorks / Haworks .NET 9.0 Microservices
+**Platform:** Haworks / Haworks .NET 9.0 Microservices
 **Date:** 2026-05-14
 **Auditor:** Claude Opus 4.6 (automated deep audit)
 **Scope:** All 4 saga state machines, their state entities, consumers, DI wiring, tests, and contracts

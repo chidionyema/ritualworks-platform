@@ -8,19 +8,19 @@ Every service is deployed as an independent Fly.io app. There is no shared runti
 
 | Fly app name | toml file | Notes |
 |---|---|---|
-| `ritualworks-bffweb` | `fly.bffweb.toml` | Public entry point; HTTPS enforced |
-| `ritualworks-identity` | `fly.identity.toml` | Internal only; no public IP |
-| `ritualworks-catalog` | `fly.catalog.toml` | Internal only |
-| `ritualworks-orders` | `fly.orders.toml` | Internal only |
-| `ritualworks-payments` | `fly.payments.toml` | Internal only |
-| `ritualworks-checkout` | `fly.checkout.toml` | Internal only |
-| `ritualworks-search` | `fly.search.toml` | Internal only |
-| `ritualworks-notifications` | `fly.notifications.toml` | Internal only |
-| `ritualworks-audit` | `fly.audit.toml` | Internal only |
-| `ritualworks-webhooks` | `fly.webhooks.toml` | Internal only |
-| `ritualworks-vault` | `fly.vault.toml` | HashiCorp Vault in production mode |
-| `ritualworks-vault-pg` | `fly.vault-pg.toml` | Postgres backend for Vault storage |
-| `ritualworks-meilisearch` | `fly.meilisearch.toml` | Meilisearch (separate from Elasticsearch) |
+| `haworks-bffweb` | `fly.bffweb.toml` | Public entry point; HTTPS enforced |
+| `haworks-identity` | `fly.identity.toml` | Internal only; no public IP |
+| `haworks-catalog` | `fly.catalog.toml` | Internal only |
+| `haworks-orders` | `fly.orders.toml` | Internal only |
+| `haworks-payments` | `fly.payments.toml` | Internal only |
+| `haworks-checkout` | `fly.checkout.toml` | Internal only |
+| `haworks-search` | `fly.search.toml` | Internal only |
+| `haworks-notifications` | `fly.notifications.toml` | Internal only |
+| `haworks-audit` | `fly.audit.toml` | Internal only |
+| `haworks-webhooks` | `fly.webhooks.toml` | Internal only |
+| `haworks-vault` | `fly.vault.toml` | HashiCorp Vault in production mode |
+| `haworks-vault-pg` | `fly.vault-pg.toml` | Postgres backend for Vault storage |
+| `haworks-meilisearch` | `fly.meilisearch.toml` | Meilisearch (separate from Elasticsearch) |
 
 All internal services are reachable from each other on Fly's private 6PN network via `http://<app-name>.internal:8080`. The BFF uses `.internal` hostnames (not `.flycast`) because the load-balanced `.flycast` endpoint was returning connection resets for HTTP/8080 traffic in this cluster.
 
@@ -116,7 +116,7 @@ Spins up the full Aspire AppHost in-process, installs Playwright browsers, then 
 
 ### Vault in production
 
-Vault runs as a Fly app (`ritualworks-vault`) backed by a Postgres storage backend (`ritualworks-vault-pg`). It is not in dev mode; it must be initialized with `vault operator init` and unsealed with `vault operator unseal` after each restart.
+Vault runs as a Fly app (`haworks-vault`) backed by a Postgres storage backend (`haworks-vault-pg`). It is not in dev mode; it must be initialized with `vault operator init` and unsealed with `vault operator unseal` after each restart.
 
 Services authenticate to Vault using AppRole: each service has a `role_id` and `secret_id` staged as Fly secrets. On startup, the service exchanges these for a short-lived Vault token, then uses that token to fetch dynamic database credentials and other secrets.
 
@@ -133,8 +133,8 @@ The `deploy/fly/ci-stage-vault-creds.sh` script runs in CI after a Vault deploy 
 Secrets that cannot be stored in Vault (because they are needed to bootstrap Vault itself, or because they are external API keys) are stored as Fly secrets set via `flyctl secrets set`:
 
 ```bash
-flyctl secrets set STRIPE_SECRET_KEY=sk_live_... -a ritualworks-payments
-flyctl secrets set OTEL_EXPORTER_OTLP_ENDPOINT=https://... -a ritualworks-bffweb
+flyctl secrets set STRIPE_SECRET_KEY=sk_live_... -a haworks-payments
+flyctl secrets set OTEL_EXPORTER_OTLP_ENDPOINT=https://... -a haworks-bffweb
 ```
 
 Fly secrets are injected as environment variables at VM startup. They are not visible in the toml files or the repository.
@@ -180,8 +180,8 @@ The content service deploy is gated on `vars.DEPLOY_CONTENT == 'true'` (a GitHub
 Fly maintains a release history per app. To roll back a single service to the previous release:
 
 ```bash
-flyctl releases list -a ritualworks-catalog
-flyctl deploy --image <previous-image-ref> -a ritualworks-catalog
+flyctl releases list -a haworks-catalog
+flyctl deploy --image <previous-image-ref> -a haworks-catalog
 ```
 
 Because the Deploy workflow is triggered by CI success, a broken commit will not reach production if any CI job fails. For a bad deploy that passes CI:
@@ -216,7 +216,7 @@ Each app sets its resource identity in the toml `[env]` block:
 
 ```toml
 OTEL_SERVICE_NAME        = "catalog-svc"
-OTEL_RESOURCE_ATTRIBUTES = "deployment.environment=production,service.namespace=ritualworks"
+OTEL_RESOURCE_ATTRIBUTES = "deployment.environment=production,service.namespace=haworks"
 ```
 
 ### Structured logging
@@ -226,7 +226,7 @@ All services use Serilog with correlation ID enrichment. Logs are available in t
 ### Fly machine monitoring
 
 ```bash
-flyctl status -a ritualworks-bffweb      # machine state and health
-flyctl vm list -a ritualworks-catalog    # list all VMs with status
-flyctl logs -a ritualworks-payments      # tail logs
+flyctl status -a haworks-bffweb      # machine state and health
+flyctl vm list -a haworks-catalog    # list all VMs with status
+flyctl logs -a haworks-payments      # tail logs
 ```

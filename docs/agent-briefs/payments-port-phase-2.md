@@ -1,6 +1,6 @@
 # Brief: Payments port phase 2 — PayPal + subscriptions + refunds + health
 
-You are continuing the payments port from `/Users/chidionyema/Documents/code/ritualworks/` (monolith, read-only) into `/Users/chidionyema/Documents/code/ritualworks-platform/` (the new microservices platform). **Phase 1 must be merged before you start phase 2.** Phase 1 is described in `docs/agent-briefs/payments-port-from-monolith.md` and ports Stripe checkout + webhooks + idempotency guard + amount-mismatch handler.
+You are continuing the payments port from `/Users/chidionyema/Documents/code/haworks/` (monolith, read-only) into `/Users/chidionyema/Documents/code/haworks-platform/` (the new microservices platform). **Phase 1 must be merged before you start phase 2.** Phase 1 is described in `docs/agent-briefs/payments-port-from-monolith.md` and ports Stripe checkout + webhooks + idempotency guard + amount-mismatch handler.
 
 This brief covers phase 2: everything the monolith had that phase 1 deferred. After phase 2 ships, the new Payments service should match the monolith's payments capability surface.
 
@@ -24,12 +24,12 @@ This is committed work, not a backlog item. The product owner has explicitly sai
 ## Repo conventions (re-read before writing)
 
 Same set as phase 1:
-- `/Users/chidionyema/Documents/code/ritualworks/.claude/rules/dotnet-clean-arch.md`
-- `/Users/chidionyema/Documents/code/ritualworks/.claude/rules/code-quality.md`
-- `/Users/chidionyema/Documents/code/ritualworks/.claude/rules/options-configuration.md`
-- `/Users/chidionyema/Documents/code/ritualworks/.claude/rules/security.md`
-- `/Users/chidionyema/Documents/code/ritualworks/.claude/rules/resilience.md`
-- `/Users/chidionyema/Documents/code/ritualworks/.claude/rules/testing.md`
+- `/Users/chidionyema/Documents/code/haworks/.claude/rules/dotnet-clean-arch.md`
+- `/Users/chidionyema/Documents/code/haworks/.claude/rules/code-quality.md`
+- `/Users/chidionyema/Documents/code/haworks/.claude/rules/options-configuration.md`
+- `/Users/chidionyema/Documents/code/haworks/.claude/rules/security.md`
+- `/Users/chidionyema/Documents/code/haworks/.claude/rules/resilience.md`
+- `/Users/chidionyema/Documents/code/haworks/.claude/rules/testing.md`
 
 The non-negotiables: `internal sealed` handlers/consumers, `Options` suffix + `SectionName` constant + `ValidateOnStart()`, publish events BEFORE `SaveChangesAsync`, `IDomainEventPublisher` not `IPublishEndpoint`, no `Task.Delay` in tests, Fluent Assertions.
 
@@ -87,7 +87,7 @@ The monolith exposes a `SubscriptionController.cs` at `src/Api/Controllers/`. In
 
 Authorization: `[Authorize]` (the JWT bearer scheme is already wired via Identity/BFF). Rate-limit subscriptions creation with the existing `auth` policy or add a new `subscriptions` policy with sensible limits.
 
-The BFF's `BackendClients.cs` does NOT currently include a subscription HttpClient; if you want the BFF to proxy these endpoints (recommended — keeps the public surface single-origin), add one with the same Aspire service-discovery URI pattern used for `payments-svc`. If not needed for v1, skip and let consumers hit `ritualworks-payments.flycast` directly (only practical if there's no public client; document the choice in the PR).
+The BFF's `BackendClients.cs` does NOT currently include a subscription HttpClient; if you want the BFF to proxy these endpoints (recommended — keeps the public surface single-origin), add one with the same Aspire service-discovery URI pattern used for `payments-svc`. If not needed for v1, skip and let consumers hit `haworks-payments.flycast` directly (only practical if there's no public client; document the choice in the PR).
 
 ## New domain events to add
 
@@ -178,7 +178,7 @@ PAYPAL_ENVIRONMENT=Sandbox        # Sandbox | Live
 STRIPE_PRICE_ID_DEFAULT=           # default subscription price ID for the demo
 ```
 
-Update `deploy/fly/bootstrap.sh` to set these on `ritualworks-payments`:
+Update `deploy/fly/bootstrap.sh` to set these on `haworks-payments`:
 - `PaymentProviders__PayPal__ClientId=$PAYPAL_CLIENT_ID`
 - `PaymentProviders__PayPal__ClientSecret=$PAYPAL_CLIENT_SECRET`
 - `PaymentProviders__PayPal__WebhookId=$PAYPAL_WEBHOOK_ID`
@@ -213,7 +213,7 @@ Test corrections during port:
 
 You're done when:
 
-1. `dotnet build RitualworksPlatform.sln -c Release` → 0 warnings, 0 errors.
+1. `dotnet build HaworksPlatform.sln -c Release` → 0 warnings, 0 errors.
 2. `dotnet test tests/Payments.Unit` → green, with all phase 2 test classes passing.
 3. `dotnet test tests/Payments.Integration` → green (Docker required).
 4. `dotnet test tests/CheckoutOrchestrator.Integration` → green, including the new `PayPalChaosTests`.
@@ -223,7 +223,7 @@ You're done when:
    - `POST /api/checkouts/initiate` drives the saga to `Completed` via PayPal's sandbox.
    - `POST /api/subscriptions` creates a Stripe subscription session and a webhook landing publishes `SubscriptionStartedEvent`.
    - `POST /api/refunds` (or wherever the new platform exposes refunds) on a paid order publishes `RefundIssuedEvent` and updates the Payment aggregate.
-8. `GET /health/ready` on `ritualworks-payments` returns 200 when both provider keys are valid; returns 503 when either is invalidated.
+8. `GET /health/ready` on `haworks-payments` returns 200 when both provider keys are valid; returns 503 when either is invalidated.
 9. Webhook router correctly dispatches: a Stripe-signed payload to `StripeWebhookProcessor`, a PayPal-signed payload to `PayPalWebhookProcessor`, and rejects unsigned payloads.
 
 ## Suggested PR shape — split into 5
@@ -260,7 +260,7 @@ Same scoping discipline as phase 1.
 
 ```bash
 # Build everything
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 
 # Per-suite tests (run in order; if any fails, stop)
 dotnet test tests/Payments.Unit
@@ -283,7 +283,7 @@ curl -X POST http://localhost:5050/api/subscriptions \
   -H "Authorization: Bearer ${JWT}" \
   -H "Content-Type: application/json" \
   -d '{"planId":"plan_demo_monthly"}'
-# Complete in browser. Check ritualworks-payments DB; subscription row should exist.
+# Complete in browser. Check haworks-payments DB; subscription row should exist.
 # Poll RabbitMQ management UI for SubscriptionStartedEvent on the contracts queue.
 
 # Health check

@@ -252,11 +252,11 @@ same `[deploy]` strategy.
 
 **Steps:**
 1. Create `fly.notifications.toml`. Copy `fly.payments.toml`. Change
-   `app = "ritualworks-notifications"`. Change Dockerfile to point at
+   `app = "haworks-notifications"`. Change Dockerfile to point at
    the existing pattern (likely `Dockerfile.notifications` — create a
    minimal one mirroring `Dockerfile.payments` if absent: ASP.NET 9
    runtime + COPY published output).
-2. `deploy/fly/bootstrap.sh`: add `ritualworks-notifications` to the
+2. `deploy/fly/bootstrap.sh`: add `haworks-notifications` to the
    `INTERNAL_APPS` array. The common[] env vars + Vault staging will
    then automatically apply.
 3. `.github/workflows/deploy.yml`: add `notifications` to the `services`

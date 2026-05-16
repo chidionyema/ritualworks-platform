@@ -1,8 +1,8 @@
-# Internal-only service. Reach via http://ritualworks-search.internal:8080
+# Internal-only service. Reach via http://haworks-search.internal:8080
 # (same .internal-not-.flycast convention as the rest of this cluster — see
 # fly.bffweb.toml's [env] comment for the rationale).
 
-app            = "ritualworks-search"
+app            = "haworks-search"
 primary_region = "iad"
 
 [build]
@@ -11,13 +11,13 @@ primary_region = "iad"
 [env]
   ASPNETCORE_URLS        = "http://+:8080"
   ASPNETCORE_ENVIRONMENT = "Production"
-  Meilisearch__Url       = "http://ritualworks-meilisearch.internal:7700"
+  Meilisearch__Url       = "http://haworks-meilisearch.internal:7700"
 
   # OpenTelemetry resource identity. Fly's [env] is static (no ${VAR}
   # interpolation), so the OTLP endpoint must be set out-of-band via:
-  #   fly secrets set OTEL_EXPORTER_OTLP_ENDPOINT=... -a ritualworks-search
+  #   fly secrets set OTEL_EXPORTER_OTLP_ENDPOINT=... -a haworks-search
   OTEL_SERVICE_NAME         = "search-svc"
-  OTEL_RESOURCE_ATTRIBUTES  = "deployment.environment=production,service.namespace=ritualworks"
+  OTEL_RESOURCE_ATTRIBUTES  = "deployment.environment=production,service.namespace=haworks"
 
 [http_service]
   internal_port        = 8080

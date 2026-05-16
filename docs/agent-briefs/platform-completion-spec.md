@@ -76,7 +76,7 @@ A1 blocks A2/A3/A4. A2/A3/A4 are parallelizable.
 
 ### Success criteria
 
-- Hitting `https://ritualworks-bffweb.fly.dev/api/subscriptions/status` without a JWT returns 401 (today: would 500 because no auth scheme).
+- Hitting `https://haworks-bffweb.fly.dev/api/subscriptions/status` without a JWT returns 401 (today: would 500 because no auth scheme).
 - With a valid JWT, BFF forwards `X-User-Id` and payments-svc reads it. Subscriptions endpoint serves the right user's record.
 - Each backend service's integration suite adds a 401-without-token assertion that passes.
 

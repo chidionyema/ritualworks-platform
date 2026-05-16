@@ -1,4 +1,4 @@
-# Ritualworks: Distributed Microservices Platform
+# Haworks: Distributed Microservices Platform
 
 > **Portfolio case study.** A working production-shape distributed system showcasing event-driven microservices, transactional outbox/inbox, MassTransit saga state machines with compensation, contract testing with Pact, GitOps deploys via ArgoCD, dynamic Vault-issued database credentials, and full distributed tracing — all runnable on a laptop in one command.
 
@@ -41,7 +41,7 @@ Both paths surface the same dashboards (Aspire dashboard for dev; Grafana + Argo
 ## Repository Layout
 
 ```
-ritualworks-platform/
+haworks-platform/
 ├── src/
 │   ├── Identity/                ← microservice (own .csproj, own .sln, own DbContext)
 │   ├── Catalog/

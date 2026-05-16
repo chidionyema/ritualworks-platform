@@ -66,7 +66,7 @@ In `Search.Infrastructure.DependencyInjection.AddInfrastructure(...)`:
 services.AddHttpClient<ICatalogProductsApi, CatalogProductsApiClient>(c =>
     {
         c.BaseAddress = new Uri(configuration["Catalog:BaseAddress"]
-            ?? "http://ritualworks-catalog.flycast:8080");
+            ?? "http://haworks-catalog.flycast:8080");
         c.Timeout = TimeSpan.FromSeconds(5);
     })
     .AddPolicyHandler((sp, _) =>
@@ -92,7 +92,7 @@ These tests do **not** start a SearchWebAppFactory — they spin up just the DI 
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/Search.Integration -c Release --filter "FullyQualifiedName~CatalogProductsApiTests"
 dotnet test tests/Search.Integration -c Release    # full suite still green
 ```

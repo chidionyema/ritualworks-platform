@@ -155,7 +155,7 @@ Plus update existing Catalog integration tests if any assertion on `OrderStockRe
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/Catalog.Unit -c Release
 dotnet test tests/Catalog.Integration -c Release   # full suite — saga path must not regress
 ```

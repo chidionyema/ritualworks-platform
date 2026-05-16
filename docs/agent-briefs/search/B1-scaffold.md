@@ -4,7 +4,7 @@
 
 ## Goal
 
-Stand up the empty `search-svc` microservice (4-project layout matching catalog) plus the Fly app + bootstrap.sh + deploy.yml entries for both `ritualworks-search` and `ritualworks-meilisearch`, with empty test projects that pass.
+Stand up the empty `search-svc` microservice (4-project layout matching catalog) plus the Fly app + bootstrap.sh + deploy.yml entries for both `haworks-search` and `haworks-meilisearch`, with empty test projects that pass.
 
 ## Phase / blocks-on
 
@@ -47,16 +47,16 @@ Create the following files. **Do not create or modify anything else.**
 
 ### Fly + ops
 
-- `fly.search.toml` — clone `fly.catalog.toml`, then **set the `[http_service]` block to `auto_stop_machines = "off"`, `min_machines_running = 1`** (per spec §7 — no cold starts allowed). Change app name to `ritualworks-search`, dockerfile path to `src/Search/Search.Api/Dockerfile`, add `[env] Meilisearch__Url = "http://ritualworks-meilisearch.flycast:7700"`.
+- `fly.search.toml` — clone `fly.catalog.toml`, then **set the `[http_service]` block to `auto_stop_machines = "off"`, `min_machines_running = 1`** (per spec §7 — no cold starts allowed). Change app name to `haworks-search`, dockerfile path to `src/Search/Search.Api/Dockerfile`, add `[env] Meilisearch__Url = "http://haworks-meilisearch.flycast:7700"`.
 - `fly.meilisearch.toml` — see spec §8 for the exact content. Use `getmeili/meilisearch:v1.10`. Volume name `meili_data`, mount `/meili_data`, initial_size 1gb.
 
 ### bootstrap.sh additions (modifications, not new file)
 
 In `deploy/fly/bootstrap.sh`:
-- Add `ritualworks-search` and `ritualworks-meilisearch` to `INTERNAL_APPS`.
-- Mirror the existing `JWT_SIGNING_KEY_PEM` auto-generation block to auto-generate `MEILI_MASTER_KEY` (32 bytes urandom, base64-encoded) on first run, persisting to `.env.local`. Stage it as a Fly secret on **both** `ritualworks-search` (`Meilisearch__MasterKey`) and `ritualworks-meilisearch` (`MEILI_MASTER_KEY`).
-- Guard the per-app DB-connection-string loop so it skips `ritualworks-meilisearch` (no Postgres dependency).
-- Volume creation: after app creation, run `flyctl volumes create meili_data --size 1 --region iad -a ritualworks-meilisearch` if a `meili_data` volume doesn't already exist on that app. Use `flyctl volumes list -a ritualworks-meilisearch` to check.
+- Add `haworks-search` and `haworks-meilisearch` to `INTERNAL_APPS`.
+- Mirror the existing `JWT_SIGNING_KEY_PEM` auto-generation block to auto-generate `MEILI_MASTER_KEY` (32 bytes urandom, base64-encoded) on first run, persisting to `.env.local`. Stage it as a Fly secret on **both** `haworks-search` (`Meilisearch__MasterKey`) and `haworks-meilisearch` (`MEILI_MASTER_KEY`).
+- Guard the per-app DB-connection-string loop so it skips `haworks-meilisearch` (no Postgres dependency).
+- Volume creation: after app creation, run `flyctl volumes create meili_data --size 1 --region iad -a haworks-meilisearch` if a `meili_data` volume doesn't already exist on that app. Use `flyctl volumes list -a haworks-meilisearch` to check.
 
 ### deploy.yml additions
 
@@ -68,7 +68,7 @@ Run all of these. All must pass.
 
 ```bash
 # 1. Solution builds clean
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 
 # 2. Unit + integration test projects exist and pass (smoke tests only)
 dotnet test tests/Search.Unit -c Release

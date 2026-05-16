@@ -1,8 +1,8 @@
-# Internal-only service. Reach via http://ritualworks-meilisearch.internal:7700
+# Internal-only service. Reach via http://haworks-meilisearch.internal:7700
 # (same .internal-not-.flycast convention as the rest of this cluster — see
 # fly.bffweb.toml's [env] comment for the rationale).
 
-app            = "ritualworks-meilisearch"
+app            = "haworks-meilisearch"
 primary_region = "iad"
 
 [build]

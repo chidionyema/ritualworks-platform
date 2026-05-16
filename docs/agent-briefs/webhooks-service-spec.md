@@ -153,7 +153,7 @@ Headers:
 - `Webhook-Id: del_xyz`
 - `Webhook-Timestamp: 1715277600`
 - `Webhook-Signature: t=1715277600,v1=<base64-hmac-sha256>`
-- `User-Agent: ritualworks-webhooks/1.0`
+- `User-Agent: haworks-webhooks/1.0`
 - `Content-Type: application/json`
 
 Signature scheme matches Stripe's (well-documented for partners):

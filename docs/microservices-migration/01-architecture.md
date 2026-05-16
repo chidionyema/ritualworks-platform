@@ -143,7 +143,7 @@ Each service runs only its own context. The pattern lifted from the monolith ref
 **Exchange-per-message-type, queue-per-consumer** (MT default).
 
 ```
-exchange:  ritualworks.payments.v1.payment-completed   (fanout)
+exchange:  haworks.payments.v1.payment-completed   (fanout)
    ├── queue: orders-svc.payment-completed             (OrderCompletedConsumer)
    ├── queue: notifications-svc.payment-completed      (future)
    └── queue: analytics-svc.payment-completed          (future)
@@ -153,15 +153,15 @@ exchange:  ritualworks.payments.v1.payment-completed   (fanout)
 
 ```
 {org}.{producing-context}.v{major}.{event-name-kebab}
-e.g. ritualworks.catalog.v1.stock-reserved
-     ritualworks.payments.v1.payment-completed
+e.g. haworks.catalog.v1.stock-reserved
+     haworks.payments.v1.payment-completed
 ```
 
 The existing `MassTransit:TopologyPrefix` config + `PrefixedEntityNameFormatter` already supports this — extend with `v{major}` segment.
 
 **Schema evolution rules:**
 - **Within `v1`:** additive only (new optional fields). Consumers ignore unknown fields (System.Text.Json default).
-- **Breaking change:** new exchange `ritualworks.payments.v2.payment-completed`. Producer dual-publishes to v1 + v2 for ≥6 weeks. Consumers migrate at their own pace. After window, v1 is removed via coordinated PR.
+- **Breaking change:** new exchange `haworks.payments.v2.payment-completed`. Producer dual-publishes to v1 + v2 for ≥6 weeks. Consumers migrate at their own pace. After window, v1 is removed via coordinated PR.
 - **Envelope headers** (`MessageId`, `CorrelationId`, `ConversationId`, `SagaId`) are immutable contracts — never repurposed, never renamed. Architecture test enforces.
 
 ### Sync API stack

@@ -78,7 +78,7 @@ internal sealed class UpstreamWarmup : BackgroundService
         var http = _httpFactory.CreateClient(serviceName);
         // The typed client carries the BaseAddress from service-discovery
         // (https+http://catalog-svc → resolved at request time to
-        // http://ritualworks-catalog.internal:8080). /health is the
+        // http://haworks-catalog.internal:8080). /health is the
         // ASP.NET default health-check path wired by ServiceDefaults
         // (see BuildingBlocks/Extensions/ServiceDefaults.cs:MapDefaultEndpoints).
         for (var attempt = 1; attempt <= MaxAttemptsPerBackend; attempt++)

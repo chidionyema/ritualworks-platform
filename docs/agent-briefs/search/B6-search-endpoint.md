@@ -97,7 +97,7 @@ Note: `ISearchIndex.SearchAsync` already exists from B2 — it must be the imple
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/Search.Unit -c Release
 dotnet test tests/Search.Integration -c Release
 ```

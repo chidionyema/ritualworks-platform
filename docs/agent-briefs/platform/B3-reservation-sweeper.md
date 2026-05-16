@@ -31,7 +31,7 @@ Tests live in `tests/Catalog.Integration/ReservationSweeperTests.cs` with `[Coll
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/Catalog.Integration -c Release --filter "FullyQualifiedName~ReservationSweeperTests"
 dotnet test tests/Catalog.Integration -c Release   # full suite — no regressions
 ```

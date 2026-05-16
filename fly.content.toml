@@ -1,6 +1,6 @@
-# Internal-only service. Reach via http://ritualworks-content.flycast:8080
+# Internal-only service. Reach via http://haworks-content.flycast:8080
 
-app            = "ritualworks-content"
+app            = "haworks-content"
 primary_region = "iad"
 
 [build]
@@ -12,9 +12,9 @@ primary_region = "iad"
 
   # OpenTelemetry resource identity. Fly's [env] is static (no ${VAR}
   # interpolation), so the OTLP endpoint must be set out-of-band via:
-  #   fly secrets set OTEL_EXPORTER_OTLP_ENDPOINT=... -a ritualworks-content
+  #   fly secrets set OTEL_EXPORTER_OTLP_ENDPOINT=... -a haworks-content
   OTEL_SERVICE_NAME         = "content-svc"
-  OTEL_RESOURCE_ATTRIBUTES  = "deployment.environment=production,service.namespace=ritualworks"
+  OTEL_RESOURCE_ATTRIBUTES  = "deployment.environment=production,service.namespace=haworks"
 
 [http_service]
   internal_port        = 8080

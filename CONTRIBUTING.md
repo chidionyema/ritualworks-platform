@@ -23,7 +23,7 @@
 
 ```bash
 # 1. Full build (0 errors required)
-dotnet build RitualworksPlatform.sln
+dotnet build HaworksPlatform.sln
 
 # 2. Architecture guards pass
 dotnet test tests/Platform.ArchitecturalGuards/

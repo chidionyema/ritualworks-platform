@@ -107,7 +107,7 @@ Call from Program.cs.
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/Search.Unit -c Release
 dotnet test tests/Search.Integration -c Release
 ```

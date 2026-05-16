@@ -52,7 +52,7 @@ If the BFF integration suite uses a different pattern (e.g. WebApplicationFactor
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/BffWeb.Integration -c Release
 dotnet test tests/BffWeb.Unit -c Release   # if it exists
 ```

@@ -101,7 +101,7 @@ Implementation:
 
 Infrastructure changes for tests:
 - `Catalog.Infrastructure.DependencyInjection` early-returns from `AddInfrastructure` when `ASPNETCORE_ENVIRONMENT=Test`, skipping the production MassTransit/RabbitMQ/EF-outbox wiring. The integration fixture sets the env var BEFORE Program.cs runs (top-level statements + WAF ordering means `builder.UseEnvironment("Test")` fires too late) and registers `AddMassTransitTestHarness` + `AddDomainEventPublisher()` itself.
-- Catalog test projects added to `RitualworksPlatform.sln`.
+- Catalog test projects added to `HaworksPlatform.sln`.
 
 
 ## Phase 2c verified surface (catalog-svc stock reservation, https://localhost:7102)
@@ -162,7 +162,7 @@ Total tests: **25 passing** (3 architecture + 7 unit + 14 integration + 1 contra
 
 ## TL;DR
 
-Strict monorepo at `/Users/chidionyema/Documents/code/ritualworks-platform/`. Architecture, build plan, and ADRs live in [`docs/microservices-migration/`](./microservices-migration/README.md).
+Strict monorepo at `/Users/chidionyema/Documents/code/haworks-platform/`. Architecture, build plan, and ADRs live in [`docs/microservices-migration/`](./microservices-migration/README.md).
 
 `dotnet run --project deploy/aspire` brings up the full stack including identity-svc. `/health` returns 200. **Register / login / JWKS round-trip works end-to-end.** JWTs are signed RS256 with RSA-2048 keypair sourced from Vault; matching public key is published at `/.well-known/jwks.json`. 6/6 integration tests pass; 1/1 Pact contract test publishes a `UserProfileChangedEvent` pact for future consumers.
 
@@ -192,7 +192,7 @@ just the messages collide. Future commits use unique messages.)
 
 | Surface | State |
 |---|---|
-| `dotnet build RitualworksPlatform.sln` | 0 warnings, 0 errors |
+| `dotnet build HaworksPlatform.sln` | 0 warnings, 0 errors |
 | `dotnet test tests/Identity.Architecture` | 3/3 boundary tests pass |
 | `dotnet test tests/Identity.Integration` (with TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock) | 6/6 register/login/JWKS tests pass in ~19s |
 | `dotnet test tests/Identity.Contract` | 1/1 Pact contract test passes; pact JSON written to `tests/pacts/` |
@@ -235,7 +235,7 @@ just the messages collide. Future commits use unique messages.)
 - KV paths: `secret/identity/{jwt,oauth/google,oauth/microsoft,oauth/facebook}`, `secret/payments/{stripe,paypal}`, `secret/bff-web/hub`
 
 ### Postgres
-- Single Aspire-managed cluster, namespaced volume `ritualworks-platform-postgres-data`
+- Single Aspire-managed cluster, namespaced volume `haworks-platform-postgres-data`
 - Per-service databases: `identity`, `catalog`, `orders`, `payments`, `content`, `checkout`
 - Per-DB owner roles: `<db>_owner` (NOLOGIN; Vault dynamic users join these)
 
@@ -290,10 +290,10 @@ Per [`microservices-migration/03-build-plan.md`](./microservices-migration/03-bu
 
 ## How to pick up where we left off
 
-1. `cd /Users/chidionyema/Documents/code/ritualworks-platform`
+1. `cd /Users/chidionyema/Documents/code/haworks-platform`
 2. Read this file (you're doing it)
 3. Skim `git log --oneline` for recent commits
 4. Check `TaskList` for outstanding items (or read the table above)
-5. `dotnet build RitualworksPlatform.sln` — should be 0 warnings, 0 errors
+5. `dotnet build HaworksPlatform.sln` — should be 0 warnings, 0 errors
 6. `dotnet run --project deploy/aspire` — full stack should come up; verify dashboard URL in console
 7. Pick the next pending task and grind

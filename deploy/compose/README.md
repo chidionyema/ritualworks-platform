@@ -1,4 +1,4 @@
-# RitualWorks Platform — Docker Compose Environment
+# Haworks Platform — Docker Compose Environment
 
 This directory provides a Docker Compose environment that mirrors the official Aspire local development setup. It spins up the complete microservices topology along with all necessary infrastructure (Postgres, RabbitMQ, Redis, Vault, LocalStack S3, Tempo, Pact Broker).
 

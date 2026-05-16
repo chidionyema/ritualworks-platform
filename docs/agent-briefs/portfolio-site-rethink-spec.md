@@ -230,7 +230,7 @@ WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/portfolio-site
 ```
 
 Notes:
-- The portfolio-site repo is **separate** from `ritualworks-platform`. The wave tool needs the brief file inside the portfolio-site repo (or referenced from this one via `REPO=`). Easiest: copy this spec into the portfolio site's `docs/agent-briefs/` when ready to run.
+- The portfolio-site repo is **separate** from `haworks-platform`. The wave tool needs the brief file inside the portfolio-site repo (or referenced from this one via `REPO=`). Easiest: copy this spec into the portfolio site's `docs/agent-briefs/` when ready to run.
 - The architecture-check workflow (T8) is the FE equivalent of the backend's, ratcheted from day 1.
 
 ## 14. Definition of done (whole feature)

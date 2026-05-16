@@ -1,12 +1,12 @@
 ```
-REPO=/Users/chidionyema/Documents/code/ritualworks-platform
-GH_REPO=chidionyema/ritualworks-platform
+REPO=/Users/chidionyema/Documents/code/haworks-platform
+GH_REPO=chidionyema/haworks-platform
 WAVE_MODE=new-service
 BASE_BRANCH=feat/cdc-service
 BRIEF_FILE=docs/agent-briefs/cdc/parallel-tracks.md
 TRACK_PREFIX=feat/cdc-
 TRACKS=(T1 T2 T3 T4 T5)
-WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/ritualworks-platform
+WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/haworks-platform
 ```
 
 ## Universal rules

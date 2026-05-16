@@ -19,7 +19,7 @@ The **HARD RULES** at the bottom apply to both modes.
 ### Parameters (operator fills these in before handing to the agent)
 
 ```
-REPO_ROOT=/Users/chidionyema/Documents/code/ritualworks-platform
+REPO_ROOT=/Users/chidionyema/Documents/code/haworks-platform
 BASE_BRANCH=feat/audit-service                        # the branch the worktree forks from
 BRIEF_FILE=docs/agent-briefs/audit/L1A-extractors-redactor.md
 TRACK_ID=audit-L1A                                    # short slug, used in worktree path + branch name
@@ -268,8 +268,8 @@ You are ONE OF N parallel coding agents. The track list and the brief that descr
 ### Parameters (operator fills these in once; the same filled-in prompt goes to every agent)
 
 ```
-REPO=/Users/chidionyema/Documents/code/ritualworks-platform
-GH_REPO=chidionyema/ritualworks-platform
+REPO=/Users/chidionyema/Documents/code/haworks-platform
+GH_REPO=chidionyema/haworks-platform
 BASE_BRANCH=<<REPLACE_WITH_BASE_BRANCH>>               # e.g. main, feat/audit-service
 BRIEF_FILE=<<REPLACE_WITH_BRIEF_PATH>>                 # e.g. docs/agent-briefs/audit/parallel-tracks.md
 TRACK_PREFIX=<<REPLACE_WITH_TRACK_PREFIX>>             # e.g. feat/audit-   ← full branch = ${TRACK_PREFIX}<id>

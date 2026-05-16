@@ -175,14 +175,14 @@ Both exit 0. New saga handles the full happy-path + compensation chaos test + ti
 ## 9. Wave configuration
 
 ```
-REPO=/Users/chidionyema/Documents/code/ritualworks-platform
-GH_REPO=chidionyema/ritualworks-platform
+REPO=/Users/chidionyema/Documents/code/haworks-platform
+GH_REPO=chidionyema/haworks-platform
 WAVE_MODE=modify
 BASE_BRANCH=feat/refund-saga
 BRIEF_FILE=docs/agent-briefs/refund-saga-spec.md
 TRACK_PREFIX=feat/refund-saga-
 TRACKS=(T1 T2 T3 T4 T5 T6 T7 T8)
-WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/ritualworks-platform
+WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/haworks-platform
 ```
 
 ## 10. Reference files

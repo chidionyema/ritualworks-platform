@@ -21,7 +21,7 @@ The protocol invariant: **if every journey passes, the platform delivers its con
 
 ```
 tests/E2E/
-├── E2E.csproj                            # refs RitualworksPlatform.AppHost + every Api csproj
+├── E2E.csproj                            # refs HaworksPlatform.AppHost + every Api csproj
 ├── Fixtures/
 │   ├── AppHostFixture.cs                 # xUnit collection fixture: boot AppHost once per run
 │   ├── JwtIssuer.cs                      # mint test JWTs (any role/sub)
@@ -107,7 +107,7 @@ public class CustomerCheckoutJourney(AppHostFixture host)
 
 ### `AppHostFixture` (collection fixture, lifetime = one per test run)
 
-- Boots the AppHost via `DistributedApplicationTestingBuilder.CreateAsync<Projects.RitualworksPlatform_AppHost>()`.
+- Boots the AppHost via `DistributedApplicationTestingBuilder.CreateAsync<Projects.HaworksPlatform_AppHost>()`.
 - Waits for every service's `/health` to return 200 (with a 60s timeout).
 - Exposes per-service typed HttpClients: `Bff`, `Catalog`, `Pricing`, `Checkout`, `Payments`, `Orders`, `Notifications`, `Audit`.
 - Exposes per-service DB query helpers: `Db.Orders`, `Db.Pricing`, `Db.Audit`, etc. (read-only — assertions only, never writes).

@@ -6,7 +6,7 @@
 
 ### Goal
 
-A production-grade Kubernetes cluster that runs the entire ritualworks platform (and any future platform built on the same primitives) with a single operating model — same manifests, same observability, same secrets flow, same deploy pipeline — across:
+A production-grade Kubernetes cluster that runs the entire haworks platform (and any future platform built on the same primitives) with a single operating model — same manifests, same observability, same secrets flow, same deploy pipeline — across:
 
 - **Major clouds:** AWS (EKS), GCP (GKE), Azure (AKS), DigitalOcean (DOKS), Linode (LKE)
 - **On-prem / bare metal:** k3s or RKE2 on Linux hosts (single-server demo to multi-node HA cluster)
@@ -343,7 +343,7 @@ This is what `wave run docs/agent-briefs/k8s-platform-spec.md` produces. `WAVE_M
 | **T7** `platform` CLI | `tools/platform` (bash CLI), `tools/platform-completions/`, `docs/runbooks/platform-cli.md` | 4 | every verb listed in § 7 works against dev-local: `platform up dev-local`, `platform deploy --all`, `platform doctor`, `platform logs <svc>`, `platform shell <svc>`, etc. |
 | **T8** Test framework + CI workflow | `infra/test/bringup-local.sh`, `infra/test/addon-smokes/**`, `infra/test/portability-acid-test.sh`, `.github/workflows/k8s-platform.yml` | 3 | bringup-local test passes from a clean machine in CI; addon smokes (cilium, cert-mgr, external-secrets, cnpg, velero) all green |
 
-**End of day 1 deliverable:** dev-local k3d cluster runs the full ritualworks platform via ArgoCD, with `platform doctor` reporting all subsystems green and the E2E suite (Phase 3c) passing against the in-cluster deploy.
+**End of day 1 deliverable:** dev-local k3d cluster runs the full haworks platform via ArgoCD, with `platform doctor` reporting all subsystems green and the E2E suite (Phase 3c) passing against the in-cluster deploy.
 
 ### Day 2+ — deferred to follow-up waves (not day-1 achievable)
 

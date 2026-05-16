@@ -95,7 +95,7 @@ C4 ─ src/Contracts/Payments/CheckoutSessionExpiredEvent.cs                    
 ## Test contracts
 
 Each brief's Acceptance section requires:
-- `dotnet build RitualworksPlatform.sln -c Release` — clean.
+- `dotnet build HaworksPlatform.sln -c Release` — clean.
 - `dotnet test tests/<Service>.Unit -c Release` — green, including new unit tests.
 - `dotnet test tests/<Service>.Integration -c Release` — green, including new integration tests using the existing `[Collection("<Service> Integration")]` shared fixture (xUnit collections are already in place from the search-service-spec session).
 

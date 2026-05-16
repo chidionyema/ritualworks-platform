@@ -1,4 +1,4 @@
-# RitualWorks Platform
+# Haworks Platform
 
 A production-grade .NET 9 microservices platform built on Clean Architecture principles. Sixteen deployed services communicate via async messaging (MassTransit/RabbitMQ), Change Data Capture (Debezium/Kafka), and synchronous REST. Every service has its own PostgreSQL schema, transactional outbox/inbox, and Polly-backed resilience. The entire stack runs locally via .NET Aspire or Docker Compose and deploys to Fly.io through a fully automated CI/CD pipeline.
 
@@ -28,7 +28,7 @@ A production-grade .NET 9 microservices platform built on Clean Architecture pri
 
 ## 1. Platform Overview
 
-RitualWorks is a marketplace platform for spiritual and ritual services. The backend is a distributed system of independently deployable .NET 9 microservices, each owning its own data store, schema migrations, and deployment unit.
+Haworks is a marketplace platform for spiritual and ritual services. The backend is a distributed system of independently deployable .NET 9 microservices, each owning its own data store, schema migrations, and deployment unit.
 
 ### Core technology choices
 

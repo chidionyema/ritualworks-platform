@@ -40,7 +40,7 @@ public sealed class WebhookDispatcher(
         request.Headers.Add("Webhook-Id", delivery.Id.ToString());
         request.Headers.Add("Webhook-Timestamp", timestamp.ToString());
         request.Headers.Add("Webhook-Signature", $"t={timestamp},v1={signature}");
-        request.Headers.UserAgent.ParseAdd("ritualworks-webhooks/1.0");
+        request.Headers.UserAgent.ParseAdd("haworks-webhooks/1.0");
 
         var client = httpFactory.CreateClient("WebhookDispatcher");
         

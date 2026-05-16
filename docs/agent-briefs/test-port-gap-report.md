@@ -159,7 +159,7 @@ Stop after #3 and re-evaluate priorities — security-critical work first lets u
 When this report goes stale (a few PRs in), regenerate the headline counts:
 
 ```bash
-cd /Users/chidionyema/Documents/code/ritualworks-platform
+cd /Users/chidionyema/Documents/code/haworks-platform
 for proj in tests/*.Unit/*.csproj tests/*.Integration/*.csproj tests/*.Architecture/*.csproj tests/*.Contract/*.csproj; do
   count=$(dotnet test "$proj" --list-tests --no-build 2>/dev/null | grep -c '^    ')
   echo "$count  $proj"

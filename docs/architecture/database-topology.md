@@ -6,10 +6,10 @@ This is the source-of-truth document for "where does each service's data actuall
 
 ## TL;DR
 
-**One Postgres instance**, many logical databases, one logical DB per service. Vault issues dynamic per-service credentials. The Postgres instance is named `ritualworks-vault-pg` for historical reasons (Vault's first use predated the migration of every other service onto the same instance).
+**One Postgres instance**, many logical databases, one logical DB per service. Vault issues dynamic per-service credentials. The Postgres instance is named `haworks-vault-pg` for historical reasons (Vault's first use predated the migration of every other service onto the same instance).
 
 ```
-ritualworks-vault-pg.internal:5432   (Fly Postgres, single instance, iad region)
+haworks-vault-pg.internal:5432   (Fly Postgres, single instance, iad region)
 ├── postgres        ← Vault's own metadata (KV, AppRole, audit log, etc.)
 ├── identity        ← Identity service
 ├── catalog         ← Catalog service
@@ -26,8 +26,8 @@ ritualworks-vault-pg.internal:5432   (Fly Postgres, single instance, iad region)
 | Property | Value |
 |---|---|
 | Provider | Fly.io Postgres (managed, single primary) |
-| App name | `ritualworks-vault-pg` |
-| Internal hostname | `ritualworks-vault-pg.internal:5432` |
+| App name | `haworks-vault-pg` |
+| Internal hostname | `haworks-vault-pg.internal:5432` |
 | Region | `iad` |
 | Postgres version | (inherits from `fly-postgres-flex` base — typically PG 16) |
 | Replication | None today — single primary. (HA replicas live in the future CNPG plan, not Fly.) |
