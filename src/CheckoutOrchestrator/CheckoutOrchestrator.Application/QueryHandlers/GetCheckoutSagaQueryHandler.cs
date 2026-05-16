@@ -12,8 +12,11 @@ internal sealed class GetCheckoutSagaQueryHandler(ICheckoutDbContext db) : IRequ
     {
         var saga = await db.CheckoutSagas.AsNoTracking()
             .FirstOrDefaultAsync(s => s.CorrelationId == request.SagaId, ct);
-        
+
         if (saga is null) return Result.Failure<CheckoutSagaDto>(Error.NotFound("CheckoutSaga.NotFound", "Saga not found."));
+
+        if (!request.IsAdmin && !string.Equals(saga.UserId, request.UserId, StringComparison.Ordinal))
+            return Result.Failure<CheckoutSagaDto>(Error.Forbidden("CheckoutSaga.Forbidden", "You are not authorized to view this saga."));
 
         return Result.Success(new CheckoutSagaDto(
             saga.CorrelationId,
@@ -33,8 +36,11 @@ internal sealed class GetCheckoutSagaByOrderIdQueryHandler(ICheckoutDbContext db
     {
         var saga = await db.CheckoutSagas.AsNoTracking()
             .FirstOrDefaultAsync(s => s.OrderId == request.OrderId, ct);
-        
+
         if (saga is null) return Result.Failure<CheckoutSagaDto>(Error.NotFound("CheckoutSaga.NotFound", "Saga not found."));
+
+        if (!request.IsAdmin && !string.Equals(saga.UserId, request.UserId, StringComparison.Ordinal))
+            return Result.Failure<CheckoutSagaDto>(Error.Forbidden("CheckoutSaga.Forbidden", "You are not authorized to view this saga."));
 
         return Result.Success(new CheckoutSagaDto(
             saga.CorrelationId,
