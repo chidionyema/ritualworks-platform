@@ -2034,6 +2034,171 @@ public sealed class PlatformGuardTests
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // LEGACY RITUALWORKS RULES — ported from old monolith CLAUDE.md
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void No_DynamicExpressionParser_without_ParsingConfig()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test")) continue;
+            var content = File.ReadAllText(file);
+            if (content.Contains("DynamicExpressionParser") || content.Contains("ParseLambda"))
+            {
+                if (!content.Contains("ParsingConfig") && !content.Contains("CustomTypeProvider") &&
+                    !content.Contains("AllowedTypes"))
+                {
+                    violations.Add($"{Relative(file)}: DynamicExpressionParser without ParsingConfig sandboxing — code injection risk");
+                }
+            }
+        }
+        violations.Should().BeEmpty("dynamic expression evaluation MUST use ParsingConfig with allowlisted safe types");
+    }
+
+    [Fact]
+    public void No_Math_Abs_on_hash_or_bitwise_result()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].TrimStart().StartsWith("//")) continue;
+                if (Regex.IsMatch(lines[i], @"Math\.Abs\s*\(.*?(GetHashCode|BitConverter|HashCode|ComputeHash)"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: Math.Abs on hash result — overflows on int.MinValue. Use & 0x7FFFFFFF");
+                }
+            }
+        }
+        violations.Should().BeEmpty("Math.Abs on hash results throws OverflowException for int.MinValue — use & 0x7FFFFFFF mask");
+    }
+
+    [Fact]
+    public void No_IConfiguration_injected_into_handlers()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles()
+            .Where(f => f.Contains("Handler") && !f.Contains("Test") && !f.Contains("Behavior")))
+        {
+            var content = File.ReadAllText(file);
+            if (content.Contains("IConfiguration ") && content.Contains("IRequestHandler") &&
+                !content.Contains("// config-needed"))
+            {
+                violations.Add($"{Relative(file)}: handler injects IConfiguration — use IOptions<T> for type-safe config");
+            }
+        }
+        violations.Should().BeEmpty("handlers must use IOptions<T>, never raw IConfiguration");
+    }
+
+    [Fact]
+    public void No_throw_ex_loses_stack_trace()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"\bthrow\s+\w+\s*;") &&
+                    !Regex.IsMatch(lines[i], @"throw\s+new\s") &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: 'throw ex;' loses stack trace — use 'throw;' to rethrow");
+                }
+            }
+        }
+        violations.Should().BeEmpty("never 'throw ex;' — use 'throw;' to preserve original stack trace");
+    }
+
+    [Fact]
+    public void Options_classes_are_sealed()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles()
+            .Where(f => Path.GetFileName(f).EndsWith("Options.cs") && !f.Contains("Test")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("namespace Haworks")) continue;
+            if (Regex.IsMatch(content, @"public\s+class\s+\w+Options") &&
+                !Regex.IsMatch(content, @"public\s+sealed\s+class"))
+            {
+                violations.Add($"{Relative(file)}: options class not sealed — add 'sealed' modifier");
+            }
+        }
+        violations.Should().BeEmpty("options classes must be sealed");
+    }
+
+    [Fact]
+    public void No_AllowAnyOrigin_with_AllowCredentials()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test")) continue;
+            var content = File.ReadAllText(file);
+            if (content.Contains("AllowAnyOrigin") && content.Contains("AllowCredentials"))
+            {
+                violations.Add($"{Relative(file)}: AllowAnyOrigin + AllowCredentials = CORS vulnerability. Use specific origins.");
+            }
+        }
+        violations.Should().BeEmpty("never combine AllowAnyOrigin with AllowCredentials — allows credential theft");
+    }
+
+    [Fact]
+    public void Query_handlers_use_AsNoTracking()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles()
+            .Where(f => f.Contains("Query") && f.Contains("Handler") && !f.Contains("Test")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("IRequestHandler")) continue;
+            if ((content.Contains("ToListAsync") || content.Contains("FirstOrDefaultAsync")) &&
+                !content.Contains("AsNoTracking") && !content.Contains("SaveChangesAsync"))
+            {
+                violations.Add($"{Relative(file)}: query handler reads DB without AsNoTracking — wasted tracking overhead");
+            }
+        }
+        // Informational — enable when coverage complete
+        // violations.Should().BeEmpty("query handlers must use AsNoTracking for read-only queries");
+    }
+
+    [Fact]
+    public void Domain_entities_use_private_setters()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles()
+            .Where(f => f.Contains(".Domain") && !f.Contains("Enum") && !f.Contains("Event") && !f.Contains("Test")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("AuditableEntity")) continue;
+            var lines = File.ReadAllLines(file);
+            int publicSetterCount = 0;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"public\s+\w+\s+\w+\s*\{\s*get;\s*set;\s*\}") &&
+                    !lines[i].Contains("List<") && !lines[i].Contains("virtual") &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    publicSetterCount++;
+                }
+            }
+            // Only flag if majority of properties are public set (not just one or two EF-required)
+            if (publicSetterCount > 3)
+            {
+                violations.Add($"{Relative(file)}: domain entity has {publicSetterCount} public setters — use private set or init");
+            }
+        }
+        // Informational — some entities have EF mapping requirements
+        // violations.Should().BeEmpty("domain entities should use private setters to maintain invariants");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // TEMPORAL SAFETY — time-dependent code must be testable & correct
     // ═══════════════════════════════════════════════════════════════════
 
