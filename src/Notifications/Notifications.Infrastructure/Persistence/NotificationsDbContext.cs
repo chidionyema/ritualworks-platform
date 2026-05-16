@@ -72,6 +72,9 @@ public class NotificationsDbContext : DbContext
                 a.Property(x => x.ErrorMessage).HasMaxLength(2000);
             });
 
+            entity.Property(n => n.IsDeleted).HasDefaultValue(false);
+            entity.HasQueryFilter(n => !n.IsDeleted);
+
             entity.HasIndex(n => n.UserId);
             entity.HasIndex(n => n.Recipient);
             entity.HasIndex(n => n.Status);

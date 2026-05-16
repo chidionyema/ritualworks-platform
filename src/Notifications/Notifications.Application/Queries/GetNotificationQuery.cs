@@ -5,7 +5,7 @@ using Haworks.BuildingBlocks.Common;
 
 namespace Haworks.Notifications.Application.Queries;
 
-public sealed record GetNotificationQuery(Guid Id) : IRequest<Result<NotificationDto>>;
+public sealed record GetNotificationQuery(Guid Id, string? RequestingUserId = null) : IRequest<Result<NotificationDto>>;
 
 public sealed record NotificationDto(
     Guid Id,
@@ -44,6 +44,16 @@ internal sealed class GetNotificationQueryHandler(
         if (notification is null)
         {
             logger.LogInformation("GetNotificationQuery: notification {NotificationId} not found", request.Id);
+            return Result.Failure<NotificationDto>(NotFound);
+        }
+
+        // IDOR guard: return NotFound (not Forbidden) to avoid leaking existence
+        if (request.RequestingUserId is not null &&
+            !string.Equals(notification.UserId, request.RequestingUserId, StringComparison.Ordinal))
+        {
+            logger.LogWarning(
+                "GetNotificationQuery: user {UserId} attempted access to notification {NotificationId} owned by {OwnerId}",
+                request.RequestingUserId, request.Id, notification.UserId);
             return Result.Failure<NotificationDto>(NotFound);
         }
 

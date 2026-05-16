@@ -145,4 +145,6 @@ public class NotificationsWebAppFactory : WebApplicationFactory<Program>, IAsync
             await db.Database.CloseConnectionAsync();
         }
     }
+
+    public Task ResetDatabaseAsync() => _resetter!.ResetAsync();
 }

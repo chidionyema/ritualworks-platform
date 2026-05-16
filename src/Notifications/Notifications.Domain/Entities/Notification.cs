@@ -41,6 +41,10 @@ public sealed class Notification : AuditableEntity
     /// <summary>Provider's correlation id once the notification has been Sent (null beforehand).</summary>
     public string? ProviderMessageId { get; private set; }
 
+    /// <summary>Soft-delete flag; filtered by EF global query filter.</summary>
+    public bool IsDeleted { get; private set; }
+    public DateTimeOffset? DeletedAt { get; private set; }
+
     public IReadOnlyCollection<DeliveryAttempt> DeliveryAttempts => _deliveryAttempts.AsReadOnly();
 
     private Notification() { }
@@ -239,6 +243,14 @@ public sealed class Notification : AuditableEntity
           or NotificationStatus.Complained
           or NotificationStatus.Failed
           or NotificationStatus.Suppressed;
+
+    /// <summary>Marks the notification as soft-deleted.</summary>
+    public void MarkDeleted()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTimeOffset.UtcNow;
+        Touch();
+    }
 
     private void Touch() => LastModifiedDate = DateTime.UtcNow;
 }

@@ -5,6 +5,7 @@ using MediatR;
 using Haworks.Notifications.Application.Commands;
 using Haworks.Notifications.Application.Queries;
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Extensions;
 
 namespace Haworks.Notifications.Api.Controllers;
 
@@ -38,7 +39,8 @@ public sealed class NotificationsController(IMediator mediator) : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetNotificationQuery(id), cancellationToken).ConfigureAwait(false);
+        var userId = HttpContext.GetForwardedUserId();
+        var result = await _mediator.Send(new GetNotificationQuery(id, userId), cancellationToken).ConfigureAwait(false);
         return result.ToActionResult();
     }
 }
