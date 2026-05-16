@@ -232,7 +232,7 @@ internal sealed class PayPalCheckoutService(
             throw new ArgumentException($"Invalid URL: {paramName}", paramName);
         if (uri.Scheme != "https" && uri.Scheme != "http")
             throw new ArgumentException($"URL must use HTTPS: {paramName}", paramName);
-        if (uri.Host is "localhost" or "127.0.0.1" or "0.0.0.0" || uri.Host.EndsWith(".internal"))
+        if (uri.Host is "localhost" or "127.0.0.1" or "0.0.0.0" || uri.Host.EndsWith(".internal", StringComparison.Ordinal))
             throw new ArgumentException($"URL must not point to internal hosts: {paramName}", paramName);
     }
 }

@@ -96,7 +96,7 @@ public sealed class PaymentSessionRequestedConsumer(
                     Currency = evt.Currency
                 }).ToList(),
                 OrderId = evt.OrderId,
-                Metadata = evt.Metadata ?? new()
+                Metadata = evt.Metadata ?? new Dictionary<string, string>()
             };
 
             var result = await checkoutService.CreateSessionAsync(request, context.CancellationToken);
