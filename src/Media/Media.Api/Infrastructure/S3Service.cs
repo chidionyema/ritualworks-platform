@@ -7,6 +7,7 @@ namespace Haworks.Media.Api.Infrastructure;
 public interface IS3Service
 {
     string GeneratePreSignedUrl(string key, string mimeType);
+    Task<Stream> DownloadAsync(string key, CancellationToken ct);
 }
 
 /// <summary>
@@ -51,6 +52,20 @@ public class S3Service : IS3Service
             || _opts.ServiceUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
             ? Protocol.HTTPS
             : Protocol.HTTP;
+    }
+
+    public async Task<Stream> DownloadAsync(string key, CancellationToken ct)
+    {
+        var response = await _s3.GetObjectAsync(new GetObjectRequest
+        {
+            BucketName = _opts.BucketName,
+            Key = key,
+        }, ct);
+
+        var ms = new MemoryStream();
+        await response.ResponseStream.CopyToAsync(ms, ct);
+        ms.Position = 0;
+        return ms;
     }
 
     public string GeneratePreSignedUrl(string key, string mimeType)

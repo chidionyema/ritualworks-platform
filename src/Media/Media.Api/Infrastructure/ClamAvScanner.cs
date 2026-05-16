@@ -55,7 +55,9 @@ public sealed class ClamAvScanner : IVirusScanner
         ClamScanResult result;
         try
         {
-            result = await clam.SendAndScanFileAsync(fileStream, ct);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(_opts.TimeoutSeconds));
+            result = await clam.SendAndScanFileAsync(fileStream, cts.Token);
         }
         catch (Exception ex)
         {

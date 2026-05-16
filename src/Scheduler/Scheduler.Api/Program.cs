@@ -85,6 +85,6 @@ internal sealed class HangfireLocalRequestFilter : IDashboardAuthorizationFilter
         bool isLocal = connection.RemoteIpAddress != null
             && (connection.RemoteIpAddress.Equals(connection.LocalIpAddress)
                 || System.Net.IPAddress.IsLoopback(connection.RemoteIpAddress));
-        return isLocal || httpContext.User.Identity?.IsAuthenticated == true;
+        return isLocal && httpContext.User.IsInRole("admin");
     }
 }

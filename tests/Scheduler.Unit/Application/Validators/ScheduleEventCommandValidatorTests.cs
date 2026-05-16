@@ -15,7 +15,7 @@ public class ScheduleEventCommandValidatorTests
             DateTimeOffset.UtcNow.AddMinutes(-1),
             "test-exchange",
             "test.key",
-            new { });
+            "{}");
 
         var result = _validator.Validate(command);
 
@@ -30,7 +30,7 @@ public class ScheduleEventCommandValidatorTests
             DateTimeOffset.UtcNow.AddDays(1),
             "test-exchange",
             "test.key",
-            new { });
+            "{}");
 
         var result = _validator.Validate(command);
 

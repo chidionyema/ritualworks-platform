@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using MassTransit;
 using Microsoft.Extensions.Logging;
@@ -18,10 +19,21 @@ public class EventPublisherJob
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    private static readonly Regex SafeNamePattern =
+        new(@"^[a-zA-Z0-9._:\-]{1,255}$", RegexOptions.Compiled);
+
     public async Task PublishAsync(string targetExchange, string routingKey, string payload)
     {
         if (string.IsNullOrWhiteSpace(targetExchange))
             throw new ArgumentException("targetExchange must not be empty", nameof(targetExchange));
+        if (!SafeNamePattern.IsMatch(targetExchange))
+            throw new ArgumentException(
+                "targetExchange contains invalid characters. Allowed: a-z A-Z 0-9 . _ : -",
+                nameof(targetExchange));
+        if (!string.IsNullOrEmpty(routingKey) && !SafeNamePattern.IsMatch(routingKey))
+            throw new ArgumentException(
+                "routingKey contains invalid characters. Allowed: a-z A-Z 0-9 . _ : -",
+                nameof(routingKey));
         if (string.IsNullOrWhiteSpace(payload))
             throw new ArgumentException("payload must not be empty", nameof(payload));
 

@@ -5,6 +5,7 @@ using Haworks.Privacy.Domain.Aggregates;
 using Haworks.Privacy.Domain.Enums;
 using MassTransit;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Haworks.Privacy.Application.Requests.Commands.InitiateRequest;
 
@@ -32,6 +33,14 @@ public class InitiatePrivacyRequestCommandHandler : IRequestHandler<InitiatePriv
 
     public async Task<Guid> Handle(InitiatePrivacyRequestCommand request, CancellationToken cancellationToken)
     {
+        var existing = await _context.PrivacyRequests.FirstOrDefaultAsync(
+            r => r.UserId == request.UserId &&
+                 (r.Status == PrivacyRequestStatus.Pending || r.Status == PrivacyRequestStatus.InProgress),
+            cancellationToken);
+
+        if (existing is not null)
+            return existing.Id;
+
         var privacyRequest = PrivacyRequest.Create(request.UserId, request.Type);
         
         _context.PrivacyRequests.Add(privacyRequest);

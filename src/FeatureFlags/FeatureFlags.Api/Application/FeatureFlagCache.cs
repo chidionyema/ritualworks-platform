@@ -54,15 +54,21 @@ public class FeatureFlagCache : IFeatureFlagCache
 
         foreach (var rule in flag.Rules)
         {
-            if (rule.UserId == userId) return true;
-            if (rule.Region == region) return true;
+            // AND logic: all non-null conditions on the rule must match.
+            if (rule.UserId != null && rule.UserId != userId) continue;
+            if (rule.Region != null && rule.Region != region) continue;
+
+            // Identity/region conditions passed (or were not set); check percentage last.
             if (rule.PercentageRollout.HasValue)
             {
                 // Use a deterministic, stable hash — GetHashCode() is process-scoped and non-deterministic.
+                // Mask sign bit instead of Math.Abs to avoid overflow on int.MinValue.
                 var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(userId));
-                var hash = Math.Abs(BitConverter.ToInt32(hashBytes, 0));
-                if (hash % 100 < rule.PercentageRollout.Value) return true;
+                var hash = BitConverter.ToInt32(hashBytes, 0) & 0x7FFFFFFF;
+                if (hash % 100 >= rule.PercentageRollout.Value) continue;
             }
+
+            return true;
         }
 
         return false;

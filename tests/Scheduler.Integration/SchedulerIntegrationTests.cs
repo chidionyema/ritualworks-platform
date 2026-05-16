@@ -30,7 +30,7 @@ public class SchedulerIntegrationTests : IClassFixture<SchedulerWebAppFactory>
             DateTimeOffset.UtcNow.AddDays(1),
             "test-exchange",
             "test.key",
-            new { Message = "Hello" });
+            "{}");
 
         // Act
         var response = await _client.PostAsJsonAsync("/api/Scheduling/schedule", command);

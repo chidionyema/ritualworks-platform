@@ -51,13 +51,30 @@ public sealed class KafkaFlushingService : BackgroundService
             // Wait for the first item in a batch (blocks until available or cancelled).
             await foreach (var first in _buffer.DequeueAllAsync(stoppingToken))
             {
-                batch.Add(first);
+                try
+                {
+                    batch.Add(first);
 
-                // Synchronously drain up to BatchSize-1 additional items already in the channel.
-                _buffer.TryReadBatch(batch, BatchSize - 1);
+                    // Drain up to BatchSize-1 additional items already in the channel.
+                    _buffer.TryReadBatch(batch, BatchSize - 1);
 
-                await ProduceBatchAsync(batch, stoppingToken);
-                batch.Clear();
+                    await ProduceBatchAsync(batch, stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw; // propagate shutdown signal
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Error processing batch of {Count} events. Dropping batch and continuing.",
+                        batch.Count);
+                    AnalyticsMetrics.EventsDropped.Add(batch.Count);
+                }
+                finally
+                {
+                    batch.Clear();
+                }
             }
         }
         catch (OperationCanceledException)
@@ -66,7 +83,7 @@ public sealed class KafkaFlushingService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Fatal error in KafkaFlushingService.");
+            _logger.LogError(ex, "Fatal error in KafkaFlushingService outer loop.");
         }
         finally
         {

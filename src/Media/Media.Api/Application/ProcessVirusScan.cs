@@ -19,15 +19,18 @@ public class ProcessVirusScanHandler : IRequestHandler<ProcessVirusScanCommand, 
     private readonly MediaDbContext _context;
     private readonly IVirusScanner _virusScanner;
     private readonly ICurrentUserService _currentUser;
+    private readonly IS3Service _s3;
 
     public ProcessVirusScanHandler(
         MediaDbContext context,
         IVirusScanner virusScanner,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IS3Service s3)
     {
         _context = context;
         _virusScanner = virusScanner;
         _currentUser = currentUser;
+        _s3 = s3;
     }
 
     public async Task<Result<Unit>> Handle(ProcessVirusScanCommand request, CancellationToken cancellationToken)
@@ -61,11 +64,9 @@ public class ProcessVirusScanHandler : IRequestHandler<ProcessVirusScanCommand, 
             mediaFile.MarkAsQuarantined();
             await _context.SaveChangesAsync(cancellationToken);
 
-            // Run the real ClamAV scan against the raw stream.
-            // The stream here is a placeholder — in production the controller/background
-            // worker would pass the downloaded S3 stream. For the API-triggered path
-            // we receive an empty stream; the background-worker path would supply the real bytes.
-            using var stream = new MemoryStream();
+            // Download the file from S3 before scanning. If download fails, leave the
+            // file in Quarantined state and propagate the exception so the transaction rolls back.
+            await using var stream = await _s3.DownloadAsync(mediaFile.Id.ToString(), cancellationToken);
             var isClean = await _virusScanner.ScanAsync(stream, cancellationToken);
 
             if (isClean)

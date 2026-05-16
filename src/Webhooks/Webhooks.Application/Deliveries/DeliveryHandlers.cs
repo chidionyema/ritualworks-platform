@@ -31,15 +31,16 @@ public sealed record WebhookAttemptDto(
     bool Succeeded);
 
 public sealed record GetDeliveriesQuery(
+    Guid CallerId,
     Guid? SubscriptionId = null,
     string? EventType = null,
     string? Status = null,
     int Skip = 0,
     int Take = 50) : IRequest<Result<PagedResult<WebhookDeliveryDto>>>;
 
-public sealed record GetDeliveryAttemptsQuery(Guid DeliveryId) : IRequest<Result<IReadOnlyList<WebhookAttemptDto>>>;
+public sealed record GetDeliveryAttemptsQuery(Guid DeliveryId, Guid CallerId) : IRequest<Result<IReadOnlyList<WebhookAttemptDto>>>;
 
-public sealed record ReplayDeliveryCommand(Guid DeliveryId) : IRequest<Result<Guid>>;
+public sealed record ReplayDeliveryCommand(Guid DeliveryId, Guid CallerId) : IRequest<Result<Guid>>;
 
 internal sealed class DeliveryHandlers(
     IWebhooksDbContext db,
@@ -50,7 +51,12 @@ internal sealed class DeliveryHandlers(
 {
     public async Task<Result<PagedResult<WebhookDeliveryDto>>> Handle(GetDeliveriesQuery request, CancellationToken ct)
     {
-        var query = db.Deliveries.AsNoTracking().AsQueryable();
+        // Cross-tenant guard: only return deliveries belonging to the caller's subscriptions
+        var query = db.Deliveries.AsNoTracking()
+            .Join(db.Subscriptions.Where(s => s.PartnerId == request.CallerId),
+                  d => d.SubscriptionId,
+                  s => s.Id,
+                  (d, s) => d);
 
         if (request.SubscriptionId.HasValue)
             query = query.Where(d => d.SubscriptionId == request.SubscriptionId.Value);
@@ -74,6 +80,17 @@ internal sealed class DeliveryHandlers(
 
     public async Task<Result<IReadOnlyList<WebhookAttemptDto>>> Handle(GetDeliveryAttemptsQuery request, CancellationToken ct)
     {
+        // Cross-tenant guard: verify the delivery belongs to one of the caller's subscriptions
+        var ownerCheck = await db.Deliveries.AsNoTracking()
+            .Join(db.Subscriptions.Where(s => s.PartnerId == request.CallerId),
+                  d => d.SubscriptionId,
+                  s => s.Id,
+                  (d, s) => d.Id)
+            .AnyAsync(id => id == request.DeliveryId, ct);
+
+        if (!ownerCheck)
+            return Result.Failure<IReadOnlyList<WebhookAttemptDto>>(Error.NotFound("Webhook.DeliveryNotFound", "Webhook delivery not found."));
+
         var attempts = await db.DeliveryAttempts
             .AsNoTracking()
             .Where(a => a.DeliveryId == request.DeliveryId)
@@ -86,7 +103,13 @@ internal sealed class DeliveryHandlers(
 
     public async Task<Result<Guid>> Handle(ReplayDeliveryCommand request, CancellationToken ct)
     {
-        var original = await db.Deliveries.AsNoTracking().FirstOrDefaultAsync(d => d.Id == request.DeliveryId, ct);
+        // Cross-tenant guard: only allow replay of deliveries belonging to the caller's subscriptions
+        var original = await db.Deliveries.AsNoTracking()
+            .Join(db.Subscriptions.Where(s => s.PartnerId == request.CallerId),
+                  d => d.SubscriptionId,
+                  s => s.Id,
+                  (d, s) => d)
+            .FirstOrDefaultAsync(d => d.Id == request.DeliveryId, ct);
         if (original == null) return Result.Failure<Guid>(Error.NotFound("Webhook.DeliveryNotFound", "Webhook delivery not found."));
 
         // Replay per spec §5.4: creates a new delivery with same payload

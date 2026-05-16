@@ -1,5 +1,7 @@
 using System.Linq.Dynamic.Core;
+using System.Linq.Dynamic.Core.CustomTypeProviders;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Text;
 using Haworks.BuildingBlocks.Common;
 using Haworks.RulesEngine.Api.Domain;
@@ -7,6 +9,29 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Haworks.RulesEngine.Api.Infrastructure;
+
+/// <summary>
+/// Restricts Dynamic LINQ to primitive types only — prevents access to File, Process,
+/// Environment, and any other dangerous BCL type via expression injection.
+/// </summary>
+internal sealed class SafeTypeProvider : IDynamicLinkCustomTypeProvider
+{
+    private static readonly HashSet<Type> AllowedTypes =
+    [
+        typeof(int),    typeof(long),   typeof(double), typeof(float),
+        typeof(decimal),typeof(bool),   typeof(string), typeof(DateTime),
+        typeof(DateTimeOffset), typeof(Guid), typeof(object)
+    ];
+
+    public HashSet<Type> GetCustomTypes() => AllowedTypes;
+
+    public Dictionary<Type, List<MethodInfo>> GetExtensionMethods() => [];
+
+    public Type? ResolveType(string typeName) => null;
+
+    public Type? ResolveTypeBySimpleName(string simpleTypeName) => null;
+}
+
 
 public class RulesEvaluator : IRulesEvaluator
 {
@@ -66,9 +91,17 @@ public class RulesEvaluator : IRulesEvaluator
             try
             {
                 // Build a single-element array, use DynamicExpressionParser to parse
-                // the expression as a lambda over Dictionary<string,object>
+                // the expression as a lambda over Dictionary<string,object>.
+                // SafeTypeProvider restricts resolvable types to primitives only,
+                // blocking access to File, Process, Environment, etc.
+                var parsingConfig = new ParsingConfig
+                {
+                    CustomTypeProvider = new SafeTypeProvider(),
+                    ResolveTypesBySimpleName = false,
+                };
                 var parameter = Expression.Parameter(typeof(Dictionary<string, object>), "inputs");
                 var lambdaExpression = DynamicExpressionParser.ParseLambda(
+                    parsingConfig,
                     new[] { parameter },
                     typeof(bool),
                     TransformExpression(rule.Expression, inputs),

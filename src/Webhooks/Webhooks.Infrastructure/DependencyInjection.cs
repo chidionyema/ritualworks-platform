@@ -50,7 +50,8 @@ public static class DependencyInjection
         services.AddScoped<IWebhookDispatcher, WebhookDispatcher>();
         
         services.AddHttpClient("WebhookValidator");
-        services.AddHttpClient("WebhookDispatcher");
+        services.AddHttpClient("WebhookDispatcher")
+            .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
 
         return services;
     }

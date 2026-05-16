@@ -3,10 +3,12 @@ using Haworks.Localization.Api.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Haworks.BuildingBlocks.Extensions;
+using Haworks.BuildingBlocks.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.Services.AddPlatformAuthentication(builder.Configuration);
 
 builder.Services.AddLocalizationService(builder.Configuration, builder.Environment);
 
