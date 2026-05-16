@@ -85,6 +85,8 @@ public sealed record Error(string Code, string Message, ErrorType Type = ErrorTy
         public static readonly Error UserInconsistency = new("Auth.UserInconsistency", "Account inconsistency detected.", ErrorType.Internal);
         public static readonly Error CreateFailed = new("Auth.CreateFailed", "Could not create a new account.", ErrorType.Internal);
 
+        public static readonly Error AccountDeactivated = new("Auth.AccountDeactivated", "Account is deactivated.", ErrorType.Forbidden);
+
         /// <summary>
         /// Creates an error indicating the account is locked out.
         /// </summary>

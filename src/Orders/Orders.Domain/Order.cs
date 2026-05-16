@@ -19,6 +19,7 @@ namespace Haworks.Orders.Domain;
 public class Order : AuditableEntity
 {
     private readonly List<OrderItem> _items = new();
+    private readonly List<OrderStatusHistory> _statusHistory = new();
 
     /// <summary>EF Core materialization constructor.</summary>
     protected Order() : base() { }
@@ -51,6 +52,7 @@ public class Order : AuditableEntity
     public string? AbandonReason { get; private set; }
 
     public IReadOnlyCollection<OrderItem> Items => _items.AsReadOnly();
+    public IReadOnlyCollection<OrderStatusHistory> StatusHistory => _statusHistory.AsReadOnly();
 
     public static Order Create(
         string userId,
@@ -86,44 +88,52 @@ public class Order : AuditableEntity
     /// outcome rather than throw, matching how the PaymentCompletedConsumer handles
     /// duplicate webhook redeliveries.
     /// </summary>
-    public bool MarkPaid(Guid paymentId)
+    public bool MarkPaid(Guid paymentId, string? changedBy = null)
     {
         if (paymentId == Guid.Empty) throw new ArgumentException("PaymentId required", nameof(paymentId));
         if (Status != OrderStatus.Created) return false;
+        var previousStatus = Status;
         Status = OrderStatus.Paid;
         PaymentId = paymentId;
         LastModifiedDate = DateTime.UtcNow;
+        _statusHistory.Add(OrderStatusHistory.Create(Id, previousStatus, Status, changedBy));
         return true;
     }
 
     /// <summary>Transitions to Abandoned. Same idempotent-no-op semantics as MarkPaid.</summary>
-    public bool MarkAbandoned(string reason)
+    public bool MarkAbandoned(string reason, string? changedBy = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
         if (Status != OrderStatus.Created) return false;
+        var previousStatus = Status;
         Status = OrderStatus.Abandoned;
         AbandonReason = reason;
         LastModifiedDate = DateTime.UtcNow;
+        _statusHistory.Add(OrderStatusHistory.Create(Id, previousStatus, Status, changedBy, reason));
         return true;
     }
 
     /// <summary>Transitions to Expired. Same idempotent-no-op semantics as MarkPaid.</summary>
-    public bool MarkExpired(string reason)
+    public bool MarkExpired(string reason, string? changedBy = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
         if (Status != OrderStatus.Created) return false;
+        var previousStatus = Status;
         Status = OrderStatus.Expired;
         AbandonReason = reason;
         LastModifiedDate = DateTime.UtcNow;
+        _statusHistory.Add(OrderStatusHistory.Create(Id, previousStatus, Status, changedBy, reason));
         return true;
     }
 
     /// <summary>Transitions to Refunded. Only allowed from Paid state.</summary>
-    public bool MarkRefunded()
+    public bool MarkRefunded(string? changedBy = null, string? reason = null)
     {
         if (Status != OrderStatus.Paid) return false;
+        var previousStatus = Status;
         Status = OrderStatus.Refunded;
         LastModifiedDate = DateTime.UtcNow;
+        _statusHistory.Add(OrderStatusHistory.Create(Id, previousStatus, Status, changedBy, reason));
         return true;
     }
 
@@ -139,11 +149,13 @@ public class Order : AuditableEntity
     }
 
     /// <summary>Reverts to Paid status. Usually after a failed or cancelled refund.</summary>
-    public bool RevertToPaid()
+    public bool RevertToPaid(string? changedBy = null, string? reason = null)
     {
         if (Status != OrderStatus.Refunded) return false;
+        var previousStatus = Status;
         Status = OrderStatus.Paid;
         LastModifiedDate = DateTime.UtcNow;
+        _statusHistory.Add(OrderStatusHistory.Create(Id, previousStatus, Status, changedBy, reason));
         return true;
     }
 }

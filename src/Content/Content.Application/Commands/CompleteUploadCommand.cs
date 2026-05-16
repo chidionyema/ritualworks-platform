@@ -6,6 +6,8 @@ using Haworks.Content.Application.Options;
 using Haworks.Content.Application.Telemetry;
 using Haworks.Content.Domain.Entities;
 using Haworks.Content.Domain.Interfaces;
+using Haworks.Contracts.Content;
+using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -27,6 +29,7 @@ internal sealed class CompleteUploadCommandHandler(
     IContentStorageService storage,
     IUploadValidator validator,
     IContentRepository repository,
+    IPublishEndpoint publishEndpoint,
     IOptions<StorageOptions> storageOptions,
     ILogger<CompleteUploadCommandHandler> logger,
     TimeProvider time) : IRequestHandler<CompleteUploadCommand, Result<UploadStatusDto>>
@@ -125,6 +128,14 @@ internal sealed class CompleteUploadCommandHandler(
                     content.Id);
             }
             content.Quarantine(verdict.FailureReason ?? "Validation failed.");
+            await publishEndpoint.Publish(new ContentQuarantinedEvent
+            {
+                ContentId = content.Id,
+                EntityId = content.EntityId.ToString(),
+                EntityType = content.EntityType,
+                OwnerUserId = content.OwnerUserId,
+                Reason = verdict.FailureReason ?? "Validation failed."
+            }, ct);
             await repository.SaveChangesAsync(ct);
             return Result.Success(ToDto(content));
         }
@@ -138,6 +149,15 @@ internal sealed class CompleteUploadCommandHandler(
             actualSize: verdict.SizeBytes,
             url: downloadUrl,
             utcNow: time.GetUtcNow().UtcDateTime);
+
+        await publishEndpoint.Publish(new ContentAvailableEvent
+        {
+            ContentId = content.Id,
+            EntityId = content.EntityId.ToString(),
+            EntityType = content.EntityType,
+            Slug = content.Slug,
+            OwnerUserId = content.OwnerUserId
+        }, ct);
 
         await repository.SaveChangesAsync(ct);
 

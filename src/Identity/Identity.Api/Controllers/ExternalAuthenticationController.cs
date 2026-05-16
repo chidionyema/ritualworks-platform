@@ -172,7 +172,7 @@ public sealed class ExternalAuthenticationController : ControllerBase
         if (!uri.IsAbsoluteUri)
         {
             // Must start with / and not be schema-relative (//) and not contain ..
-            return url.StartsWith('/') && !url.StartsWith("//") && !url.Contains("..", StringComparison.Ordinal);
+            return url.StartsWith('/') && !url.StartsWith("//", StringComparison.Ordinal) && !url.Contains("..", StringComparison.Ordinal);
         }
 
         var currentHost = HttpContext.Request.Host.Host;

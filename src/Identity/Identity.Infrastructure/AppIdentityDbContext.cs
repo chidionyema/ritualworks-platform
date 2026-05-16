@@ -61,6 +61,15 @@ public class AppIdentityDbContext : IdentityDbContext<User>
         // User configuration (extends IdentityUser)
         modelBuilder.Entity<User>(entity =>
         {
+            // Global query filter — inactive users excluded by default.
+            // Use .IgnoreQueryFilters() for admin/erasure scenarios.
+            entity.HasQueryFilter(u => u.IsActive);
+
+            entity.Property(u => u.IsActive)
+                .HasDefaultValue(true);
+
+            entity.Property(u => u.DeactivatedAt);
+
             entity.Property(u => u.CheckoutSessionId)
                 .HasMaxLength(200);
 

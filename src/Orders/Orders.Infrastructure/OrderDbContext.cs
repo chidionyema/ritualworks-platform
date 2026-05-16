@@ -28,6 +28,7 @@ public class OrderDbContext : DbContext
 
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+    public DbSet<OrderStatusHistory> OrderStatusHistory => Set<OrderStatusHistory>();
     public DbSet<GuestOrderInfo> GuestOrders => Set<GuestOrderInfo>();
     public DbSet<StockReleaseFailure> StockReleaseFailures => Set<StockReleaseFailure>();
 
@@ -69,6 +70,24 @@ public class OrderDbContext : DbContext
             entity.HasIndex(o => o.SagaId).IsUnique().HasDatabaseName("IX_Orders_SagaId");
             entity.HasIndex(o => o.IdempotencyKey).HasDatabaseName("IX_Orders_IdempotencyKey");
             entity.HasIndex(o => o.Status).HasDatabaseName("IX_Orders_Status");
+
+            entity.HasMany(typeof(OrderStatusHistory), "_statusHistory")
+                .WithOne()
+                .HasForeignKey("OrderId")
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Navigation("_statusHistory").UsePropertyAccessMode(PropertyAccessMode.Field);
+        });
+
+        modelBuilder.Entity<OrderStatusHistory>(entity =>
+        {
+            entity.ToTable("OrderStatusHistory");
+            entity.HasKey(h => h.Id);
+            entity.Property(h => h.ChangedBy).HasMaxLength(200);
+            entity.Property(h => h.Reason).HasMaxLength(500);
+            entity.Property(h => h.FromStatus).HasConversion<string>().HasMaxLength(50);
+            entity.Property(h => h.ToStatus).HasConversion<string>().HasMaxLength(50);
+            entity.HasIndex(h => h.OrderId).HasDatabaseName("IX_OrderStatusHistory_OrderId");
         });
 
         modelBuilder.Entity<OrderItem>(entity =>

@@ -154,6 +154,26 @@ internal sealed class LoginCommandHandler : IRequestHandler<LoginCommand, Result
         // Reset failed access count on successful login
         await _userManager.ResetAccessFailedCountAsync(user);
 
+        // Reject deactivated users even if credentials are valid
+        if (!user.IsActive)
+        {
+            _logger.LogWarning("Login rejected for deactivated user: {Username}", request.Username);
+
+            await _auditLogger.LogAsync(new AuditEvent
+            {
+                Action = AuditActions.LoginFailed,
+                UserId = user.Id,
+                Resource = $"User:{user.Id}",
+                IsSuccess = false,
+                Details = "Account is deactivated",
+                IpAddress = ipAddress,
+                UserAgent = userAgent,
+                CorrelationId = correlationId
+            }, cancellationToken);
+
+            return Result.Failure<AuthResponseDto>(Error.Auth.AccountDeactivated);
+        }
+
         activity?.SetTag("user.id", user.Id);
         activity?.SetTag("login.two_factor", user.TwoFactorEnabled);
 

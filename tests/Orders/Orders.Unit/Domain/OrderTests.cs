@@ -152,6 +152,68 @@ public class OrderTests
 
     #endregion
 
+    #region StatusHistory Tests
+
+    [Fact]
+    public void MarkPaid_AddsHistoryEntry_WithCorrectFromAndTo()
+    {
+        // Arrange
+        var order = Order.Create("user", 100m, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
+        var paymentId = Guid.NewGuid();
+
+        // Act
+        order.MarkPaid(paymentId, changedBy: "PaymentCompletedConsumer");
+
+        // Assert
+        order.StatusHistory.Should().HaveCount(1);
+        var entry = order.StatusHistory.First();
+        entry.FromStatus.Should().Be(OrderStatus.Created);
+        entry.ToStatus.Should().Be(OrderStatus.Paid);
+        entry.ChangedBy.Should().Be("PaymentCompletedConsumer");
+        entry.OrderId.Should().Be(order.Id);
+    }
+
+    [Fact]
+    public void MarkAbandoned_AddsHistoryEntry_WithReason()
+    {
+        // Arrange
+        var order = Order.Create("user", 100m, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
+
+        // Act
+        order.MarkAbandoned("Stock timeout", changedBy: "StockReservationFailedConsumer");
+
+        // Assert
+        order.StatusHistory.Should().HaveCount(1);
+        var entry = order.StatusHistory.First();
+        entry.FromStatus.Should().Be(OrderStatus.Created);
+        entry.ToStatus.Should().Be(OrderStatus.Abandoned);
+        entry.Reason.Should().Be("Stock timeout");
+        entry.ChangedBy.Should().Be("StockReservationFailedConsumer");
+    }
+
+    [Fact]
+    public void MultipleTransitions_PopulatesStatusHistory()
+    {
+        // Arrange
+        var order = Order.Create("user", 100m, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
+
+        // Act
+        order.MarkPaid(Guid.NewGuid());
+        order.MarkRefunded(reason: "Customer requested");
+        order.RevertToPaid(reason: "Refund cancelled");
+
+        // Assert
+        order.StatusHistory.Should().HaveCount(3);
+        order.StatusHistory.ElementAt(0).FromStatus.Should().Be(OrderStatus.Created);
+        order.StatusHistory.ElementAt(0).ToStatus.Should().Be(OrderStatus.Paid);
+        order.StatusHistory.ElementAt(1).FromStatus.Should().Be(OrderStatus.Paid);
+        order.StatusHistory.ElementAt(1).ToStatus.Should().Be(OrderStatus.Refunded);
+        order.StatusHistory.ElementAt(2).FromStatus.Should().Be(OrderStatus.Refunded);
+        order.StatusHistory.ElementAt(2).ToStatus.Should().Be(OrderStatus.Paid);
+    }
+
+    #endregion
+
     #region OrderItem Verification
 
     [Fact]

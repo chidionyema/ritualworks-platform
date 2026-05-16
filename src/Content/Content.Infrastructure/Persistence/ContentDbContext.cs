@@ -1,3 +1,4 @@
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -188,6 +189,11 @@ public class ContentDbContext : DbContext
             entity.HasIndex(v => v.ContentId)
                 .HasDatabaseName("IX_ContentVersions_ContentId");
         });
+
+        // MassTransit EF Core outbox entities (transactional outbox pattern).
+        modelBuilder.AddInboxStateEntity();
+        modelBuilder.AddOutboxStateEntity();
+        modelBuilder.AddOutboxMessageEntity();
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
