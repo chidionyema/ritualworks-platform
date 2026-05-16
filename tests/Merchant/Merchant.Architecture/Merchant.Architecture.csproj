@@ -13,8 +13,8 @@
     <PackageReference Include="NetArchTest.Rules" Version="1.3.2" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Merchant/Merchant.Domain/Merchant.Domain.csproj" />
-    <ProjectReference Include="../../src/Merchant/Merchant.Application/Merchant.Application.csproj" />
-    <ProjectReference Include="../../src/Merchant/Merchant.Infrastructure/Merchant.Infrastructure.csproj" />
+    <ProjectReference Include="../../../src/Merchant/Merchant.Domain/Merchant.Domain.csproj" />
+    <ProjectReference Include="../../../src/Merchant/Merchant.Application/Merchant.Application.csproj" />
+    <ProjectReference Include="../../../src/Merchant/Merchant.Infrastructure/Merchant.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

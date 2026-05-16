@@ -1,4 +1,6 @@
 using MediatR;
+using Microsoft.Extensions.Options;
+using Haworks.BuildingBlocks.Common;
 using Haworks.Payments.Application.DTOs.Subscriptions;
 using Haworks.Payments.Application.Interfaces;
 
@@ -10,17 +12,16 @@ public sealed record CreateSubscriptionCheckoutCommand(
     decimal Amount,
     string? RedirectPath) : IRequest<Result<CreateSubscriptionCheckoutResultDto>>;
 
-internal sealed class CreateSubscriptionCheckoutCommandHandler(ISubscriptionService subscriptionService)
+internal sealed class CreateSubscriptionCheckoutCommandHandler(
+    ISubscriptionService subscriptionService,
+    IOptions<BrandOptions> brandOptions)
     : IRequestHandler<CreateSubscriptionCheckoutCommand, Result<CreateSubscriptionCheckoutResultDto>>
 {
     public async Task<Result<CreateSubscriptionCheckoutResultDto>> Handle(CreateSubscriptionCheckoutCommand request, CancellationToken ct)
     {
-        // Note: The PriceId here corresponds to the PlanId expected by the service.
-        // The Amount is passed in the command but the underlying service uses the PlanId/PriceId
-        // which typically determines the price in Stripe. We include it for consistency with the brief.
-        
-        var successUrl = $"{request.RedirectPath ?? "https://haworks.com"}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}";
-        var cancelUrl = $"{request.RedirectPath ?? "https://haworks.com"}/checkout/cancel";
+        var baseUrl = request.RedirectPath ?? brandOptions.Value.PrimaryUrl.TrimEnd('/');
+        var successUrl = $"{baseUrl}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}";
+        var cancelUrl = $"{baseUrl}/checkout/cancel";
 
         var sessionRequest = new CreateSubscriptionSessionRequest(
             request.UserId,

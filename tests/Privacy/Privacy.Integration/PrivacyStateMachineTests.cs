@@ -52,7 +52,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
     public async Task HappyPath_AllThreeServices_Saga_Finalizes()
     {
         var (requestId, userId) = await PublishInitiateAsync();
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Processing", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         // Publish all three service completions (stagger to avoid concurrency conflicts).
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
@@ -65,7 +65,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         await PollUntilAsync(() =>
         {
             var state = SagaStateOrNull(requestId);
-            return state == "Completed" || state == "Final" || state is null;
+            return string.Equals(state, "Completed", StringComparison.Ordinal) || string.Equals(state, "Final", StringComparison.Ordinal) || state is null;
         }, TimeSpan.FromSeconds(15));
 
         // The saga must have published PrivacyErasureRequested on initiation.
@@ -89,7 +89,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
     public async Task PartialCompletion_TwoOfThree_StaysProcessing()
     {
         var (requestId, userId) = await PublishInitiateAsync();
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Processing", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
         await Task.Delay(500); // Allow concurrency token to settle
@@ -97,9 +97,9 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         await Task.Delay(500);
 
         // Poll until both flags are set (concurrency retries may delay persistence)
-        await PollUntilAsync(() =>
+        await PollUntilAsync(async () =>
         {
-            var s = ReadSagaAsync(requestId).Result;
+            var s = await ReadSagaAsync(requestId);
             return s is { IdentityCompleted: true, OrdersCompleted: true };
         }, TimeSpan.FromSeconds(10));
 
@@ -118,7 +118,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
     public async Task CompletionsArriveOutOfOrder_StillCompletes()
     {
         var (requestId, userId) = await PublishInitiateAsync();
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Processing", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         // Deliberately send in reverse order (stagger to avoid concurrency conflicts).
         await PublishErasureCompletedAsync(requestId, userId, "payments-svc");
@@ -130,7 +130,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         await PollUntilAsync(() =>
         {
             var state = SagaStateOrNull(requestId);
-            return state == "Completed" || state == "Final" || state is null;
+            return string.Equals(state, "Completed", StringComparison.Ordinal) || string.Equals(state, "Final", StringComparison.Ordinal) || state is null;
         }, TimeSpan.FromSeconds(15));
 
         var leftover = await ReadSagaAsync(requestId);
@@ -147,11 +147,11 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
     public async Task ErasureFailed_TransitionsToFailed()
     {
         var (requestId, userId) = await PublishInitiateAsync();
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Processing", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         await PublishAsync(new PrivacyErasureFailed { RequestId = requestId, UserId = userId, ServiceName = "orders-svc", ErrorMessage = "DB connection lost" });
 
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Failed", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Failed", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         var saga = await ReadSagaAsync(requestId);
         saga.Should().NotBeNull();
@@ -165,12 +165,12 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
     public async Task Timeout_TransitionsToStalled()
     {
         var (requestId, userId) = await PublishInitiateAsync();
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Processing", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         // Simulate the timeout event directly (in production this fires after 7 days).
         await PublishAsync(new PrivacyErasureTimedOut { RequestId = requestId });
 
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Stalled", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Stalled", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         var saga = await ReadSagaAsync(requestId);
         saga.Should().NotBeNull();
@@ -184,7 +184,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
     public async Task Timeout_WithPartialCompletion_LogsIncomplete()
     {
         var (requestId, userId) = await PublishInitiateAsync();
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Processing", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         // Only identity completes before timeout.
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
@@ -197,7 +197,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         }, TimeSpan.FromSeconds(10));
 
         await PublishAsync(new PrivacyErasureTimedOut { RequestId = requestId });
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Stalled", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Stalled", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         var saga = await ReadSagaAsync(requestId);
         saga.Should().NotBeNull();
@@ -214,7 +214,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
     public async Task DuplicateErasureCompleted_AfterFinalized_IsDiscarded()
     {
         var (requestId, userId) = await PublishInitiateAsync();
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Processing", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
         await Task.Delay(500);
@@ -225,7 +225,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         await PollUntilAsync(() =>
         {
             var state = SagaStateOrNull(requestId);
-            return state == "Completed" || state == "Final" || state is null;
+            return string.Equals(state, "Completed", StringComparison.Ordinal) || string.Equals(state, "Final", StringComparison.Ordinal) || state is null;
         }, TimeSpan.FromSeconds(15));
 
         // Send a duplicate — should not throw or create a new saga instance.
@@ -236,7 +236,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
             await PollUntilAsync(() =>
             {
                 var s = ReadSagaAsync(requestId).GetAwaiter().GetResult();
-                return s is not null && s.CurrentState != "Completed" && s.CurrentState != "Final";
+                return s is not null && !string.Equals(s.CurrentState, "Completed", StringComparison.Ordinal) && !string.Equals(s.CurrentState, "Final", StringComparison.Ordinal);
             }, TimeSpan.FromSeconds(2));
         }
         catch (TimeoutException) { /* expected — duplicate was correctly discarded */ }
@@ -256,7 +256,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
     public async Task ErasureFailed_AfterCompleted_IsDiscarded()
     {
         var (requestId, userId) = await PublishInitiateAsync();
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Processing", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
         await Task.Delay(500);
@@ -267,7 +267,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         await PollUntilAsync(() =>
         {
             var state = SagaStateOrNull(requestId);
-            return state == "Completed" || state == "Final" || state is null;
+            return string.Equals(state, "Completed", StringComparison.Ordinal) || string.Equals(state, "Final", StringComparison.Ordinal) || state is null;
         }, TimeSpan.FromSeconds(15));
 
         // Publish failure after completion — saga is finalized, event is discarded.
@@ -278,7 +278,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
             await PollUntilAsync(() =>
             {
                 var s = ReadSagaAsync(requestId).GetAwaiter().GetResult();
-                return s is not null && s.CurrentState == "Failed";
+                return s is not null && string.Equals(s.CurrentState, "Failed", StringComparison.Ordinal);
             }, TimeSpan.FromSeconds(2));
         }
         catch (TimeoutException) { /* expected — late failure was correctly discarded */ }
@@ -297,10 +297,10 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
     public async Task ErasureCompleted_AfterFailed_IsDiscarded()
     {
         var (requestId, userId) = await PublishInitiateAsync();
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Processing", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         await PublishAsync(new PrivacyErasureFailed { RequestId = requestId, UserId = userId, ServiceName = "identity-svc", ErrorMessage = "crash" });
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Failed", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Failed", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         // Publish completion after failure — should be discarded.
         await PublishErasureCompletedAsync(requestId, userId, "orders-svc");
@@ -323,7 +323,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
     public async Task UnknownService_LogsWarning_StaysProcessing()
     {
         var (requestId, userId) = await PublishInitiateAsync();
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Processing", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         await PublishErasureCompletedAsync(requestId, userId, "unknown-svc");
         // settling time for negative assertion — unknown service must not set any flags
@@ -352,7 +352,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
     public async Task StatePersists_AcrossRestart()
     {
         var (requestId, userId) = await PublishInitiateAsync();
-        await PollUntilAsync(() => SagaStateOrNull(requestId) == "Processing", TimeSpan.FromSeconds(15));
+        await PollUntilAsync(() => string.Equals(SagaStateOrNull(requestId), "Processing", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
 
@@ -384,7 +384,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         await PollUntilAsync(() =>
         {
             var state = SagaStateOrNull(requestId);
-            return state == "Completed" || state == "Final" || state is null;
+            return string.Equals(state, "Completed", StringComparison.Ordinal) || string.Equals(state, "Final", StringComparison.Ordinal) || state is null;
         }, TimeSpan.FromSeconds(15));
 
         var resumed = await ReadSagaAsync(requestId);
@@ -409,10 +409,10 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
     private Task PublishErasureCompletedAsync(Guid requestId, Guid userId, string serviceName)
         => PublishAsync(new PrivacyErasureCompleted { RequestId = requestId, UserId = userId, ServiceName = serviceName });
 
-    private async Task PublishAsync<T>(T evt) where T : class
+    private Task PublishAsync<T>(T evt) where T : class
     {
         var bus = _factory.Services.GetRequiredService<MassTransit.IBus>();
-        await bus.Publish(evt);
+        return bus.Publish(evt);
     }
 
     private string? SagaStateOrNull(Guid requestId)
@@ -439,6 +439,17 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         while (DateTime.UtcNow < deadline)
         {
             if (predicate()) return;
+            await Task.Delay(250);
+        }
+        throw new TimeoutException($"PollUntilAsync timed out after {timeout.TotalSeconds}s in {caller}");
+    }
+
+    private static async Task PollUntilAsync(Func<Task<bool>> predicate, TimeSpan timeout, [System.Runtime.CompilerServices.CallerMemberName] string? caller = null)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (await predicate()) return;
             await Task.Delay(250);
         }
         throw new TimeoutException($"PollUntilAsync timed out after {timeout.TotalSeconds}s in {caller}");

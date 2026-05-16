@@ -62,7 +62,8 @@ public static class DependencyInjection
         
         services.AddHttpClient<IGeocodingService, NominatimGeocodingService>((sp, c) =>
         {
-            c.BaseAddress = new Uri("https://nominatim.openstreetmap.org/");
+            var nominatimUrl = configuration["Location:NominatimBaseUrl"] ?? "https://nominatim.openstreetmap.org/";
+            c.BaseAddress = new Uri(nominatimUrl);
             c.DefaultRequestHeaders.Add("User-Agent", "HaworksPlatform/1.0");
             var t = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Haworks.BuildingBlocks.Resilience.HttpClientTimeoutOptions>>().Value;
             c.Timeout = TimeSpan.FromSeconds(t.LocationNominatimSeconds);

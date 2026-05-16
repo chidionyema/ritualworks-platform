@@ -17,7 +17,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Payouts/Payouts.Api/Payouts.Api.csproj" />
-    <ProjectReference Include="../../src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj" />
+    <ProjectReference Include="../../../src/Payouts/Payouts.Api/Payouts.Api.csproj" />
+    <ProjectReference Include="../../../src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj" />
   </ItemGroup>
 </Project>

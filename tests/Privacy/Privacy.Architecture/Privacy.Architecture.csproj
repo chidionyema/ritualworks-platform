@@ -13,8 +13,8 @@
     <PackageReference Include="NetArchTest.Rules" Version="1.3.2" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Privacy/Privacy.Domain/Privacy.Domain.csproj" />
-    <ProjectReference Include="../../src/Privacy/Privacy.Application/Privacy.Application.csproj" />
-    <ProjectReference Include="../../src/Privacy/Privacy.Infrastructure/Privacy.Infrastructure.csproj" />
+    <ProjectReference Include="../../../src/Privacy/Privacy.Domain/Privacy.Domain.csproj" />
+    <ProjectReference Include="../../../src/Privacy/Privacy.Application/Privacy.Application.csproj" />
+    <ProjectReference Include="../../../src/Privacy/Privacy.Infrastructure/Privacy.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

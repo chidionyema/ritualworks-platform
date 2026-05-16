@@ -99,6 +99,8 @@ public class MediaController(IMediator mediator) : ControllerBase
         [FromQuery] string? status = null,
         [FromQuery] string? mimeTypePrefix = null)
     {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
         var result = await mediator.Send(new ListMediaQuery(page, pageSize, status, mimeTypePrefix));
         return result.ToActionResult();
     }

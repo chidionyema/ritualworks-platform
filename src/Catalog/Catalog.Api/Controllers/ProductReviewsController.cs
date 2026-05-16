@@ -28,6 +28,8 @@ public class ProductReviewsController : ControllerBase
     [ProducesResponseType(typeof(List<ProductReviewResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetReviews(Guid productId, [FromQuery] int skip = 0, [FromQuery] int take = 20, CancellationToken cancellationToken = default)
     {
+        skip = Math.Max(skip, 0);
+        take = Math.Clamp(take, 1, 100);
         // Currently omitting the "includeUnapproved" check per the simplified query ported
         var result = await _mediator.Send(new GetProductReviewsQuery(productId, skip, take), cancellationToken);
 

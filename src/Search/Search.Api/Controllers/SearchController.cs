@@ -29,6 +29,8 @@ public sealed class SearchController : ControllerBase
         [FromQuery, Range(1, 100)] int pageSize = 20,
         CancellationToken ct = default)
     {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
         var sanitized = SearchQuerySanitizer.Sanitize(q);
         if (sanitized.Length == 0)
         {

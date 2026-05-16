@@ -21,7 +21,11 @@ public sealed class ProductsController(
         [FromQuery] int take = 20,
         [FromQuery] Guid? categoryId = null,
         CancellationToken ct = default)
-        => (await mediator.Send(new ListProductsQuery(skip, take, categoryId), ct)).ToActionResult();
+    {
+        skip = Math.Max(skip, 0);
+        take = Math.Clamp(take, 1, 100);
+        return (await mediator.Send(new ListProductsQuery(skip, take, categoryId), ct)).ToActionResult();
+    }
 
     [HttpGet("{id:guid}")]
     [AllowAnonymous]

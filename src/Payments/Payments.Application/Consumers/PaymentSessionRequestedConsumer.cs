@@ -1,6 +1,8 @@
 using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Haworks.BuildingBlocks.Common;
 using Haworks.Contracts.Payments;
 using Haworks.Payments.Application.Telemetry;
 
@@ -40,6 +42,7 @@ public sealed class PaymentSessionRequestedConsumer(
     IDomainEventPublisher eventPublisher,
     ICheckoutSessionService checkoutService,
     Haworks.Payments.Domain.Interfaces.IPaymentRepository paymentRepository,
+    IOptions<BrandOptions> brandOptions,
     ILogger<PaymentSessionRequestedConsumer> logger
 ) : IConsumer<PaymentSessionRequestedEvent>
 {
@@ -154,7 +157,7 @@ public sealed class PaymentSessionRequestedConsumer(
             SagaId = evt.SagaId,
             PaymentId = paymentId,
             SessionId = sessionId,
-            CheckoutUrl = $"https://demo.haworks.dev/checkout/{sessionId}",
+            CheckoutUrl = $"{brandOptions.Value.PrimaryUrl.TrimEnd('/')}/checkout/{sessionId}",
             Provider = provider,
             Amount = evt.Amount,
             Currency = evt.Currency

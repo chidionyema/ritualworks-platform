@@ -27,7 +27,11 @@ public sealed class DeliveriesController(IMediator mediator) : ControllerBase
         [FromQuery] int skip = 0,
         [FromQuery] int take = 50,
         CancellationToken ct = default)
-        => (await mediator.Send(new GetDeliveriesQuery(GetPartnerId(), subscriptionId, eventType, status, skip, take), ct)).ToActionResult();
+    {
+        skip = Math.Max(skip, 0);
+        take = Math.Clamp(take, 1, 100);
+        return (await mediator.Send(new GetDeliveriesQuery(GetPartnerId(), subscriptionId, eventType, status, skip, take), ct)).ToActionResult();
+    }
 
     [HttpGet("{id:guid}/attempts")]
     public async Task<IActionResult> GetAttempts(Guid id, CancellationToken ct)

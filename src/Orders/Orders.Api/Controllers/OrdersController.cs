@@ -21,7 +21,7 @@ public sealed class OrdersController(IMediator mediator) : ControllerBase
             return result.ToActionResult();
 
         var authenticatedUserId = HttpContext.GetForwardedUserId();
-        if (result.Value.UserId != authenticatedUserId && !User.IsInRole("Admin"))
+        if (!string.Equals(result.Value.UserId, authenticatedUserId, StringComparison.Ordinal) && !User.IsInRole("Admin"))
             return Forbid();
 
         return result.ToActionResult();
@@ -35,9 +35,11 @@ public sealed class OrdersController(IMediator mediator) : ControllerBase
         [FromQuery] int take = 20,
         CancellationToken ct = default)
     {
+        skip = Math.Max(skip, 0);
+        take = Math.Clamp(take, 1, 100);
         // If the requested userId doesn't match the authenticated user, and user is not Admin, return Forbidden
         var authenticatedUserId = HttpContext.GetForwardedUserId();
-        if (userId != authenticatedUserId && !User.IsInRole("Admin"))
+        if (!string.Equals(userId, authenticatedUserId, StringComparison.Ordinal) && !User.IsInRole("Admin"))
         {
             return Forbid();
         }

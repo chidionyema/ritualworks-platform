@@ -205,7 +205,7 @@ public sealed class HybridCache : IHybridCache, IDisposable
     private SemaphoreSlim GetStripe(string key)
     {
         // We use an unsigned int to ensure the modulo result is positive.
-        uint index = (uint)key.GetHashCode() % LockStripes;
+        uint index = (uint)key.GetHashCode(StringComparison.Ordinal) % LockStripes;
         return _lockPool[index];
     }
 

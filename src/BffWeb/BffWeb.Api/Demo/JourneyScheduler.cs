@@ -212,7 +212,9 @@ public sealed class JourneyScheduler : BackgroundService
         var baseUrl =
             _config["JourneyScheduler:LoopbackUrl"]
             ?? FirstUrl(_config["ASPNETCORE_URLS"])
-            ?? "http://localhost:5050";
+            ?? _config["JourneyScheduler:FallbackUrl"]
+            ?? throw new InvalidOperationException(
+                "JourneyScheduler loopback URL not configured. Set JourneyScheduler:LoopbackUrl, ASPNETCORE_URLS, or JourneyScheduler:FallbackUrl.");
         http.BaseAddress = new Uri(baseUrl);
         http.Timeout = TimeSpan.FromSeconds(15);
         return http;

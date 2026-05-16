@@ -22,12 +22,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/Privacy/Privacy.Api/Privacy.Api.csproj" />
-    <ProjectReference Include="../../src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj" />
+    <ProjectReference Include="../../../src/Privacy/Privacy.Api/Privacy.Api.csproj" />
+    <ProjectReference Include="../../../src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="../../src/BuildingBlocks.Testing/TestModuleInitializer.cs"
+    <Compile Include="../../../src/BuildingBlocks.Testing/TestModuleInitializer.cs"
              Link="TestModuleInitializer.cs" />
   </ItemGroup>
 

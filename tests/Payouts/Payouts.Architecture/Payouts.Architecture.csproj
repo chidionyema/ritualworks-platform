@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <RootNamespace>Haworks.Scheduler.Architecture</RootNamespace>
-    <AssemblyName>Haworks.Scheduler.Architecture</AssemblyName>
+    <RootNamespace>Haworks.Payouts.Architecture</RootNamespace>
+    <AssemblyName>Haworks.Payouts.Architecture</AssemblyName>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
@@ -13,8 +13,8 @@
     <PackageReference Include="NetArchTest.Rules" Version="1.3.2" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Scheduler/Scheduler.Domain/Scheduler.Domain.csproj" />
-    <ProjectReference Include="../../src/Scheduler/Scheduler.Application/Scheduler.Application.csproj" />
-    <ProjectReference Include="../../src/Scheduler/Scheduler.Infrastructure/Scheduler.Infrastructure.csproj" />
+    <ProjectReference Include="../../../src/Payouts/Payouts.Domain/Payouts.Domain.csproj" />
+    <ProjectReference Include="../../../src/Payouts/Payouts.Application/Payouts.Application.csproj" />
+    <ProjectReference Include="../../../src/Payouts/Payouts.Infrastructure/Payouts.Infrastructure.csproj" />
   </ItemGroup>
 </Project>
