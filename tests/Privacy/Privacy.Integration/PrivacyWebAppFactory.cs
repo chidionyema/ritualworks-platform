@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Haworks.Privacy.Application.Requests.Sagas;
 using Haworks.Privacy.Infrastructure.Persistence;
+using Haworks.BuildingBlocks.Testing;
 using Haworks.BuildingBlocks.Testing.Authentication;
 using Haworks.BuildingBlocks.Testing.Containers;
 using Microsoft.EntityFrameworkCore;

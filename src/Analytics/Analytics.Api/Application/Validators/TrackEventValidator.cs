@@ -6,9 +6,10 @@ public class TrackEventValidator : AbstractValidator<TrackEventCommand>
 {
     public TrackEventValidator()
     {
+        RuleFor(x => x.EventId).NotEqual(Guid.Empty).WithMessage("EventId must be a valid non-empty GUID.");
         RuleFor(x => x.EventName).NotEmpty().MaximumLength(100);
         RuleFor(x => x.UserId).NotEqual(Guid.Empty).WithMessage("UserId must be a valid non-empty GUID.");
-        RuleFor(x => x.OccurredAt).LessThanOrEqualTo(x => DateTime.UtcNow.AddMinutes(5))
-            .WithMessage("OccurredAt cannot be too far in the future.");
+        RuleFor(x => x.OccurredAt).LessThanOrEqualTo(x => DateTime.UtcNow.AddSeconds(60))
+            .WithMessage("OccurredAt cannot be more than 60 seconds in the future.");
     }
 }

@@ -25,6 +25,7 @@ public sealed class AnalyticsFlowsTests(AnalyticsWebAppFactory factory) : IAsync
     public async Task Track_event_returns_202_Accepted()
     {
         var command = new TrackEventCommand(
+            EventId: Guid.NewGuid(),
             EventName: "test_event",
             UserId: Guid.NewGuid(),
             SessionId: "session-123",

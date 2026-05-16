@@ -5,6 +5,7 @@ using MediatR;
 namespace Haworks.Analytics.Api.Application.Commands;
 
 public record TrackEventCommand(
+    [property: JsonRequired] Guid EventId,
     [property: JsonRequired] string EventName,
     [property: JsonRequired] Guid UserId,
     string? SessionId,

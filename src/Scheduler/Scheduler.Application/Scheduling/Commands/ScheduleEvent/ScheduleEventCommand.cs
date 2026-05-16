@@ -1,23 +1,28 @@
 using System.Text.Json;
 using FluentValidation;
+using Haworks.BuildingBlocks.CurrentUser;
 using Haworks.Scheduler.Application.Common.Interfaces;
 using MediatR;
 
 namespace Haworks.Scheduler.Application.Scheduling.Commands.ScheduleEvent;
 
 public record ScheduleEventCommand(
+    string IdempotencyKey,
     DateTimeOffset ScheduledTime,
     string TargetExchange,
     string RoutingKey,
-    string Payload) : IRequest;
+    string Payload) : IRequest<ScheduleEventResult>;
+
+public record ScheduleEventResult(string JobId, bool AlreadyExisted);
 
 public class ScheduleEventCommandValidator : AbstractValidator<ScheduleEventCommand>
 {
-    private static readonly DateTimeOffset MaxScheduledTime =
-        DateTimeOffset.UtcNow.AddYears(1);
-
     public ScheduleEventCommandValidator()
     {
+        RuleFor(v => v.IdempotencyKey)
+            .NotEmpty()
+            .MaximumLength(200);
+
         RuleFor(v => v.ScheduledTime)
             .Must(t => t > DateTimeOffset.UtcNow)
             .WithMessage("ScheduledTime must be in the future")
@@ -50,21 +55,29 @@ public class ScheduleEventCommandValidator : AbstractValidator<ScheduleEventComm
     }
 }
 
-public class ScheduleEventCommandHandler : IRequestHandler<ScheduleEventCommand>
+public class ScheduleEventCommandHandler : IRequestHandler<ScheduleEventCommand, ScheduleEventResult>
 {
     private readonly IEventScheduler _scheduler;
+    private readonly ICurrentUserService _currentUser;
 
-    public ScheduleEventCommandHandler(IEventScheduler scheduler)
+    public ScheduleEventCommandHandler(IEventScheduler scheduler, ICurrentUserService currentUser)
     {
         _scheduler = scheduler;
+        _currentUser = currentUser;
     }
 
-    public Task Handle(ScheduleEventCommand request, CancellationToken cancellationToken)
+    public async Task<ScheduleEventResult> Handle(ScheduleEventCommand request, CancellationToken cancellationToken)
     {
-        return _scheduler.ScheduleEventAsync(
+        var scheduledBy = _currentUser.UserId ?? "system";
+
+        var jobId = await _scheduler.ScheduleEventAsync(
+            request.IdempotencyKey,
             request.ScheduledTime,
             request.TargetExchange,
             request.RoutingKey,
-            request.Payload);
+            request.Payload,
+            scheduledBy);
+
+        return new ScheduleEventResult(jobId, AlreadyExisted: false);
     }
 }

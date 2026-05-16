@@ -20,7 +20,7 @@ public class SchedulingController : ControllerBase
     [HttpPost("schedule")]
     public async Task<IActionResult> Schedule(ScheduleEventCommand command)
     {
-        await _mediator.Send(command);
-        return Accepted();
+        var result = await _mediator.Send(command);
+        return Accepted(new { result.JobId, result.AlreadyExisted });
     }
 }

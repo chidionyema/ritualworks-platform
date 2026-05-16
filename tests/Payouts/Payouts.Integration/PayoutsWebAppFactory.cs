@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using Xunit;
 using Haworks.BuildingBlocks.Testing;
 using Haworks.BuildingBlocks.Testing.Authentication;
 using Haworks.BuildingBlocks.Testing.Containers;
@@ -43,7 +44,7 @@ public class PayoutsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifeti
     }
 
     public Task ResetDatabaseAsync() => _resetter!.ResetAsync();
-...
 
-    protected override void ConfigureWebHost(IWebHostBuilder builder) { builder.UseEnvironment("Test"); builder.ConfigureAppConfiguration((_, config) => { config.AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:payouts"] = ConnString, ["Stripe:SecretKey"] = "sk_test_dummy" }); }); builder.ConfigureTestServices(services => { var mockGateway = new Mock<IPayoutGateway>(); mockGateway.Setup(x => x.InitiatePayoutAsync(It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync(("tr_test", Haworks.Payouts.Domain.Enums.PayoutStatus.Succeeded)); services.AddSingleton(mockGateway.Object); services.AddMassTransitTestHarness(); services.AddAuthentication(TestAuthenticationHandler.SchemeName).AddTestAuth(); }); }
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+ { builder.UseEnvironment("Test"); builder.ConfigureAppConfiguration((_, config) => { config.AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:payouts"] = ConnString, ["Stripe:SecretKey"] = "sk_test_dummy" }); }); builder.ConfigureTestServices(services => { var mockGateway = new Mock<IPayoutGateway>(); mockGateway.Setup(x => x.InitiatePayoutAsync(It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync(("tr_test", Haworks.Payouts.Domain.Enums.PayoutStatus.Succeeded)); services.AddSingleton(mockGateway.Object); services.AddMassTransitTestHarness(); services.AddAuthentication(TestAuthenticationHandler.SchemeName).AddTestAuth(); }); }
 }
