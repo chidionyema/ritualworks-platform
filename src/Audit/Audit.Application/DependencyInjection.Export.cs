@@ -47,7 +47,8 @@ public static class AuditExportRegistration
             services.AddSingleton(s3InterfaceType, sp => 
             {
                 var config = sp.GetRequiredService<IConfiguration>();
-                var serviceUrl = config.GetConnectionString("s3") ?? "http://localhost:4566";
+                var serviceUrl = config.GetConnectionString("s3")
+                    ?? throw new InvalidOperationException("ConnectionStrings:s3 must be configured for audit export");
                 
                 var s3Config = Activator.CreateInstance(s3ConfigType);
                 s3ConfigType.GetProperty("ServiceURL")?.SetValue(s3Config, serviceUrl);

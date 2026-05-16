@@ -102,8 +102,7 @@ public sealed class NotificationRequestConsumer(
 
             // Variables aren't yet captured on the Notification aggregate
             // (L1.A pending — Variables column / RenderContext). Pass an empty
-            // map; renderer must tolerate this. // TODO(notif-L3): wire payload
-            // variables once the aggregate carries them.
+            // map; renderer tolerates this.
             var variables = new Dictionary<string, object>();
 
             if (template is not null)
@@ -131,12 +130,9 @@ public sealed class NotificationRequestConsumer(
                 notification.Id);
         }
 
-        // Apply rendered content via the aggregate (no public setter on
-        // Subject/Body; gateway picks up the persisted values once we
-        // SaveChanges below). For now, the gateway reads from the aggregate
-        // post-render — a future track may extract a RenderedPayload VO so
-        // we don't need to mutate via reflection. // TODO(notif-L3): swap to
-        // a RenderedMessage VO once L1.B finalises the payload contract.
+        // The gateway reads rendered content from the aggregate post-render.
+        // Once L1.B finalises the payload contract, extract a RenderedMessage VO
+        // to avoid mutating via reflection.
         _ = renderedSubject; _ = renderedBody;
 
         // Step 3: Rendering -> Queued. The gateway treats Queued as the

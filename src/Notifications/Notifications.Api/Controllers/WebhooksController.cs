@@ -28,8 +28,11 @@ public sealed class WebhooksController(
         try 
         {
             var snsMessage = Message.ParseMessage(rawPayload);
-            // TODO: Verify signature properly in V4
-            // if (!snsMessage.IsSignatureValid()) ...
+            if (!snsMessage.IsMessageSignatureValid())
+            {
+                logger.LogWarning("Invalid SNS signature on SES webhook");
+                return BadRequest("Invalid signature");
+            }
 
             if (string.Equals(snsMessage.Type, "SubscriptionConfirmation", StringComparison.Ordinal))
             {

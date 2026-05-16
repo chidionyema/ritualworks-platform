@@ -2587,6 +2587,10 @@ string.Equals(referenced, "BuildingBlocks.Testing", StringComparison.Ordinal) ||
     private static string Relative(string path) =>
         path.Replace(Directory.GetParent(SrcRoot)!.FullName + Path.DirectorySeparatorChar, "");
 
+    private static IEnumerable<string> FindCsFiles() =>
+        Directory.GetFiles(SrcRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("bin") && !f.Contains("/Migrations/"));
+
     private static IEnumerable<string> FindProgramFiles() =>
         Directory.GetFiles(SrcRoot, "Program.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains("obj") && !f.Contains("bin") && f.Contains(".Api"));
@@ -3349,4 +3353,47 @@ string.Equals(referenced, "BuildingBlocks.Testing", StringComparison.Ordinal) ||
         }
         violations.Should().BeEmpty("every external HTTP call must have a timeout or resilience policy");
     }
+
+    // ─── Code Hygiene ─────────────────────────────────────────────────
+
+    [Fact]
+    public void No_TODO_comments_in_source_code()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindCsFiles())
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"//\s*TODO", RegexOptions.IgnoreCase | RegexOptions.NonBacktracking))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: {lines[i].Trim()}");
+                }
+            }
+        }
+        violations.Should().BeEmpty("TODO comments must be resolved before merging — track work in issues, not code");
+    }
+
+    [Fact]
+    public void No_hardcoded_localhost_URIs_in_source_code()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindCsFiles())
+        {
+            if (file.Contains("/tests/") || file.Contains("/Demo/")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"""https?://localhost[:""/]", RegexOptions.IgnoreCase | RegexOptions.NonBacktracking)
+                    && !lines[i].TrimStart().StartsWith("//", StringComparison.Ordinal)
+                    && !lines[i].Contains("IsDevelopment")
+                    && (i == 0 || !lines[i - 1].Contains("IsDevelopment")))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: {lines[i].Trim()}");
+                }
+            }
+        }
+        violations.Should().BeEmpty("hardcoded localhost URIs cause silent production failures — use configuration");
+    }
+
 }
