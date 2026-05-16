@@ -1,38 +1,34 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using nClam;
 
 namespace Haworks.Media.Api.Infrastructure;
 
-/// <summary>
-/// Options for the ClamAV virus scanner.
-/// Bound from the "ClamAV" configuration section.
-/// </summary>
 public sealed class ClamAvOptions
 {
     public const string SectionName = "ClamAV";
 
+    public bool Enabled { get; set; } = true;
+
+    [Required]
     public string Host { get; set; } = "clamav";
 
+    [Range(1, 65535)]
     public int Port { get; set; } = 3310;
 
+    [Range(5, 3600)]
     public int TimeoutSeconds { get; set; } = 30;
+
+    /// <summary>Max file size for in-memory INSTREAM scanning. Larger files use temp-file SCAN mode.</summary>
+    public long InStreamMaxBytes { get; set; } = 25_000_000; // ~25 MB
 }
 
 public interface IVirusScanner
 {
-    /// <summary>
-    /// Scans <paramref name="fileStream"/> for viruses via ClamAV.
-    /// Returns true if clean, false if infected or the scan fails.
-    /// </summary>
     Task<bool> ScanAsync(Stream fileStream, CancellationToken ct = default);
 }
 
-/// <summary>
-/// Real ClamAV scanner via nClam TCP client.
-/// Marks the file Quarantined before scanning; promotes to Active on a clean result.
-/// Leaves it Quarantined (or transitions to Rejected) when infected.
-/// </summary>
 public sealed class ClamAvScanner : IVirusScanner
 {
     private readonly ClamAvOptions _opts;
@@ -46,26 +42,81 @@ public sealed class ClamAvScanner : IVirusScanner
 
     public async Task<bool> ScanAsync(Stream fileStream, CancellationToken ct = default)
     {
-        var clam = new ClamClient(_opts.Host, _opts.Port)
+        if (!_opts.Enabled)
         {
-            MaxStreamSize = 26_214_400, // 25 MB chunk limit
-        };
+            _logger.LogWarning("ClamAV disabled — skipping scan (UNSAFE in production)");
+            return true;
+        }
 
         fileStream.Position = 0;
+        var fileSize = fileStream.Length;
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(TimeSpan.FromSeconds(_opts.TimeoutSeconds));
+
+        // Large files: write to temp file, scan via MULTISCAN on filesystem
+        if (fileSize > _opts.InStreamMaxBytes)
+        {
+            return await ScanViaFileSystemAsync(fileStream, cts.Token);
+        }
+
+        // Small files: stream directly via INSTREAM protocol
+        return await ScanViaStreamAsync(fileStream, cts.Token);
+    }
+
+    private async Task<bool> ScanViaStreamAsync(Stream fileStream, CancellationToken ct)
+    {
+        var clam = new ClamClient(_opts.Host, _opts.Port)
+        {
+            MaxStreamSize = _opts.InStreamMaxBytes,
+        };
+
         ClamScanResult result;
         try
         {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(_opts.TimeoutSeconds));
-            result = await clam.SendAndScanFileAsync(fileStream, cts.Token);
+            result = await clam.SendAndScanFileAsync(fileStream, ct);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "ClamAV scan failed — host={Host} port={Port}", _opts.Host, _opts.Port);
-            // Fail closed: treat scan error as suspect
-            return false;
+            _logger.LogError(ex, "ClamAV INSTREAM scan failed — host={Host} port={Port}", _opts.Host, _opts.Port);
+            return false; // fail closed
         }
 
+        return InterpretResult(result);
+    }
+
+    private async Task<bool> ScanViaFileSystemAsync(Stream fileStream, CancellationToken ct)
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), $"clam-scan-{Guid.NewGuid()}");
+        try
+        {
+            await using (var fs = File.Create(tempPath))
+            {
+                await fileStream.CopyToAsync(fs, ct);
+            }
+
+            var clam = new ClamClient(_opts.Host, _opts.Port);
+            ClamScanResult result;
+            try
+            {
+                result = await clam.ScanFileOnServerAsync(tempPath, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ClamAV filesystem scan failed for {Path}", tempPath);
+                return false; // fail closed
+            }
+
+            return InterpretResult(result);
+        }
+        finally
+        {
+            try { File.Delete(tempPath); } catch { /* best effort */ }
+        }
+    }
+
+    private bool InterpretResult(ClamScanResult result)
+    {
         switch (result.Result)
         {
             case ClamScanResults.Clean:
