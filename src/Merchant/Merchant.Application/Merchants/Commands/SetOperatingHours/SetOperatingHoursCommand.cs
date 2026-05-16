@@ -19,10 +19,15 @@ public class SetOperatingHoursCommandValidator : AbstractValidator<SetOperatingH
     {
         RuleFor(v => v.MerchantId).NotEmpty();
         RuleFor(v => v.Hours).NotNull();
+        RuleFor(v => v.Hours).Must(h => h.Count <= 7).WithMessage("Maximum 7 entries allowed (one per day).");
+        RuleFor(v => v.Hours).Must(h => h.Select(x => x.Day).Distinct().Count() == h.Count)
+            .WithMessage("Duplicate DayOfWeek entries are not allowed.");
         RuleForEach(v => v.Hours).ChildRules(hour =>
         {
             hour.RuleFor(h => h.Day).IsInEnum();
-            hour.RuleFor(h => h.Open).LessThan(h => h.Close).WithMessage("Open time must be before close time.");
+            hour.RuleFor(h => h.Open).LessThan(h => h.Close)
+                .When(h => !(h.Open == TimeSpan.Zero && h.Close == TimeSpan.Zero))
+                .WithMessage("Open time must be before close time (00:00/00:00 means 24h).");
         });
     }
 }

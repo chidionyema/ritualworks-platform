@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Haworks.Merchant.Application.Merchants.Queries;
 
-public record ListMerchantsQuery(int Skip, int Take, MerchantStatus? Status) : IRequest<Result<PagedResult<MerchantDto>>>;
+public record ListMerchantsQuery(int Skip, int Take, MerchantStatus? Status, bool IncludeDeactivated = false) : IRequest<Result<PagedResult<MerchantDto>>>;
 
 public sealed class ListMerchantsQueryHandler : IRequestHandler<ListMerchantsQuery, Result<PagedResult<MerchantDto>>>
 {
@@ -21,6 +21,8 @@ public sealed class ListMerchantsQueryHandler : IRequestHandler<ListMerchantsQue
 
         if (request.Status.HasValue)
             query = query.Where(m => m.Status == request.Status.Value);
+        else if (!request.IncludeDeactivated)
+            query = query.Where(m => m.Status != MerchantStatus.Deactivated);
 
         var total = await query.CountAsync(cancellationToken);
 

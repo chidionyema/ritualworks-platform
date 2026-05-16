@@ -7,6 +7,8 @@ namespace Haworks.Merchant.Unit.Domain;
 
 public sealed class MerchantProfileTests
 {
+    private const string AdminId = "admin-user-123";
+
     [Fact]
     public void Create_sets_status_to_Pending()
     {
@@ -23,19 +25,21 @@ public sealed class MerchantProfileTests
     {
         var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
 
-        profile.Activate();
+        profile.Activate(AdminId);
 
         profile.Status.Should().Be(MerchantStatus.Active);
+        profile.ApprovedBy.Should().Be(AdminId);
+        profile.ApprovedAt.Should().NotBeNull();
     }
 
     [Fact]
     public void Activate_from_Suspended_succeeds()
     {
         var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
-        profile.Activate();
-        profile.Suspend();
+        profile.Activate(AdminId);
+        profile.Suspend(AdminId, "review");
 
-        profile.Activate();
+        profile.Activate(AdminId);
 
         profile.Status.Should().Be(MerchantStatus.Active);
     }
@@ -44,54 +48,183 @@ public sealed class MerchantProfileTests
     public void Activate_from_Rejected_throws()
     {
         var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
-        profile.Reject("policy violation");
+        profile.Reject(AdminId, "policy violation");
 
-        var act = () => profile.Activate();
+        var act = () => profile.Activate(AdminId);
 
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*rejected*");
+            .WithMessage("*Rejected*Active*");
     }
 
     [Fact]
-    public void Suspend_changes_status_to_Suspended()
+    public void Activate_from_Deactivated_throws()
     {
         var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
+        profile.Activate(AdminId);
+        profile.Deactivate(AdminId);
 
-        profile.Suspend();
+        var act = () => profile.Activate(AdminId);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Deactivated*Active*");
+    }
+
+    [Fact]
+    public void Suspend_from_Active_succeeds()
+    {
+        var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
+        profile.Activate(AdminId);
+
+        profile.Suspend(AdminId, "Terms violation");
 
         profile.Status.Should().Be(MerchantStatus.Suspended);
+        profile.SuspendedBy.Should().Be(AdminId);
+        profile.SuspendedAt.Should().NotBeNull();
+        profile.SuspensionReason.Should().Be("Terms violation");
     }
 
     [Fact]
-    public void Deactivate_changes_status_to_Deactivated()
+    public void Suspend_from_Pending_throws()
     {
         var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
 
-        profile.Deactivate();
+        var act = () => profile.Suspend(AdminId, "reason");
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Pending*Suspended*");
+    }
+
+    [Fact]
+    public void Suspend_from_Deactivated_throws()
+    {
+        var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
+        profile.Activate(AdminId);
+        profile.Deactivate(AdminId);
+
+        var act = () => profile.Suspend(AdminId, "reason");
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Deactivated*Suspended*");
+    }
+
+    [Fact]
+    public void Deactivate_from_Active_succeeds()
+    {
+        var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
+        profile.Activate(AdminId);
+
+        profile.Deactivate(AdminId);
+
+        profile.Status.Should().Be(MerchantStatus.Deactivated);
+        profile.DeactivatedBy.Should().Be(AdminId);
+        profile.DeactivatedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Deactivate_from_Suspended_succeeds()
+    {
+        var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
+        profile.Activate(AdminId);
+        profile.Suspend(AdminId, "review");
+
+        profile.Deactivate(AdminId);
 
         profile.Status.Should().Be(MerchantStatus.Deactivated);
     }
 
     [Fact]
-    public void Reject_sets_status_and_reason()
+    public void Deactivate_from_Pending_throws()
     {
         var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
 
-        profile.Reject("Terms violation");
+        var act = () => profile.Deactivate(AdminId);
 
-        profile.Status.Should().Be(MerchantStatus.Rejected);
-        profile.RejectionReason.Should().Be("Terms violation");
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Pending*Deactivated*");
     }
 
     [Fact]
-    public void SetPending_changes_status_to_Pending()
+    public void Deactivate_from_Rejected_throws()
     {
         var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
-        profile.Activate();
+        profile.Reject(AdminId, "bad");
+
+        var act = () => profile.Deactivate(AdminId);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Rejected*Deactivated*");
+    }
+
+    [Fact]
+    public void Reject_from_Pending_succeeds()
+    {
+        var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
+
+        profile.Reject(AdminId, "Terms violation");
+
+        profile.Status.Should().Be(MerchantStatus.Rejected);
+        profile.RejectionReason.Should().Be("Terms violation");
+        profile.RejectedBy.Should().Be(AdminId);
+        profile.RejectedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Reject_from_Active_throws()
+    {
+        var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
+        profile.Activate(AdminId);
+
+        var act = () => profile.Reject(AdminId, "reason");
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Active*Rejected*");
+    }
+
+    [Fact]
+    public void Reject_from_Suspended_throws()
+    {
+        var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
+        profile.Activate(AdminId);
+        profile.Suspend(AdminId, "review");
+
+        var act = () => profile.Reject(AdminId, "reason");
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Suspended*Rejected*");
+    }
+
+    [Fact]
+    public void SetPending_from_Rejected_succeeds()
+    {
+        var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
+        profile.Reject(AdminId, "policy violation");
 
         profile.SetPending();
 
         profile.Status.Should().Be(MerchantStatus.Pending);
+    }
+
+    [Fact]
+    public void SetPending_from_Active_throws()
+    {
+        var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
+        profile.Activate(AdminId);
+
+        var act = () => profile.SetPending();
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Active*Pending*");
+    }
+
+    [Fact]
+    public void SetPending_from_Pending_throws()
+    {
+        var profile = MerchantProfile.Create(Guid.NewGuid(), "Test", "test");
+
+        var act = () => profile.SetPending();
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Pending*Pending*");
     }
 
     [Fact]

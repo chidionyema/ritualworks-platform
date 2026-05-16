@@ -63,11 +63,12 @@ public class MerchantsController : ControllerBase
         [FromQuery] int skip = 0,
         [FromQuery] int take = 20,
         [FromQuery] MerchantStatus? status = null,
+        [FromQuery] bool includeDeactivated = false,
         CancellationToken ct = default)
     {
         skip = Math.Max(skip, 0);
         take = Math.Clamp(take, 1, 100);
-        var result = await _mediator.Send(new ListMerchantsQuery(skip, take, status), ct);
+        var result = await _mediator.Send(new ListMerchantsQuery(skip, take, status, includeDeactivated), ct);
         return result.ToActionResult();
     }
 
@@ -102,7 +103,11 @@ public class MerchantsController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {
-        var result = await _mediator.Send(new ApproveMerchantCommand(id), ct);
+        var adminId = HttpContext.GetForwardedUserId();
+        if (string.IsNullOrEmpty(adminId))
+            return Unauthorized();
+
+        var result = await _mediator.Send(new ApproveMerchantCommand(id, adminId), ct);
         return result.ToNoContentActionResult();
     }
 
@@ -110,15 +115,23 @@ public class MerchantsController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Reject(Guid id, [FromBody] RejectMerchantRequest request, CancellationToken ct)
     {
-        var result = await _mediator.Send(new RejectMerchantCommand(id, request.Reason), ct);
+        var adminId = HttpContext.GetForwardedUserId();
+        if (string.IsNullOrEmpty(adminId))
+            return Unauthorized();
+
+        var result = await _mediator.Send(new RejectMerchantCommand(id, adminId, request.Reason), ct);
         return result.ToNoContentActionResult();
     }
 
     [HttpPost("{id:guid}/suspend")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> Suspend(Guid id, CancellationToken ct)
+    public async Task<IActionResult> Suspend(Guid id, [FromBody] SuspendMerchantRequest request, CancellationToken ct)
     {
-        var result = await _mediator.Send(new SuspendMerchantCommand(id), ct);
+        var adminId = HttpContext.GetForwardedUserId();
+        if (string.IsNullOrEmpty(adminId))
+            return Unauthorized();
+
+        var result = await _mediator.Send(new SuspendMerchantCommand(id, adminId, request.Reason), ct);
         return result.ToNoContentActionResult();
     }
 
@@ -145,3 +158,5 @@ public sealed record UpdateMerchantRequest(
     string? Website);
 
 public sealed record RejectMerchantRequest(string Reason);
+
+public sealed record SuspendMerchantRequest(string Reason);

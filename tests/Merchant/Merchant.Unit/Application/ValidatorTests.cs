@@ -79,7 +79,7 @@ public sealed class ValidatorTests
     public void RejectMerchant_empty_reason_fails()
     {
         var validator = new RejectMerchantCommandValidator();
-        var command = new RejectMerchantCommand(Guid.NewGuid(), "");
+        var command = new RejectMerchantCommand(Guid.NewGuid(), "admin-1", "");
 
         var result = validator.TestValidate(command);
 
