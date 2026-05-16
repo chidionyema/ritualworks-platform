@@ -1,4 +1,4 @@
-version: '3.8'
+# Compose v2+ — version attribute removed (obsolete)
 
 services:
   # ===========================================================================
@@ -514,7 +514,7 @@ services:
       start_period: 30s
 
   debezium-connect:
-    image: debezium/connect:3.0
+    image: debezium/connect:3.0.0.Final
     container_name: rw-debezium-connect
     depends_on:
       kafka:
