@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Haworks.BuildingBlocks.Common;
 using Haworks.FeatureFlags.Api.Domain;
 using Haworks.FeatureFlags.Api.Infrastructure;
@@ -9,7 +10,10 @@ using Haworks.Contracts.FeatureFlags;
 
 namespace Haworks.FeatureFlags.Api.Application;
 
-public record EvaluateFlagQuery(string FlagName, string UserId, string Region) : IRequest<Result<bool>>;
+public record EvaluateFlagQuery(
+    [property: JsonRequired] string FlagName, 
+    [property: JsonRequired] string UserId, 
+    string Region) : IRequest<Result<bool>>;
 
 public class EvaluateFlagValidator : AbstractValidator<EvaluateFlagQuery>
 {
@@ -38,7 +42,10 @@ public class EvaluateFlagHandler : IRequestHandler<EvaluateFlagQuery, Result<boo
     }
 }
 
-public record UpdateFlagCommand(string FlagName, bool IsEnabled, string Description) : IRequest<Result<Unit>>;
+public record UpdateFlagCommand(
+    [property: JsonRequired] string FlagName, 
+    [property: JsonRequired] bool IsEnabled, 
+    string Description) : IRequest<Result<Unit>>;
 
 public class UpdateFlagValidator : AbstractValidator<UpdateFlagCommand>
 {

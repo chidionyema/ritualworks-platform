@@ -55,8 +55,8 @@ public class FeatureFlagCache : IFeatureFlagCache
         foreach (var rule in flag.Rules)
         {
             // AND logic: all non-null conditions on the rule must match.
-            if (rule.UserId != null && rule.UserId != userId) continue;
-            if (rule.Region != null && rule.Region != region) continue;
+            if (rule.UserId != null && !string.Equals(rule.UserId, userId, StringComparison.Ordinal)) continue;
+            if (rule.Region != null && !string.Equals(rule.Region, region, StringComparison.Ordinal)) continue;
 
             // Identity/region conditions passed (or were not set); check percentage last.
             if (rule.PercentageRollout.HasValue)
