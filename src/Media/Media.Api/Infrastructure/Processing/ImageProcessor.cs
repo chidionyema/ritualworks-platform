@@ -24,17 +24,19 @@ public sealed class ImageProcessor(
     {
         await using var stream = await s3.DownloadAsync(s3Key, ct);
 
+        // Check dimensions BEFORE loading full image to prevent decompression bombs
+        var info = await Image.IdentifyAsync(stream, ct);
+        if (info != null && (info.Width > _opts.MaxDimensionPixels || info.Height > _opts.MaxDimensionPixels))
+        {
+            throw new InvalidOperationException(
+                $"Image dimensions ({info.Width}x{info.Height}) exceed max ({_opts.MaxDimensionPixels}px).");
+        }
+
+        stream.Position = 0;
         using var image = await Image.LoadAsync(stream, ct);
 
         // Auto-orient based on EXIF rotation
         image.Mutate(x => x.AutoOrient());
-
-        // Validate dimensions
-        if (image.Width > _opts.MaxDimensionPixels || image.Height > _opts.MaxDimensionPixels)
-        {
-            throw new InvalidOperationException(
-                $"Image dimensions ({image.Width}x{image.Height}) exceed max ({_opts.MaxDimensionPixels}px).");
-        }
 
         // Strip GPS data for privacy
         if (_opts.StripExifGps && image.Metadata.ExifProfile != null)
