@@ -39,7 +39,7 @@ public record CreateCheckoutSessionRequest
     public required string CustomerEmail { get; init; }
     public required string IdempotencyKey { get; init; }
     public required IReadOnlyList<LineItem> LineItems { get; init; }
-    public Dictionary<string, string> Metadata { get; init; } = new();
+    public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
     public string Currency { get; init; } = "USD";
     public string? CustomerId { get; init; }
     public string? UserId { get; init; }
