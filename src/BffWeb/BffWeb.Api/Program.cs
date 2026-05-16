@@ -177,12 +177,9 @@ if (builder.Environment.IsDevelopment())
 // AllowCredentials is required for SignalR's negotiate handshake. Header
 // + method allowlists match what the demos actually send.
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? new[]
-    {
-        "http://localhost:4321",
-        "https://ritualworks.pages.dev",
-        "https://portfolio-showcase.pages.dev",
-    };
+    ?? (builder.Environment.IsDevelopment()
+        ? new[] { "http://localhost:4321", "https://ritualworks.pages.dev", "https://portfolio-showcase.pages.dev" }
+        : new[] { "https://ritualworks.pages.dev", "https://portfolio-showcase.pages.dev" });
 
 builder.Services.AddCors(o => o.AddPolicy("portfolio-site", p => p
     .WithOrigins(corsOrigins)

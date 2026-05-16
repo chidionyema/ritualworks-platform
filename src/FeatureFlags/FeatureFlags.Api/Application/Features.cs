@@ -74,7 +74,7 @@ public class UpdateFlagHandler : IRequestHandler<UpdateFlagCommand, Result<Unit>
         }
 
         await _db.SaveChangesAsync(ct);
-        await _publishEndpoint.Publish(new FeatureFlagUpdated(flag.Name, flag.IsEnabled), ct);
+        await _publishEndpoint.Publish(new FeatureFlagUpdated { FlagName = flag.Name, IsEnabled = flag.IsEnabled }, ct);
 
         return Result.Success(Unit.Value);
     }

@@ -22,7 +22,7 @@ public sealed class BrandOptions
     /// <summary>
     /// The root URL of the brand's primary portal.
     /// </summary>
-    public string PrimaryUrl { get; set; } = "https://localhost";
+    public string PrimaryUrl { get; set; } = "https://haworks.com";
 
     /// <summary>
     /// URL to the brand's logo.

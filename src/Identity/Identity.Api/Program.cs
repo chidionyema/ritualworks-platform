@@ -94,7 +94,9 @@ if (builder.Configuration.GetValue("Vault:Enabled", false))
 }
 
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? ["http://localhost:3000", "http://localhost:5050"];
+    ?? (builder.Environment.IsDevelopment()
+        ? ["http://localhost:3000", "http://localhost:5050"]
+        : throw new InvalidOperationException("Cors:AllowedOrigins must be configured in production"));
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
