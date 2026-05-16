@@ -1,6 +1,6 @@
 # Platform completion — Phase A (auth) + Phase B (reservation lifecycle)
 
-**Status:** Draft 2026-05-08. Two follow-up initiatives surfaced by the checkout/payments gap-fill cycle (C1–C4). Ship in this order: Phase A first (small, unblocks any user-aware endpoint), Phase B second (medium, unblocks ADR-004's sync reservation flow + the C2/C3 briefs we deferred).
+**Status: Complete.** All phases (A1–A4 auth, B1–B3 reservation lifecycle) shipped and merged to main.
 
 **Source incidents:** the C1 done-report flagged that `payments-svc` has no JWT validation despite `[Authorize]` attributes, and the same is true of every backend service in the platform. The C2 and C3 done-reports flagged that `OrderStockReservation` is half-built relative to ADR-004's design.
 

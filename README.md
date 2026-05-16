@@ -1,11 +1,13 @@
 # RitualWorks Platform
 
-A production-grade .NET 9 microservices platform built on Clean Architecture principles. Seventeen bounded-context services communicate via async messaging (MassTransit/RabbitMQ), Change Data Capture (Debezium/Kafka), and synchronous REST. Every service has its own PostgreSQL schema, transactional outbox/inbox, and Polly-backed resilience. The entire stack runs locally via .NET Aspire or Docker Compose and deploys to Fly.io through a fully automated CI/CD pipeline.
+A production-grade .NET 9 microservices platform built on Clean Architecture principles. Sixteen deployed services communicate via async messaging (MassTransit/RabbitMQ), Change Data Capture (Debezium/Kafka), and synchronous REST. Every service has its own PostgreSQL schema, transactional outbox/inbox, and Polly-backed resilience. The entire stack runs locally via .NET Aspire or Docker Compose and deploys to Fly.io through a fully automated CI/CD pipeline.
 
 [![CI](https://github.com/chidionyema/ritualworks-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/chidionyema/ritualworks-platform/actions/workflows/ci.yml)
 [![Deploy](https://github.com/chidionyema/ritualworks-platform/actions/workflows/deploy.yml/badge.svg)](https://github.com/chidionyema/ritualworks-platform/actions/workflows/deploy.yml)
 [![.NET 9](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+> **New here?** Start with **[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)** (zero-to-running in 5 minutes) or **[docs/INDEX.md](docs/INDEX.md)** (find any doc by role). To contribute, see **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ---
 
@@ -219,7 +221,7 @@ The Aspire dashboard opens at `http://localhost:15888`. All services are availab
 ### Option B — Docker Compose
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d
+docker compose -f deploy/compose/docker-compose.yml up -d
 dotnet run --project src/BffWeb/BffWeb.Api
 ```
 
@@ -261,7 +263,7 @@ ritualworks-platform/
   deploy/
     aspire/                      # .NET Aspire AppHost (Program.cs)
     fly/                         # bootstrap.sh, per-service fly.toml files
-  infra/                         # docker-compose.yml, Vault manifests, Tempo config
+  deploy/compose/                 # docker-compose.yml
   scripts/                       # check-architecture.sh, seed-vault-dev.sh
   docs/                          # Extended documentation
   .github/workflows/             # CI, Deploy, Nightly, CodeQL, post-deploy scan
@@ -489,7 +491,7 @@ Containers declared with `ContainerLifetime.Persistent` survive `Ctrl+C` and are
 
 ```bash
 # Start all infrastructure
-docker compose -f infra/docker-compose.yml up -d
+docker compose -f deploy/compose/docker-compose.yml up -d
 
 # Run a single service
 dotnet run --project src/Catalog/Catalog.Api
@@ -537,11 +539,7 @@ The primary region is `iad` (Washington, D.C.). Additional regions can be added 
 
 ## Contributing
 
-1. Fork the repository and create a feature branch from `main`.
-2. Follow the coding conventions in [Section 5](#5-development).
-3. Add tests at the appropriate layer (unit for logic, integration for persistence).
-4. Ensure `./scripts/check-architecture.sh` passes locally.
-5. Open a pull request — Claude PR Review will post an automated review within minutes.
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full guide: PR workflow, coding conventions, testing rules, pre-push checklist, and common pitfalls.
 
 ---
 

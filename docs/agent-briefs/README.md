@@ -32,10 +32,15 @@ Prerequisites for a parallelizable feature:
 
 If any of these fail, the feature is not yet ready for a wave — do an L0 scaffold first.
 
-## Active briefs
+## Brief status
 
-| Brief | Status | Companion docs |
-|---|---|---|
-| [`test-port-from-monolith.md`](./test-port-from-monolith.md) | open — Gemini in flight on T1.1-T1.4 | [`test-port-gap-report.md`](./test-port-gap-report.md) |
-| [`portfolio-bffweb-phase2.md`](./portfolio-bffweb-phase2.md) | open — depends on `feat/portfolio-bffweb-demos` (Phase 1) being merged first | none |
-| [`location-service-spec.md`](./location-service-spec.md) | draft — pending architectural review | none |
+| Brief | Status |
+|---|---|
+| [`audit-service-spec.md`](./audit-service-spec.md) | Complete — v1 deployed |
+| [`audit-decoupling-spec.md`](./audit-decoupling-spec.md) | Complete — event-shape-agnostic |
+| [`platform-completion-spec.md`](./platform-completion-spec.md) | Complete — auth + reservations shipped |
+| [`webhooks-service-spec.md`](./webhooks-service-spec.md) | Complete — deployed |
+| [`test-port-from-monolith.md`](./test-port-from-monolith.md) | In progress |
+| [`location-service-spec.md`](./location-service-spec.md) | Draft — pending review |
+| [`cdc-service-spec.md`](./cdc-service-spec.md) | Deferred — see [BACKLOG.md](../BACKLOG.md) |
+| [`k8s-platform-spec.md`](./k8s-platform-spec.md) | Vision — not yet implemented |

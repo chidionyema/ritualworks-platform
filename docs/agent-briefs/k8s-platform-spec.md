@@ -1,6 +1,6 @@
 # K8s Platform — End-to-End Spec
 
-**Status:** vision spec. Will spawn phase-specific implementation specs.
+**Status:** Vision spec (not implemented). Current production deployment uses Fly.io. See [GETTING-STARTED.md](../GETTING-STARTED.md) for local dev (Aspire) and [BACKLOG.md](../BACKLOG.md) for K8s migration priority.
 
 ## 1. Goal & non-goals
 

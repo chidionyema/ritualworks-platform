@@ -1,3 +1,5 @@
+> **Note:** This brief was written when the plan was Meilisearch. The actual implementation uses **Elasticsearch 8**. References to Meilisearch below are historical.
+
 # B6 — GET /search endpoint
 
 ## Goal

@@ -59,7 +59,7 @@ services). Coupling inventory + decoupling moves per existing service in
 | Payments              | done          | payment sessions, refunds, subscriptions              |
 | CheckoutOrchestrator  | done          | saga between Catalog/Orders/Payments                  |
 | Content               | done          | uploads, presigned URLs, virus scan                   |
-| Search                | done          | Meilisearch indexing + query                          |
+| Search                | done          | Elasticsearch indexing + query                        |
 | BffWeb                | done          | gateway/BFF                                           |
 | Notifications         | done (L0–L4)  | in-app + email + push templated delivery              |
 

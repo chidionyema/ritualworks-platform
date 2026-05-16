@@ -1,6 +1,6 @@
 # CDC Service — End-to-End Spec
 
-**Status:** spec — not yet implemented.
+**Status:** Spec only — not yet implemented. Current CDC uses Debezium/Kafka (see README). This spec describes an alternative WAL-direct approach; implementation deferred. See [BACKLOG.md](../BACKLOG.md) for priority.
 
 **Mode:** new service (introduces `cdc-svc`) + DB-level configuration on every existing service (NOT application code changes — see § 4). The wave will run mostly as `WAVE_MODE=modify` with a small new-service component.
 
@@ -343,7 +343,7 @@ fly postgres config update \
 | `checkout` | checkout_sagas (optional, only if a consumer requests) | 0-5min |
 | `audit` | SKIP — would create a feedback loop (audit's own data being captured by audit). | 0 |
 | `notifications` | SKIP unless a real consumer emerges; notifications is pull-driven (consumes intent, doesn't produce state others react to). | 0 |
-| `search` | SKIP — search owns its Meilisearch index, not state others react to. | 0 |
+| `search` | SKIP — search owns its Elasticsearch index, not state others react to. | 0 |
 | `bffweb` | SKIP — no DB. | 0 |
 
 Total producer integration: **~30 minutes of operator time** (one config update + 8 SQL statements committed to `infra/stateful/cdc-publications/`). The CI workflow that applies these is part of the cdc-svc rollout (T3 in § 11).
@@ -534,7 +534,7 @@ For each downstream service, integration tests run against the consumer + its re
 | Consumer | Test surface |
 |---|---|
 | **cache-invalidator** | Publish `cdc.entity.product.updated`; assert Redis key `catalog:product:<id>` deleted. Test config rule changes (add new entity_type → key pattern) → live reload picks them up. |
-| **search-svc CDC consumer** | Publish event for product; assert Meilisearch document mutated. Test delete event → document removed. Test config-mapped entity_type without index → no-op (not an error). |
+| **search-svc CDC consumer** | Publish event for product; assert Elasticsearch document mutated. Test delete event → document removed. Test config-mapped entity_type without index → no-op (not an error). |
 | **audit-svc data-mode** | Publish event; assert `data_audit_events` row persisted with correct payload-before/after. Test redaction config drops sensitive fields before persist. |
 | **webhooks-svc** | Register subscriber filter; publish matching event; assert HTTP POST fired with correct payload. Test failed delivery → retry + DLQ. |
 | **analytics-svc** | Publish event; assert warehouse-staging table has appended row. |

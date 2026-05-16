@@ -1,5 +1,7 @@
 # Audit Service — End-to-End Spec
 
+> **Status: v1 complete and deployed.** All phases (L0–L1D) shipped and running in production.
+
 Captures every domain event published on RabbitMQ to an append-only,
 queryable store. Provides a read API for compliance audits, support
 investigations ("what happened to order #1234?"), and security forensics.

@@ -1,5 +1,7 @@
 # Audit — decoupling refactor (modify existing service)
 
+> **Status: Complete.** Audit service is now event-shape-agnostic. All typed extractors replaced with reflection-based extraction.
+
 **Mode:** modify-existing-service. Run with `wave run`; auto-detect should set `WAVE_MODE=modify`.
 
 **Goal:** drop Audit's compile-time knowledge of specific Catalog and Identity event types. After this lands, `scripts/check-architecture.sh` should report 0 hard violations AND 0 soft warnings for Audit. The `using Haworks.Contracts.Catalog;` and `using Haworks.Contracts.Identity;` lines should not exist anywhere under `src/Audit/`.

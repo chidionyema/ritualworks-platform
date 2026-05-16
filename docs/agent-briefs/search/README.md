@@ -1,3 +1,5 @@
+> **Note:** These briefs were written when the plan was Meilisearch. The actual implementation uses **Elasticsearch 8**. All phases (B1-B7) are complete.
+
 # Gemini CLI agent protocol — Search service
 
 You are a Gemini CLI agent. Read this file **first**, then read the assigned brief (`B<n>-*.md`), then read the brief's **Inputs** section, then start work.

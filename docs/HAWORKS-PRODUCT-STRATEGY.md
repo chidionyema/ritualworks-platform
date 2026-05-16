@@ -1,5 +1,7 @@
 # Haworks: Product Strategy & Packaging Roadmap
 
+> **Status:** Strategic vision (2026). CLI tooling and NuGet SDK packaging are not yet implemented. See [docs/BACKLOG.md](BACKLOG.md) for current priorities.
+
 This document outlines the strategic vision for transforming the Haworks platform from a reference architecture into a highly distributable, enterprise-grade product.
 
 ---

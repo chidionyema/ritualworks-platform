@@ -1,6 +1,6 @@
 # ADR-0002: Aspire for Local Dev, kind+ArgoCD for Production-Shape Demo
 
-**Status:** Accepted
+**Status:** Partially superseded — local dev uses Aspire (unchanged); production deployment uses **Fly.io** (not Kind/K8s). K8s remains a future option; see `docs/agent-briefs/k8s-platform-spec.md`.
 **Date:** 2026-05-02
 **Deciders:** chidionyema
 

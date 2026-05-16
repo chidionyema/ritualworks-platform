@@ -1,3 +1,5 @@
+> **Note:** This brief was written when the plan was Meilisearch. The actual implementation uses **Elasticsearch 8**. References to Meilisearch below are historical.
+
 # B7 — BFF wiring + staging smoke
 
 ## Goal
