@@ -30,6 +30,9 @@ public class AppIdentityDbContext : IdentityDbContext<User>
         _environment = environment;
         _loggerFactory = loggerFactory;
         _currentUserService = currentUserService;
+
+        ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.TrackAll;
+        ChangeTracker.LazyLoadingEnabled = false;
     }
 
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
@@ -39,9 +42,6 @@ public class AppIdentityDbContext : IdentityDbContext<User>
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);
-
-        ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.TrackAll;
-        ChangeTracker.LazyLoadingEnabled = false;
 
         optionsBuilder.UseLoggerFactory(_loggerFactory);
 
