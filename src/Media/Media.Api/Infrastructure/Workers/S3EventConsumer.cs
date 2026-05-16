@@ -6,11 +6,6 @@ using Microsoft.Extensions.Options;
 
 namespace Haworks.Media.Api.Infrastructure.Workers;
 
-/// <summary>
-/// Background worker that polls an SQS queue for S3 ObjectCreated events.
-/// When a file is uploaded to S3, this worker detects it and triggers the virus scan pipeline,
-/// eliminating the need for the client to call POST /complete.
-/// </summary>
 public sealed class S3EventConsumer(
     IServiceScopeFactory scopeFactory,
     IAmazonSQS sqs,
@@ -18,23 +13,28 @@ public sealed class S3EventConsumer(
     ILogger<S3EventConsumer> logger) : BackgroundService
 {
     private readonly S3NotificationOptions _opts = opts.Value;
+    private int _consecutiveErrors;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var interval = TimeSpan.FromSeconds(_opts.PollIntervalSeconds);
-
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 await PollAsync(stoppingToken);
+                _consecutiveErrors = 0;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                logger.LogError(ex, "S3 event consumer iteration failed");
+                _consecutiveErrors++;
+                logger.LogError(ex, "S3 event consumer iteration failed (consecutive: {Count})", _consecutiveErrors);
             }
 
-            await Task.Delay(interval, stoppingToken);
+            // Exponential backoff on consecutive errors, capped at 60s
+            var delaySec = _consecutiveErrors > 0
+                ? Math.Min(60, (int)Math.Pow(2, _consecutiveErrors))
+                : _opts.PollIntervalSeconds;
+            await Task.Delay(TimeSpan.FromSeconds(delaySec), stoppingToken);
         }
     }
 
@@ -60,34 +60,48 @@ public sealed class S3EventConsumer(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to process S3 event message {MessageId}", message.MessageId);
-                // Message will become visible again after visibility timeout expires
             }
         }
     }
 
     private async Task HandleMessageAsync(Message message, CancellationToken ct)
     {
-        // S3 event notification JSON structure
         using var doc = JsonDocument.Parse(message.Body);
 
-        // Handle SNS-wrapped messages (S3 → SNS → SQS)
-        JsonElement records;
-        if (doc.RootElement.TryGetProperty("Records", out records))
+        // Collect media IDs — handle both S3→SQS and S3→SNS→SQS formats.
+        // For SNS-wrapped messages, clone the Records element before the inner
+        // JsonDocument is disposed to avoid use-after-free.
+        var mediaIds = new List<Guid>();
+
+        if (doc.RootElement.TryGetProperty("Records", out var directRecords))
         {
-            // Direct S3 → SQS
+            ExtractMediaIds(directRecords, mediaIds);
         }
         else if (doc.RootElement.TryGetProperty("Message", out var snsMessage))
         {
-            // SNS → SQS wrapper
             using var inner = JsonDocument.Parse(snsMessage.GetString()!);
-            records = inner.RootElement.GetProperty("Records");
+            if (inner.RootElement.TryGetProperty("Records", out var snsRecords))
+            {
+                // Clone before inner is disposed
+                var cloned = snsRecords.Clone();
+                ExtractMediaIds(cloned, mediaIds);
+            }
         }
         else
         {
-            logger.LogWarning("Unrecognized S3 event format: {Body}", message.Body[..Math.Min(500, message.Body.Length)]);
+            logger.LogWarning("Unrecognized S3 event format: {Body}",
+                message.Body[..Math.Min(500, message.Body.Length)]);
             return;
         }
 
+        foreach (var mediaId in mediaIds)
+        {
+            await TriggerScanAsync(mediaId, ct);
+        }
+    }
+
+    private static void ExtractMediaIds(JsonElement records, List<Guid> mediaIds)
+    {
         foreach (var record in records.EnumerateArray())
         {
             var eventName = record.GetProperty("eventName").GetString();
@@ -95,16 +109,8 @@ public sealed class S3EventConsumer(
                 continue;
 
             var s3Key = record.GetProperty("s3").GetProperty("object").GetProperty("key").GetString();
-            if (string.IsNullOrEmpty(s3Key)) continue;
-
-            // s3Key is the MediaFile.Id (GUID)
-            if (!Guid.TryParse(s3Key, out var mediaId))
-            {
-                logger.LogDebug("Skipping S3 event for non-media key: {Key}", s3Key);
-                continue;
-            }
-
-            await TriggerScanAsync(mediaId, ct);
+            if (!string.IsNullOrEmpty(s3Key) && Guid.TryParse(s3Key, out var mediaId))
+                mediaIds.Add(mediaId);
         }
     }
 
@@ -122,13 +128,11 @@ public sealed class S3EventConsumer(
 
         if (file.Status != MediaStatus.Pending)
         {
-            logger.LogDebug("S3 event for already-processed media {MediaId} (status={Status}) — skipping", mediaId, file.Status);
+            logger.LogDebug("S3 event for already-processed media {MediaId} (status={Status}) — skipping",
+                mediaId, file.Status);
             return;
         }
 
-        // Trigger scan via MediatR
-        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
-        // Use a system-level current user since this is server-initiated
         var scanner = scope.ServiceProvider.GetRequiredService<IVirusScanner>();
         var s3 = scope.ServiceProvider.GetRequiredService<IS3Service>();
 
@@ -150,6 +154,10 @@ public sealed class S3EventConsumer(
             await tx.CommitAsync(ct);
 
             logger.LogInformation("S3 event scan complete for {MediaId}: {Status}", mediaId, file.Status);
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        {
+            logger.LogInformation("Concurrent scan for {MediaId} — already handled", mediaId);
         }
         catch
         {
