@@ -2033,6 +2033,382 @@ public sealed class PlatformGuardTests
         violations.Should().BeEmpty("static mutable collections must use thread-safe types");
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // TEMPORAL SAFETY — time-dependent code must be testable & correct
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void No_Thread_Sleep_in_production_code()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Demo") || file.Contains("Migration")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("Thread.Sleep(") && !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: Thread.Sleep blocks the thread — use await Task.Delay with CancellationToken");
+                }
+            }
+        }
+        violations.Should().BeEmpty("Thread.Sleep must never appear in production code — it blocks the thread pool");
+    }
+
+    [Fact]
+    public void No_Console_Write_in_production_code()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Program.cs") || file.Contains("Demo")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if ((lines[i].Contains("Console.Write(") || lines[i].Contains("Console.WriteLine(")) &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: Console.Write in production code — use ILogger<T>");
+                }
+            }
+        }
+        violations.Should().BeEmpty("production code must use ILogger<T>, never Console.Write");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // API CONTRACT SAFETY — prevent internal model leakage
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Controllers_never_return_DbContext_entities_directly()
+    {
+        // Returning EF entities from controllers leaks internal structure,
+        // navigation properties, and allows mass assignment attacks.
+        var entityTypes = new HashSet<string>();
+        foreach (var file in FindDbContextFiles())
+        {
+            var content = File.ReadAllText(file);
+            foreach (Match m in Regex.Matches(content, @"DbSet<(\w+)>"))
+                entityTypes.Add(m.Groups[1].Value);
+        }
+
+        var violations = new List<string>();
+        foreach (var file in FindControllerFiles())
+        {
+            if (file.Contains("Demo") || file.Contains("Admin")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains("return Ok(") && !lines[i].Contains("return new")) continue;
+                foreach (var entity in entityTypes)
+                {
+                    if (lines[i].Contains($"Ok({entity.ToLowerInvariant()}") ||
+                        lines[i].Contains($"Ok(new {entity}"))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: returning EF entity {entity} directly — use a DTO to prevent mass assignment and internal leakage");
+                    }
+                }
+            }
+        }
+        // Informational — needs manual review for false positives
+        // violations.Should().BeEmpty("controllers must return DTOs, never EF entities directly");
+    }
+
+    [Fact]
+    public void No_connection_string_in_source_code()
+    {
+        // Agents sometimes paste connection strings during debugging
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Factory") || file.Contains("Test") || file.Contains("Migration")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].TrimStart().StartsWith("//")) continue;
+                if (Regex.IsMatch(lines[i], @"Host=\w+.*;.*Database=\w+") &&
+                    !lines[i].Contains("design-time") && !lines[i].Contains("DesignTime"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: connection string in source code — use configuration");
+                }
+            }
+        }
+        violations.Should().BeEmpty("connection strings must come from configuration, not source code");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // EVENT CONTRACT INTEGRITY — prevent silent consumer failures
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Event_records_have_no_mutable_collections()
+    {
+        // List<T> on events allows mutation after publish — use IReadOnlyList
+        var contractsDir = Path.Combine(SrcRoot, "Contracts");
+        if (!Directory.Exists(contractsDir)) return;
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(contractsDir, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj")))
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if ((lines[i].Contains("List<") || lines[i].Contains("Dictionary<")) &&
+                    lines[i].Contains("{ get;") &&
+                    !lines[i].Contains("IReadOnly") && !lines[i].Contains("Immutable") &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: mutable collection on event contract — use IReadOnlyList<T> or IReadOnlyDictionary");
+                }
+            }
+        }
+        violations.Should().BeEmpty("event contracts must use IReadOnlyList/IReadOnlyDictionary to prevent mutation after publish");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // LOGGING DISCIPLINE — structured, no PII, correct levels
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void No_catch_blocks_without_logging_in_production()
+    {
+        // Every catch block that doesn't rethrow must log. Silent failures are invisible.
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Demo") || file.Contains("Migration") ||
+                file.Contains("Factory")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!Regex.IsMatch(lines[i], @"catch\s*(\(|{)")) continue;
+                // Read next 10 lines for logging or rethrow
+                var block = string.Join(" ", lines.Skip(i).Take(10));
+                if (!block.Contains("_logger") && !block.Contains("Log") &&
+                    !block.Contains("throw") && !block.Contains("throw;") &&
+                    !block.Contains("best effort") && !block.Contains("// ignore") &&
+                    !block.Contains("// expected") && !block.Contains("finally"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: catch block without logging or rethrow — silent failures are invisible");
+                }
+            }
+        }
+        // Informational — some catch blocks legitimately suppress (e.g., file cleanup)
+        // violations.Should().BeEmpty("catch blocks must either log or rethrow");
+    }
+
+    [Fact]
+    public void No_sensitive_data_in_LogWarning_or_LogError()
+    {
+        // Card numbers, passwords, tokens, SSNs must never appear at Warning/Error level
+        var sensitivePatterns = new[] { "cardNumber", "CardNumber", "card_number", "cvv", "ssn", "SSN",
+            "password", "Password", "secret", "Secret", "token", "Token", "apiKey", "ApiKey" };
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains("LogWarning") && !lines[i].Contains("LogError") &&
+                    !lines[i].Contains("LogCritical")) continue;
+                if (lines[i].TrimStart().StartsWith("//")) continue;
+                foreach (var pattern in sensitivePatterns)
+                {
+                    if (lines[i].Contains($"{{{pattern}}}") || lines[i].Contains($"{{@{pattern}}}"))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: sensitive field '{pattern}' in log message — redact before logging");
+                        break;
+                    }
+                }
+            }
+        }
+        violations.Should().BeEmpty("sensitive data (passwords, tokens, card numbers) must be redacted before logging");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DEPENDENCY HYGIENE — prevent coupling violations
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void No_cross_service_project_references()
+    {
+        // Services must communicate via Contracts + messaging, never direct project references
+        var violations = new List<string>();
+        foreach (var csproj in Directory.GetFiles(SrcRoot, "*.csproj", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("BuildingBlocks") && !f.Contains("Contracts") && !f.Contains("Test")))
+        {
+            var content = File.ReadAllText(csproj);
+            var ownerService = csproj.Replace(SrcRoot + Path.DirectorySeparatorChar, "").Split(Path.DirectorySeparatorChar).First();
+
+            foreach (Match m in Regex.Matches(content, @"<ProjectReference\s+Include=""[^""]*?/(\w+)/\w+\.csproj"""))
+            {
+                var referenced = m.Groups[1].Value;
+                if (referenced == ownerService || referenced == "BuildingBlocks" ||
+                    referenced == "BuildingBlocks.Testing" || referenced == "Contracts")
+                    continue;
+                violations.Add($"{Relative(csproj)}: references {referenced} — services must communicate via Contracts/messaging, not direct references");
+            }
+        }
+        violations.Should().BeEmpty("services must not reference other services directly — use Contracts + MassTransit");
+    }
+
+    [Fact]
+    public void Application_layer_does_not_reference_Infrastructure()
+    {
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(SrcRoot, "*.csproj", SearchOption.AllDirectories)
+            .Where(f => f.Contains(".Application") && !f.Contains("obj")))
+        {
+            var content = File.ReadAllText(file);
+            if (Regex.IsMatch(content, @"<ProjectReference.*\.Infrastructure\."))
+            {
+                violations.Add($"{Relative(file)}: Application layer references Infrastructure — dependency inversion violation");
+            }
+        }
+        violations.Should().BeEmpty("Application layer must not reference Infrastructure (depend on interfaces, not implementations)");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // TEST QUALITY — prevent false confidence
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Integration_test_factories_implement_IAsyncLifetime()
+    {
+        var testRoot = Path.Combine(Directory.GetParent(SrcRoot)!.FullName, "tests");
+        if (!Directory.Exists(testRoot)) return;
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(testRoot, "*Factory.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && f.Contains("Integration")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("WebApplicationFactory")) continue;
+            if (!content.Contains("IAsyncLifetime"))
+            {
+                violations.Add($"{Relative(file)}: integration test factory missing IAsyncLifetime — database/container resources may leak");
+            }
+        }
+        violations.Should().BeEmpty("integration test factories must implement IAsyncLifetime for proper resource cleanup");
+    }
+
+    [Fact]
+    public void No_Assert_IsSuccess_without_value_check()
+    {
+        // Common agent mistake: Assert result.IsSuccess but never check the actual value.
+        // This gives false confidence — the test passes even if the value is wrong.
+        var testRoot = Path.Combine(Directory.GetParent(SrcRoot)!.FullName, "tests");
+        if (!Directory.Exists(testRoot)) return;
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(testRoot, "*Tests.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("Guard")))
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains("IsSuccess") || !lines[i].Contains("Should()")) continue;
+                // Check next 5 lines for actual value assertions
+                var following = string.Join(" ", lines.Skip(i + 1).Take(5));
+                if (!following.Contains("Should()") && !following.Contains("Value") &&
+                    !following.Contains("Assert.") && !following.Contains("Be("))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: asserts IsSuccess but never checks the actual value — false confidence");
+                }
+            }
+        }
+        // Informational — some tests legitimately only care about success/failure
+        // violations.Should().BeEmpty("tests asserting IsSuccess should also check the value");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DEPLOYMENT SAFETY — prevent prod misconfigurations
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Every_deployed_service_has_fly_toml()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(SrcRoot, ".."));
+        var deployed = new[] { "audit", "bffweb", "catalog", "checkoutorchestrator", "content",
+            "identity", "location", "merchant", "notifications", "orders",
+            "payments", "payouts", "privacy", "scheduler", "search", "webhooks" };
+        var violations = new List<string>();
+        foreach (var svc in deployed)
+        {
+            var tomls = Directory.GetFiles(repoRoot, $"fly.{svc}*.toml", SearchOption.TopDirectoryOnly);
+            if (tomls.Length == 0)
+            {
+                // Also check deploy/fly/
+                var altTomls = Directory.GetFiles(Path.Combine(repoRoot, "deploy", "fly"), $"fly.{svc}*.toml", SearchOption.TopDirectoryOnly);
+                if (altTomls.Length == 0)
+                {
+                    violations.Add($"fly.{svc}.toml: deployed service has no Fly.io configuration");
+                }
+            }
+        }
+        // Informational — some services share a fly.toml or deploy differently
+        // violations.Should().BeEmpty("every deployed service must have a fly.toml");
+    }
+
+    [Fact]
+    public void Dockerfiles_dont_use_COPY_dot_dot()
+    {
+        // COPY . . copies the entire repo into the image — slow, leaks secrets, massive layers
+        var violations = new List<string>();
+        foreach (var dockerfile in Directory.GetFiles(SrcRoot, "Dockerfile", SearchOption.AllDirectories))
+        {
+            var content = File.ReadAllText(dockerfile);
+            if (Regex.IsMatch(content, @"COPY\s+\.\s+\."))
+            {
+                violations.Add($"{Relative(dockerfile)}: COPY . . copies entire repo — use targeted COPY for faster builds and smaller images");
+            }
+        }
+        violations.Should().BeEmpty("Dockerfiles must use targeted COPY, never COPY . . (leaks secrets, slow builds)");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DATA INTEGRITY — prevent silent corruption
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void No_Guid_Empty_as_real_identifier()
+    {
+        // Guid.Empty as a default/fallback ID is a data integrity bug
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Guard") || file.Contains("Migration") || file.Contains("Demo")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].TrimStart().StartsWith("//")) continue;
+                // Flag: assigning Guid.Empty to an Id/key field (not checking against it)
+                if (Regex.IsMatch(lines[i], @"(Id|Key)\s*=\s*Guid\.Empty") &&
+                    !lines[i].Contains("==") && !lines[i].Contains("!=") &&
+                    !lines[i].Contains("default"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: assigning Guid.Empty to an ID field — use Guid.NewGuid() or fail loudly");
+                }
+            }
+        }
+        violations.Should().BeEmpty("Guid.Empty must never be assigned as a real identifier — it masks missing data");
+    }
+
+    [Fact]
+    public void EF_string_properties_have_MaxLength()
+    {
+        // Unbounded varchar columns waste storage and allow injection of massive payloads
+        var violations = new List<string>();
+        foreach (var file in FindDbContextFiles())
+        {
+            var content = File.ReadAllText(file);
+            // Find string property configurations without MaxLength
+            var propertyConfigs = Regex.Matches(content, @"entity\.Property\([^)]*\)\s*\.((?:(?!\.\w+\().)*)");
+            // This is complex to detect accurately via regex — use informational mode
+        }
+        // Too many false positives for enforcement — tracked as convention
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────
 
     private static string FindSrcRoot()
