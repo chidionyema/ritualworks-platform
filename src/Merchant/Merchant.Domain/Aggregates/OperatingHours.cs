@@ -8,8 +8,12 @@ public sealed class OperatingHours : AuditableEntity
     public required int DayOfWeek { get; init; } // 0-6
     public required TimeSpan OpenTime { get; set; }
     public required TimeSpan CloseTime { get; set; }
+    public bool IsOpen { get; private set; } = true;
 
-    public static OperatingHours Create(Guid merchantId, int dayOfWeek, TimeSpan openTime, TimeSpan closeTime)
+    public void Close() => IsOpen = false;
+    public void Open() => IsOpen = true;
+
+    public static OperatingHours Create(Guid merchantId, int dayOfWeek, TimeSpan openTime, TimeSpan closeTime, bool isOpen = true)
     {
         return new OperatingHours
         {
@@ -17,7 +21,8 @@ public sealed class OperatingHours : AuditableEntity
             MerchantId = merchantId,
             DayOfWeek = dayOfWeek,
             OpenTime = openTime,
-            CloseTime = closeTime
+            CloseTime = closeTime,
+            IsOpen = isOpen
         };
     }
 }
