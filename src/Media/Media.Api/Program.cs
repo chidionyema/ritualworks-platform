@@ -33,7 +33,9 @@ builder.Services.AddDbContext<MediaDbContext>(options =>
 
 // ── Health checks ──
 builder.Services.AddHealthChecks()
-    .AddDbHealthCheck<MediaDbContext>();
+    .AddDbHealthCheck<MediaDbContext>()
+    .AddCheck<Haworks.Media.Api.Infrastructure.Health.ClamAvHealthCheck>("clamav")
+    .AddCheck<Haworks.Media.Api.Infrastructure.Health.S3HealthCheck>("s3");
 
 // ── Upload options ──
 builder.Services.AddOptions<UploadOptions>()

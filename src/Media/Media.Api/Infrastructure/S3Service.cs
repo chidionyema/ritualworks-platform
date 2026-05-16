@@ -13,6 +13,7 @@ public interface IS3Service
     Task CompleteMultipartUploadAsync(string key, string uploadId, IList<PartETag> parts, CancellationToken ct);
     Task AbortMultipartUploadAsync(string key, string uploadId, CancellationToken ct);
     Task UploadAsync(string key, string mimeType, Stream content, CancellationToken ct);
+    string GeneratePresignedGetUrl(string key);
 }
 
 /// <summary>
@@ -159,5 +160,20 @@ public class S3Service : IS3Service
             ContentType = mimeType,
             InputStream = content,
         }, ct);
+    }
+
+    public string GeneratePresignedGetUrl(string key)
+    {
+        if (!_opts.Enabled)
+            return $"https://s3-disabled.local/{_opts.BucketName}/{key}";
+
+        return _s3.GetPreSignedURL(new GetPreSignedUrlRequest
+        {
+            BucketName = _opts.BucketName,
+            Key = key,
+            Verb = HttpVerb.GET,
+            Expires = DateTime.UtcNow.AddMinutes(_opts.PresignedUrlExpiryMinutes),
+            Protocol = _presignProtocol,
+        });
     }
 }
