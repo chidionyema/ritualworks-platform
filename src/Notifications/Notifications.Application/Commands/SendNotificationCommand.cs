@@ -139,7 +139,9 @@ internal sealed class SendNotificationCommandHandler(
             request.TemplateId,
             idempotencyKey,
             request.UserId,
-            request.Priority
+            request.Priority,
+            variables: request.Variables as Dictionary<string, object>
+                ?? new Dictionary<string, object>(request.Variables)
         );
     }
 }

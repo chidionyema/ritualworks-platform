@@ -29,8 +29,6 @@ public class LocationDbContext : DbContext, ILocationDbContext
         _environment = environment;
         _loggerFactory = loggerFactory;
         _currentUserService = currentUserService;
-
-        ChangeTracker.LazyLoadingEnabled = false;
     }
 
     public DbSet<Address> Addresses => Set<Address>();
@@ -38,6 +36,7 @@ public class LocationDbContext : DbContext, ILocationDbContext
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);
+        ChangeTracker.LazyLoadingEnabled = false;
 
         optionsBuilder.UseLoggerFactory(_loggerFactory);
 
