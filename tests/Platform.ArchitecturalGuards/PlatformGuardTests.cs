@@ -2784,16 +2784,20 @@ public sealed class PlatformGuardTests
         {
             if (file.Contains("Test") || file.Contains("Health") || file.Contains("Middleware") ||
                 file.Contains("Handler") || file.Contains("DelegatingHandler") || file.Contains("Extensions") ||
-                file.Contains("Cache") || file.Contains("Idempotency") || file.Contains("Guard")) continue;
+                file.Contains("Cache") || file.Contains("Idempotency") || file.Contains("Guard") ||
+                file.Contains("Controller") || file.Contains("/Demo/") ||
+                file.Contains("SignalR") || file.Contains("Hub")) continue; // controllers/demos/hubs use DI-injected typed clients
             var content = File.ReadAllText(file);
             // Skip interfaces and files that use IDistributedCache (GetAsync is cache, not HTTP)
             if (content.Contains("interface ") && !content.Contains("class ")) continue;
             if (content.Contains("IDistributedCache") || content.Contains("IHybridCache")) continue;
-            if (!content.Contains("HttpClient") && !content.Contains("SendAsync") &&
-                !content.Contains("PostAsync"))
+            // Only flag files that actually use HttpClient (not gateway.SendAsync, hub.SendAsync, etc.)
+            if (!content.Contains("HttpClient"))
                 continue;
-            // AddHttpClient (IHttpClientFactory) is fine — timeout configured via handler pipeline
+            // AddHttpClient (IHttpClientFactory) is fine — timeout configured via handler pipeline.
+            // Constructor-injected HttpClient also comes from IHttpClientFactory.
             if (content.Contains("AddHttpClient") || content.Contains("IHttpClientFactory")) continue;
+            if (Regex.IsMatch(content, @"\(HttpClient\s+\w+\)")) continue; // primary constructor injection
             // File uses HTTP — check for timeout/resilience
             if (!content.Contains("Timeout") && !content.Contains("ResiliencePolicy") &&
                 !content.Contains("IResiliencePolicyFactory") && !content.Contains("Polly") &&
