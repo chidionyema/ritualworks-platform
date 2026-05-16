@@ -3,6 +3,7 @@ using System;
 using Haworks.Payouts.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Haworks.Payouts.Infrastructure.Migrations
 {
     [DbContext(typeof(PayoutsDbContext))]
-    partial class PayoutsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260516105056_FinancialPrecisionAndRefundSupport")]
+    partial class FinancialPrecisionAndRefundSupport
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

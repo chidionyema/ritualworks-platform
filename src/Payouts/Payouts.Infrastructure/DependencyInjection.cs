@@ -32,6 +32,7 @@ public static class DependencyInjection
             services.AddMassTransit(x => {
                 x.SetKebabCaseEndpointNameFormatter();
                 x.AddConsumer<PaymentCompletedConsumer>();
+                x.AddConsumer<RefundIssuedConsumer>();
                 x.AddEntityFrameworkOutbox<PayoutsDbContext>(o =>
                 {
                     o.UsePostgres();
@@ -40,11 +41,10 @@ public static class DependencyInjection
                     o.DuplicateDetectionWindow = TimeSpan.FromMinutes(30);
                 });
                 x.UsingRabbitMq((context, cfg) => {
-                    var rabbitMqConfig = configuration.GetSection("RabbitMq");
-                    cfg.Host(rabbitMqConfig["Host"], "/", h => {
-                        h.Username(rabbitMqConfig["Username"] ?? throw new InvalidOperationException("RabbitMq:Username is required"));
-                        h.Password(rabbitMqConfig["Password"] ?? throw new InvalidOperationException("RabbitMq:Password is required"));
-                    });
+                    var rabbitConn = configuration.GetConnectionString("rabbitmq")
+                        ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is required");
+                    cfg.Host(new Uri(rabbitConn));
+                    cfg.UseDelayedMessageScheduler();
                     cfg.ConfigureStandardRabbitMq(context);
                 });
             });

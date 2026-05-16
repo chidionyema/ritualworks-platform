@@ -14,6 +14,12 @@ public sealed class LedgerEntry : AuditableEntity
 
     public static LedgerEntry Create(Guid accountId, Guid transactionId, decimal amount, EntryType type, string description, string referenceId)
     {
+        if (accountId == Guid.Empty) throw new ArgumentException("AccountId required", nameof(accountId));
+        if (transactionId == Guid.Empty) throw new ArgumentException("TransactionId required", nameof(transactionId));
+        if (amount <= 0) throw new ArgumentException("Amount must be positive", nameof(amount));
+        ArgumentException.ThrowIfNullOrWhiteSpace(description);
+        ArgumentException.ThrowIfNullOrWhiteSpace(referenceId);
+
         return new LedgerEntry
         {
             Id = Guid.NewGuid(),
