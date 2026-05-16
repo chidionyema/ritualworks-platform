@@ -30,7 +30,9 @@ public class MediaFile
 
     private MediaFile() { }
 
-    public static MediaFile Create(string fileName, string hash, long size, string mimeType, string ownerId)
+    public static MediaFile Create(
+        string fileName, string hash, long size, string mimeType, string ownerId,
+        TimeProvider? timeProvider = null)
     {
         return new MediaFile
         {
@@ -41,7 +43,7 @@ public class MediaFile
             MimeType = mimeType,
             Status = MediaStatus.Pending,
             OwnerId = ownerId,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime,
             UploadKind = UploadKind.SinglePart,
         };
     }
