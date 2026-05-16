@@ -66,12 +66,13 @@ public static class DependencyInjection
             // reserved. Uses the broker's delay mechanism (RabbitMQ delayed-
             // message-exchange plugin) when available.
             mt.AddDelayedMessageScheduler();
+            mt.AddConsumer<Haworks.BuildingBlocks.Messaging.GlobalFaultConsumer>();
 
             mt.AddEntityFrameworkOutbox<CheckoutDbContext>(o =>
             {
                 o.UsePostgres();
                 o.UseBusOutbox();
-                o.QueryDelay = TimeSpan.FromSeconds(1);
+                o.QueryDelay = TimeSpan.FromMilliseconds(100);
                 o.DuplicateDetectionWindow = TimeSpan.FromMinutes(30);
             });
 

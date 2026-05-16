@@ -42,6 +42,7 @@ public static class DependencyInjection
         {
             x.SetKebabCaseEndpointNameFormatter();
             x.AddDelayedMessageScheduler();
+            x.AddConsumer<Haworks.BuildingBlocks.Messaging.GlobalFaultConsumer>();
 
             x.AddSagaStateMachine<PrivacyRequestStateMachine, PrivacyRequestState, PrivacyRequestSagaDefinition>()
                 .EntityFrameworkRepository(r =>
@@ -54,6 +55,7 @@ public static class DependencyInjection
             {
                 o.UsePostgres();
                 o.UseBusOutbox();
+                o.QueryDelay = TimeSpan.FromMilliseconds(100);
                 o.DuplicateDetectionWindow = TimeSpan.FromMinutes(30);
             });
 

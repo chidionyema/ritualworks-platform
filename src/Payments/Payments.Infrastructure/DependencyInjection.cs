@@ -168,10 +168,12 @@ public static class DependencyInjection
         {
             mt.SetKebabCaseEndpointNameFormatter();
             mt.AddDelayedMessageScheduler();
+            mt.AddConsumer<GlobalFaultConsumer>();
             mt.AddEntityFrameworkOutbox<PaymentDbContext>(o =>
             {
                 o.UsePostgres();
                 o.UseBusOutbox();
+                o.QueryDelay = TimeSpan.FromMilliseconds(100);
                 o.DuplicateDetectionWindow = TimeSpan.FromMinutes(30);
             });
 
