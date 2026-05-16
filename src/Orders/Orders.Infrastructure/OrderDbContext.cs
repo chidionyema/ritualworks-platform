@@ -24,8 +24,6 @@ public class OrderDbContext : DbContext
         _environment = environment;
         _loggerFactory = loggerFactory;
         _currentUserService = currentUserService;
-
-        ChangeTracker.LazyLoadingEnabled = false;
     }
 
     public DbSet<Order> Orders => Set<Order>();
@@ -36,6 +34,7 @@ public class OrderDbContext : DbContext
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);
+        ChangeTracker.LazyLoadingEnabled = false;
         optionsBuilder.UseLoggerFactory(_loggerFactory);
         if (_environment.IsDevelopment()) optionsBuilder.EnableSensitiveDataLogging();
     }

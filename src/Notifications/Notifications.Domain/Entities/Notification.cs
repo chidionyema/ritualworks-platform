@@ -32,6 +32,7 @@ public sealed class Notification : AuditableEntity
     public NotificationPriority Priority { get; private set; }
     public string Subject { get; private set; } = string.Empty;
     public string Body { get; private set; } = string.Empty;
+    public Dictionary<string, object>? Variables { get; private set; }
     public string? ErrorMessage { get; private set; }
     public DateTime? SentAt { get; private set; }
     public DateTime? DeliveredAt { get; private set; }
@@ -53,6 +54,7 @@ public sealed class Notification : AuditableEntity
     /// <param name="priority">Delivery priority; defaults to Normal.</param>
     /// <param name="subject">Initial subject line (may be overwritten by render).</param>
     /// <param name="body">Initial body (may be overwritten by render).</param>
+    /// <param name="variables">Template variables for rendering (optional).</param>
     public static Notification Create(
         string recipient,
         NotificationChannel channel,
@@ -61,7 +63,8 @@ public sealed class Notification : AuditableEntity
         string? userId = null,
         NotificationPriority priority = NotificationPriority.Normal,
         string subject = "",
-        string body = "")
+        string body = "",
+        Dictionary<string, object>? variables = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(recipient);
         ArgumentException.ThrowIfNullOrWhiteSpace(templateId);
@@ -77,6 +80,7 @@ public sealed class Notification : AuditableEntity
             Priority = priority,
             Subject = subject ?? string.Empty,
             Body = body ?? string.Empty,
+            Variables = variables,
             Status = NotificationStatus.Created,
         };
     }
@@ -86,6 +90,21 @@ public sealed class Notification : AuditableEntity
     {
         EnsureTransitionFrom(nameof(MarkRendering), NotificationStatus.Created);
         Status = NotificationStatus.Rendering;
+        Touch();
+    }
+
+    /// <summary>
+    /// Replaces Subject/Body with rendered content. Must be called while in Rendering state
+    /// (between MarkRendering and MarkQueued).
+    /// </summary>
+    public void SetRenderedContent(string subject, string body)
+    {
+        if (Status != NotificationStatus.Rendering)
+            throw new InvalidOperationException(
+                $"SetRenderedContent requires Rendering state, but current state is {Status}");
+
+        Subject = subject ?? string.Empty;
+        Body = body ?? string.Empty;
         Touch();
     }
 

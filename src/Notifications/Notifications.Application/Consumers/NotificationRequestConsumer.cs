@@ -100,10 +100,7 @@ public sealed class NotificationRequestConsumer(
             var template = await templateSelector.SelectAsync(
                 notification.TemplateId, DefaultLocale, notification.Channel);
 
-            // Variables aren't yet captured on the Notification aggregate
-            // (L1.A pending — Variables column / RenderContext). Pass an empty
-            // map; renderer tolerates this.
-            var variables = new Dictionary<string, object>();
+            var variables = notification.Variables ?? new Dictionary<string, object>();
 
             if (template is not null)
             {
@@ -130,13 +127,9 @@ public sealed class NotificationRequestConsumer(
                 notification.Id);
         }
 
-        // The gateway reads rendered content from the aggregate post-render.
-        // Once L1.B finalises the payload contract, extract a RenderedMessage VO
-        // to avoid mutating via reflection.
-        _ = renderedSubject; _ = renderedBody;
+        notification.SetRenderedContent(renderedSubject, renderedBody);
+        await repository.SaveChangesAsync(ct);
 
-        // Step 3: Rendering -> Queued. The gateway treats Queued as the
-        // pre-condition for MarkSent/MarkFailed.
         notification.MarkQueued();
 
         // Step 4: dispatch via the channel-appropriate gateway. The gateway
