@@ -87,15 +87,26 @@ public sealed class EndToEndCaptureTests : IClassFixture<AuditWebAppFactory>
         // We expect at least 3 events (Order, Payment, StockReservationFailed).
         // VaultRotationStageEvent has no EntityId/PaymentId so the stub extractor
         // sets entityId="" which may not land reliably in all environments.
+        //
+        // The polling query wraps transient Npgsql failures (57P01 — connection
+        // recycled by the Testcontainer) so a single stale-connection event
+        // doesn't fail the entire test.
         List<AuditEvent>? events = null;
         for (int i = 0; i < 60; i++)
         {
-            await using var pollScope = _factory.Services.CreateAsyncScope();
-            var pollDb = pollScope.ServiceProvider.GetRequiredService<AuditDbContext>();
-            events = await pollDb.AuditEvents.AsNoTracking()
-                .Where(e => e.EntityId == orderId.ToString())
-                .ToListAsync();
-            if (events.Count >= 3) break;
+            try
+            {
+                await using var pollScope = _factory.Services.CreateAsyncScope();
+                var pollDb = pollScope.ServiceProvider.GetRequiredService<AuditDbContext>();
+                events = await pollDb.AuditEvents.AsNoTracking()
+                    .Where(e => e.EntityId == orderId.ToString())
+                    .ToListAsync();
+                if (events.Count >= 3) break;
+            }
+            catch (Exception ex) when (IsTransientPostgres(ex))
+            {
+                // Stale pooled connection — retry after brief pause
+            }
             await Task.Delay(500);
         }
 
@@ -106,5 +117,23 @@ public sealed class EndToEndCaptureTests : IClassFixture<AuditWebAppFactory>
         // PaymentCompletedEvent has both OrderId and PaymentId — TestStubExtractor uses OrderId (checked first)
         events.Should().Contain(e => e.EventType == nameof(PaymentCompletedEvent) && e.EntityId == orderId.ToString());
         events.Should().Contain(e => e.EventType == nameof(StockReservationFailedEvent) && e.EntityId == orderId.ToString());
+    }
+
+    /// <summary>
+    /// Detects Npgsql transient failures (connection recycled, admin shutdown, etc.)
+    /// so the polling loop can retry instead of failing the test.
+    /// </summary>
+    private static bool IsTransientPostgres(Exception ex)
+    {
+        // Walk the exception chain looking for Npgsql transient indicators
+        for (var current = ex; current != null; current = current.InnerException)
+        {
+            var msg = current.Message;
+            // 57P01 = admin shutdown, 57P03 = cannot connect, 08006 = connection failure
+            if (msg.Contains("57P01") || msg.Contains("57P03") || msg.Contains("08006") ||
+                msg.Contains("transient failure") || msg.Contains("broken state"))
+                return true;
+        }
+        return false;
     }
 }
