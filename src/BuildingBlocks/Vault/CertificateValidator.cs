@@ -70,7 +70,7 @@ public class CertificateValidator : ICertificateValidator
         // 4. Development-only bypass
         if (policyErrors.HasFlag(SslPolicyErrors.RemoteCertificateChainErrors))
         {
-            var isDev = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development";
+            var isDev = string.Equals(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"), "Development", StringComparison.Ordinal);
             if (isDev && options.AllowChainErrorsInDevelopment)
             {
                 _logger.LogWarning("Allowing chain errors in development (INSECURE).");

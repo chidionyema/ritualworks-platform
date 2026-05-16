@@ -478,7 +478,7 @@ public sealed class ResiliencePolicyFactory : IResiliencePolicyFactory
     private static bool IsStripeTransient(Exception ex)
     {
         var typeName = ex.GetType().Name;
-        if (typeName != "StripeException") return false;
+        if (!string.Equals(typeName, "StripeException", StringComparison.Ordinal)) return false;
 
         var stripeErrorProp = ex.GetType().GetProperty("StripeError");
         var stripeError = stripeErrorProp?.GetValue(ex);
@@ -492,7 +492,7 @@ public sealed class ResiliencePolicyFactory : IResiliencePolicyFactory
 
     private static bool IsVaultTransient(Exception ex)
     {
-        if (ex.GetType().Name != "VaultApiException") return false;
+        if (!string.Equals(ex.GetType().Name, "VaultApiException", StringComparison.Ordinal)) return false;
 
         var statusCodeProp = ex.GetType().GetProperty("HttpStatusCode");
         if (statusCodeProp?.GetValue(ex) is HttpStatusCode statusCode)
@@ -518,7 +518,7 @@ public sealed class ResiliencePolicyFactory : IResiliencePolicyFactory
                    ex.Message.Contains("429", StringComparison.OrdinalIgnoreCase);
         }
 
-        if (typeName == "AmazonS3Exception")
+        if (string.Equals(typeName, "AmazonS3Exception", StringComparison.Ordinal))
         {
             var statusCodeProp = ex.GetType().GetProperty("StatusCode");
             if (statusCodeProp?.GetValue(ex) is HttpStatusCode statusCode)

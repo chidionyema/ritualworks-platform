@@ -45,7 +45,7 @@ public static class InstanceIdMiddleware
             foreach (var kvp in otel.Split(',', StringSplitOptions.RemoveEmptyEntries))
             {
                 var parts = kvp.Split('=', 2);
-                if (parts.Length == 2 && parts[0].Trim() == "service.instance.id")
+                if (parts.Length == 2 && string.Equals(parts[0].Trim(), "service.instance.id", StringComparison.Ordinal))
                 {
                     var raw = parts[1].Trim();
                     return Shorten(raw);
