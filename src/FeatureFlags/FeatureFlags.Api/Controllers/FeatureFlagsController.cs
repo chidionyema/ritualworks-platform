@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Haworks.FeatureFlags.Api.Application;
 using MediatR;
@@ -18,13 +19,21 @@ public class FeatureFlagsController : ControllerBase
     }
 
     [HttpGet("evaluate")]
-    public async Task<IActionResult> Evaluate([FromQuery] string flagName, [FromQuery] string userId, [FromQuery] string region)
+    public async Task<IActionResult> Evaluate([FromQuery] string flagName, [FromQuery] string region)
     {
+        // Extract userId from JWT claims to prevent impersonation via query params.
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub");
+
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
         var result = await _mediator.Send(new EvaluateFlagQuery(flagName, userId, region));
         return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
     }
 
     [HttpPost("update")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> Update([FromBody] UpdateFlagCommand command)
     {
         var result = await _mediator.Send(command);

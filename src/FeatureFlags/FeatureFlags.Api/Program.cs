@@ -10,7 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 
 var connectionString = builder.Configuration.GetConnectionString("featureflags")
-    ?? "Host=localhost;Database=featureflags;Username=postgres;Password=";
+    ?? throw new InvalidOperationException("ConnectionStrings:featureflags is required.");
 
 builder.Services.AddDbContext<FeatureFlagsDbContext>(options =>
 {
@@ -18,12 +18,16 @@ builder.Services.AddDbContext<FeatureFlagsDbContext>(options =>
         npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "featureflags"));
 });
 
+// Redis distributed cache — used by StackExchange.Redis for IDistributedCache consumers.
 builder.Services.AddStackExchangeRedisCache(options =>
 {
-    options.Configuration = builder.Configuration.GetConnectionString("redis");
+    options.Configuration = builder.Configuration.GetConnectionString("redis")
+        ?? throw new InvalidOperationException("ConnectionStrings:redis is required.");
 });
 
 builder.Services.AddSingleton<IFeatureFlagCache, FeatureFlagCache>();
+
+builder.Services.AddPlatformAuthentication(builder.Configuration);
 
 builder.Services.AddMassTransit(mt =>
 {
@@ -35,10 +39,24 @@ builder.Services.AddMassTransit(mt =>
 
     mt.AddConsumer<FeatureFlagUpdatedConsumer>();
 
-    mt.UsingInMemory((context, cfg) =>
+    if (!builder.Environment.IsEnvironment("Test"))
     {
-        cfg.ConfigureStandardBus(context);
-    });
+        mt.UsingRabbitMq((context, cfg) =>
+        {
+            var rabbitConn = builder.Configuration.GetConnectionString("rabbitmq")
+                ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is required.");
+
+            cfg.Host(new Uri(rabbitConn));
+            cfg.ConfigureStandardRabbitMq(context);
+        });
+    }
+    else
+    {
+        mt.UsingInMemory((context, cfg) =>
+        {
+            cfg.ConfigureEndpoints(context);
+        });
+    }
 });
 
 builder.Services.AddHealthChecks().AddDbHealthCheck<FeatureFlagsDbContext>();
@@ -49,11 +67,10 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Staff-level hardening: Cache warmup on startup ensures sub-millisecond evaluation
-// from the very first request.
+// Cache warmup on startup ensures sub-millisecond evaluation from the very first request.
 using (var scope = app.Services.CreateScope())
 {
-    try 
+    try
     {
         var cache = scope.ServiceProvider.GetRequiredService<IFeatureFlagCache>();
         await cache.WarmupAsync(default);
@@ -73,6 +90,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapDefaultEndpoints();
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 
 app.Run();

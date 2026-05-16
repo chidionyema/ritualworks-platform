@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Haworks.Realtime.Api.Application.Common;
 using System.Security.Claims;
 
 namespace Haworks.Realtime.Api.Infrastructure.SignalR;
 
+[Authorize]
 public class NotificationHub : Hub
 {
     private readonly IInboxService _inboxService;

@@ -1,40 +1,65 @@
 using System.Text.Json;
-using Microsoft.Extensions.Caching.Distributed;
 using Haworks.Realtime.Api.Application.Common;
+using StackExchange.Redis;
 
 namespace Haworks.Realtime.Api.Infrastructure.Persistence;
 
+/// <summary>
+/// Redis-backed inbox using a LIST per user.
+/// StoreMessageAsync uses LPUSH — O(1), atomic by design (single Redis command).
+/// GetAndClearMessagesAsync uses a Lua script that atomically LRANGEs all items
+/// then DELetes the key, preventing lost-update races between concurrent readers.
+/// TTL is reset on every write to keep hot inboxes alive.
+/// </summary>
 public class RedisInboxService : IInboxService
 {
-    private readonly IDistributedCache _cache;
+    private const int InboxTtlDays = 7;
+    private const int MaxInboxSize = 200;
 
-    public RedisInboxService(IDistributedCache cache)
+    // Atomically fetch all items and delete the list.
+    private static readonly LuaScript GetAndClearScript = LuaScript.Prepare("""
+        local items = redis.call('LRANGE', @key, 0, -1)
+        redis.call('DEL', @key)
+        return items
+        """);
+
+    private readonly IConnectionMultiplexer _redis;
+
+    public RedisInboxService(IConnectionMultiplexer redis)
     {
-        _cache = cache;
+        _redis = redis;
     }
 
     public async Task StoreMessageAsync(Guid userId, object message, CancellationToken ct = default)
     {
-        var key = $"inbox:{userId}";
-        var existingJson = await _cache.GetStringAsync(key, ct);
-        var messages = string.IsNullOrEmpty(existingJson) 
-            ? new List<object>() 
-            : JsonSerializer.Deserialize<List<object>>(existingJson) ?? new List<object>();
-        
-        messages.Add(message);
-        await _cache.SetStringAsync(key, JsonSerializer.Serialize(messages), new DistributedCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(7)
-        }, ct);
+        var db = _redis.GetDatabase();
+        var key = InboxKey(userId);
+        var json = JsonSerializer.Serialize(message);
+
+        // LPUSH is atomic; cap the list to avoid unbounded growth.
+        await db.ListLeftPushAsync(key, json);
+        await db.ListTrimAsync(key, 0, MaxInboxSize - 1);
+        await db.KeyExpireAsync(key, TimeSpan.FromDays(InboxTtlDays));
     }
 
     public async Task<IEnumerable<object>> GetAndClearMessagesAsync(Guid userId, CancellationToken ct = default)
     {
-        var key = $"inbox:{userId}";
-        var existingJson = await _cache.GetStringAsync(key, ct);
-        if (string.IsNullOrEmpty(existingJson)) return Enumerable.Empty<object>();
+        var db = _redis.GetDatabase();
+        var key = InboxKey(userId);
 
-        await _cache.RemoveAsync(key, ct);
-        return JsonSerializer.Deserialize<List<object>>(existingJson) ?? Enumerable.Empty<object>();
+        var result = (RedisValue[]?) await db.ScriptEvaluateAsync(
+            GetAndClearScript,
+            new { key = (RedisKey) key });
+
+        if (result is null || result.Length == 0)
+            return Enumerable.Empty<object>();
+
+        // Items were pushed left; reverse so oldest is first.
+        return result
+            .Reverse()
+            .Select(v => JsonSerializer.Deserialize<object>((string) v!)!)
+            .ToList();
     }
+
+    private static string InboxKey(Guid userId) => $"inbox:{userId}";
 }

@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 using Haworks.FeatureFlags.Api.Domain;
 using Haworks.FeatureFlags.Api.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -56,7 +58,9 @@ public class FeatureFlagCache : IFeatureFlagCache
             if (rule.Region == region) return true;
             if (rule.PercentageRollout.HasValue)
             {
-                var hash = Math.Abs(userId.GetHashCode());
+                // Use a deterministic, stable hash — GetHashCode() is process-scoped and non-deterministic.
+                var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(userId));
+                var hash = Math.Abs(BitConverter.ToInt32(hashBytes, 0));
                 if (hash % 100 < rule.PercentageRollout.Value) return true;
             }
         }
