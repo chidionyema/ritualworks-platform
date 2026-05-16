@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Haworks.BuildingBlocks.CurrentUser;
 
 namespace Haworks.Media.Api.Application;
@@ -5,11 +6,19 @@ namespace Haworks.Media.Api.Application;
 public record GetMediaUrlQuery(Guid MediaId, string? Variant = null) : IRequest<Result<MediaUrlResponse>>;
 public record MediaUrlResponse(string Url, DateTime ExpiresAt);
 
-public class GetMediaUrlValidator : AbstractValidator<GetMediaUrlQuery>
+public partial class GetMediaUrlValidator : AbstractValidator<GetMediaUrlQuery>
 {
+    [GeneratedRegex(@"^[a-zA-Z0-9_\-/\.]{1,100}$")]
+    private static partial Regex SafeVariantPattern();
+
     public GetMediaUrlValidator()
     {
         RuleFor(x => x.MediaId).NotEmpty();
+        RuleFor(x => x.Variant)
+            .Must(v => v == null || SafeVariantPattern().IsMatch(v))
+            .WithMessage("Variant contains invalid characters.")
+            .Must(v => v == null || !v.Contains("..", StringComparison.Ordinal))
+            .WithMessage("Path traversal is not allowed.");
     }
 }
 
@@ -33,10 +42,10 @@ public class GetMediaUrlHandler(
         if (!string.Equals(file.OwnerId, ownerId, StringComparison.Ordinal))
             return Result.Failure<MediaUrlResponse>(new Error("Media.Forbidden", "You do not own this media file."));
 
-        if (file.Status == MediaStatus.Rejected)
-            return Result.Failure<MediaUrlResponse>(new Error("Media.ScanFailed", "This file failed virus scanning and cannot be served."));
+        if (file.Status != MediaStatus.Active)
+            return Result.Failure<MediaUrlResponse>(new Error("Media.NotReady",
+                $"File is in {file.Status} state and cannot be served."));
 
-        // Determine S3 key: original file or a variant
         var s3Key = string.IsNullOrEmpty(request.Variant)
             ? file.Id.ToString()
             : $"media/{file.Id}/{request.Variant}";
