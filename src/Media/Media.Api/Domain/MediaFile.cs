@@ -35,7 +35,7 @@ public class MediaFile
         return new MediaFile
         {
             Id = Guid.NewGuid(),
-            FileName = fileName,
+            FileName = SanitizeFileName(fileName),
             Hash = hash,
             Size = size,
             MimeType = mimeType,
@@ -53,6 +53,13 @@ public class MediaFile
         S3UploadId = s3UploadId ?? throw new ArgumentNullException(nameof(s3UploadId));
         PartCount = partCount > 0 ? partCount : throw new ArgumentOutOfRangeException(nameof(partCount));
         UploadKind = UploadKind.Multipart;
+    }
+
+    private static string SanitizeFileName(string name)
+    {
+        var sanitized = Path.GetFileName(name) ?? name;
+        sanitized = new string(sanitized.Where(c => !char.IsControl(c)).ToArray());
+        return string.IsNullOrWhiteSpace(sanitized) ? "unnamed" : sanitized;
     }
 
     public void MarkAsQuarantined()
