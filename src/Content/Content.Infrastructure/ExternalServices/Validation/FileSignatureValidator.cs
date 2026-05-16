@@ -73,7 +73,7 @@ public class FileSignatureValidator : IFileSignatureValidator
                 if (head.AsSpan(0, sig.Length).SequenceEqual(sig))
                 {
                     // For WebP, we also need to check the 8-11 bytes for "WEBP"
-                    if (mime == "image/webp")
+                    if (string.Equals(mime, "image/webp", StringComparison.Ordinal))
                     {
                         if (read >= 12 && head[8] == 0x57 && head[9] == 0x45 && head[10] == 0x42 && head[11] == 0x50)
                         {

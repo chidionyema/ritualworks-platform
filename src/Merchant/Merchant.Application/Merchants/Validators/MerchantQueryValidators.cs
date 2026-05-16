@@ -7,7 +7,7 @@ public sealed class GetMerchantByIdQueryValidator : AbstractValidator<GetMerchan
 {
     public GetMerchantByIdQueryValidator()
     {
-        RuleFor(x => x.Id).NotEqual(Guid.Empty);
+        RuleFor(x => x.MerchantId).NotEqual(Guid.Empty);
     }
 }
 
