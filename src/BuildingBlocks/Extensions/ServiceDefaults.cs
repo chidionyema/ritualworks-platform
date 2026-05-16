@@ -10,6 +10,7 @@ using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using OpenTelemetry.Exporter;
 
 namespace Haworks.BuildingBlocks.Extensions;
 
@@ -96,7 +97,8 @@ public static class ServiceDefaults
                 serviceInstanceId: Environment.MachineName))
             .WithMetrics(metrics =>
             {
-                metrics.AddAspNetCoreInstrumentation()
+                metrics.AddPrometheusExporter()
+                    .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation()
                     // Core Platform Meters
@@ -257,6 +259,9 @@ public static class ServiceDefaults
         // line emitted from this point on (including health checks, auth,
         // routing) is enriched with CorrelationId in Serilog LogContext.
         app.UseCorrelationId();
+
+        // Expose /metrics endpoint for Prometheus scraping (Kestrel, CLR, ASP.NET metrics).
+        app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
         // All health checks must pass for detailed health info
         app.MapHealthChecks("/health");

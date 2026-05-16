@@ -1,0 +1,128 @@
+{
+  "uid": "saga-state-machines",
+  "title": "Saga State Machines",
+  "description": "MassTransit saga health: stuck states, transitions, compensation rates",
+  "tags": ["haworks", "sagas"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Refund Stuck in Review",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "payments_refund_stuck_in_review_total", "legendFormat": "stuck" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 1, "color": "orange" }, { "value": 5, "color": "red" }] }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Checkout Stuck in Review",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "checkout_saga_stuck_in_review_total", "legendFormat": "stuck" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 1, "color": "orange" }, { "value": 5, "color": "red" }] }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Privacy Erasure Stalled",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "privacy_erasure_stalled_total", "legendFormat": "stalled" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 1, "color": "red" }] }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Dunning Exhausted (24h)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "increase(payments_subscription_dunning_exhausted_total[24h])", "legendFormat": "exhausted" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 3, "color": "orange" }, { "value": 5, "color": "red" }] }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Saga Transition Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(masstransit_saga_duration_seconds_count[5m])) by (saga_name)",
+          "legendFormat": "{{ saga_name }}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "id": 6,
+      "title": "Saga Duration P95",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(masstransit_saga_duration_seconds_bucket[5m])) by (le, saga_name))",
+          "legendFormat": "{{ saga_name }} p95"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 7,
+      "title": "Consumer Error Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(masstransit_receive_errors_total[5m])) by (service_name, message_type)",
+          "legendFormat": "{{ service_name }}/{{ message_type }}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Active Alert Rules (Saga Health)",
+      "type": "alertlist",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "datasource": "Prometheus",
+      "options": {
+        "alertName": "",
+        "dashboardAlerts": false,
+        "maxItems": 20,
+        "sortOrder": 1,
+        "stateFilter": { "firing": true, "pending": true }
+      }
+    }
+  ]
+}

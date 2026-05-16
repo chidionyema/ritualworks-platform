@@ -1,0 +1,75 @@
+groups:
+  - name: platform-health
+    rules:
+      - alert: OtelCollectorDown
+        expr: up{job="otel-collector"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OTel Collector is down"
+          description: "The OpenTelemetry Collector has been unreachable for over 1 minute"
+
+      - alert: ServiceDown
+        expr: up{job="haworks-services"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.service_name }} is down"
+          description: "Service {{ $labels.service_name }} ({{ $labels.instance }}) has been unreachable for over 2 minutes"
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m])) by (service_name)
+          /
+          sum(rate(http_server_request_duration_seconds_count[5m])) by (service_name)
+          > 0.05
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate on {{ $labels.service_name }}"
+          description: "{{ $labels.service_name }} has >5% error rate (current: {{ $value | humanizePercentage }})"
+
+      - alert: HighLatencyP99
+        expr: |
+          histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le, service_name))
+          > 2.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High P99 latency on {{ $labels.service_name }}"
+          description: "{{ $labels.service_name }} P99 latency is {{ $value }}s (threshold: 2s)"
+
+      - alert: LokiIngestionRateHigh
+        expr: rate(loki_distributor_bytes_received_total[5m]) > 8388608
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Loki ingestion rate is high"
+          description: "Log ingestion rate exceeds 8 MB/s — risk of drops"
+
+      - alert: DiskPressure
+        expr: prometheus_tsdb_head_chunks_storage_size_bytes > 15000000000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus storage pressure"
+          description: "TSDB head chunks exceed 15 GiB — consider increasing retention or reducing cardinality"
+
+  - name: saga-health-instant
+    rules:
+      # Test-only rule with for: 0m — validates alert routing without 5-min wait
+      - alert: RefundStuckInReviewInstant
+        expr: payments_refund_stuck_in_review_total > 0
+        for: 0m
+        labels:
+          severity: warning
+          test_only: "true"
+        annotations:
+          summary: "TEST: Refund saga stuck (instant fire)"
+          description: "Test rule to validate Alertmanager routing path"
