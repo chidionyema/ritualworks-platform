@@ -37,6 +37,61 @@ if (!builder.Environment.IsEnvironment("Test") && !string.IsNullOrEmpty(kafkaCon
     builder.Services.AddHostedService<Haworks.BffWeb.Application.Consumers.BffCdcCacheInvalidator>();
 }
 
+// ── Rate Limiting ──────────────────────────────────────────────────
+// Three tiers: global per-IP, authenticated per-user, and strict
+// per-IP for expensive operations (saga start, event trigger).
+// Configurable via RateLimiting section in appsettings / env vars.
+var rlSection = builder.Configuration.GetSection("RateLimiting");
+var globalPermits = rlSection.GetValue("GlobalPermitsPerMinute", 120);
+var userPermits = rlSection.GetValue("UserPermitsPerMinute", 60);
+var expensivePermits = rlSection.GetValue("ExpensivePermitsPerMinute", 10);
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Global: per-IP sliding window — catches scrapers and unauthenticated abuse
+    options.GlobalLimiter = System.Threading.RateLimiting.PartitionedRateLimiter
+        .Create<HttpContext, string>(ctx =>
+            System.Threading.RateLimiting.RateLimitPartition.GetSlidingWindowLimiter(
+                partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new System.Threading.RateLimiting.SlidingWindowRateLimiterOptions
+                {
+                    PermitLimit = globalPermits,
+                    Window = TimeSpan.FromMinutes(1),
+                    SegmentsPerWindow = 4,
+                }));
+
+    // "authenticated": per-user token bucket — tighter than IP for logged-in users
+    options.AddPolicy("authenticated", ctx =>
+        System.Threading.RateLimiting.RateLimitPartition.GetTokenBucketLimiter(
+            partitionKey: ctx.User?.FindFirst("sub")?.Value
+                ?? ctx.Connection.RemoteIpAddress?.ToString()
+                ?? "unknown",
+            factory: _ => new System.Threading.RateLimiting.TokenBucketRateLimiterOptions
+            {
+                TokenLimit = userPermits,
+                ReplenishmentPeriod = TimeSpan.FromMinutes(1),
+                TokensPerPeriod = userPermits,
+            }));
+
+    // "expensive": per-IP fixed window — saga start, event trigger, vault rotate
+    options.AddPolicy("expensive", ctx =>
+        System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+            {
+                PermitLimit = expensivePermits,
+                Window = TimeSpan.FromMinutes(1),
+            }));
+
+    options.OnRejected = async (context, ct) =>
+    {
+        context.HttpContext.Response.Headers.RetryAfter = "60";
+        await Task.CompletedTask;
+    };
+});
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -299,6 +354,7 @@ if (!app.Environment.IsDevelopment())
 // position relative to UseAuthentication doesn't matter for the response,
 // but it does matter for the OPTIONS preflight.
 app.UseCors("portfolio-site");
+app.UseRateLimiter();
 // Activity middleware sits before auth so a 401 still records traffic into
 // the IngressEvents24h counter. Path-scoped to /api/demo/* internally so
 // non-demo routes have zero overhead.

@@ -5,6 +5,7 @@ using Haworks.BffWeb.Application.Telemetry;
 using Haworks.BuildingBlocks.Idempotency;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Haworks.BffWeb.Api.Controllers;
 
@@ -31,6 +32,7 @@ public sealed class CheckoutController(
     ILogger<CheckoutController> logger) : ControllerBase
 {
     [HttpPost]
+    [EnableRateLimiting("expensive")]
     public async Task<IActionResult> Start([FromBody] CheckoutRequest body, CancellationToken ct)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

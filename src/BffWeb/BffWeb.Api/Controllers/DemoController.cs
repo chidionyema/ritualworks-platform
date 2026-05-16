@@ -8,6 +8,7 @@ using Haworks.BffWeb.Application.Interfaces;
 using Haworks.Contracts.Checkout;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Polly;
 using Polly.CircuitBreaker;
 
@@ -82,6 +83,7 @@ public class DemoController : ControllerBase
 
     [HttpPost("saga/start")]
     [AllowAnonymous]
+    [EnableRateLimiting("expensive")]
     public async Task<IActionResult> StartSaga([FromBody] SagaStartRequest request, CancellationToken ct)
     {
         var sagaId = Guid.NewGuid();
@@ -273,6 +275,7 @@ public class DemoController : ControllerBase
 
     [HttpPost("events/trigger")]
     [AllowAnonymous]
+    [EnableRateLimiting("expensive")]
     public async Task<IActionResult> TriggerEvent(
         [FromBody] EventTriggerRequest request,
         [FromHeader(Name = "X-Demo-Session")] Guid? demoSession,
@@ -597,6 +600,7 @@ public class DemoController : ControllerBase
 
     [HttpPost("vault/rotate")]
     [Authorize(Roles = "Admin,Service")]
+    [EnableRateLimiting("expensive")]
     public async Task<IActionResult> RotateVault(
         [FromHeader(Name = "X-Demo-Session")] Guid? demoSession,
         CancellationToken ct)
