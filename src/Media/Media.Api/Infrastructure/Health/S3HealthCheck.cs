@@ -14,8 +14,8 @@ public sealed class S3HealthCheck(IAmazonS3 s3, IOptions<MediaStorageOptions> op
 
         try
         {
-            await s3.ListBucketsAsync(ct);
-            return HealthCheckResult.Healthy("S3 connected");
+            await s3.EnsureBucketExistsAsync(opts.Value.BucketName);
+            return HealthCheckResult.Healthy($"S3 bucket '{opts.Value.BucketName}' accessible");
         }
         catch (Exception ex)
         {
