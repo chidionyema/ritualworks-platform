@@ -6,6 +6,7 @@ using Xunit;
 using Haworks.Contracts.Privacy;
 using Haworks.Privacy.Application.Requests.Sagas;
 using Haworks.Privacy.Infrastructure.Persistence;
+using Haworks.BuildingBlocks.Testing;
 
 namespace Haworks.Privacy.Integration;
 
@@ -30,6 +31,7 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _factory.EnsureSchemaAsync();
+        await _factory.ResetDatabaseAsync();
         var harness = _factory.Services.GetRequiredService<ITestHarness>();
         harness.TestTimeout = TimeSpan.FromSeconds(30);
         harness.TestInactivityTimeout = TimeSpan.FromSeconds(10);

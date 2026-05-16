@@ -50,4 +50,30 @@ public sealed class PrivacyRequestTests
 
         request.Status.Should().Be(PrivacyRequestStatus.Failed);
     }
+
+    [Fact]
+    public void Complete_on_already_completed_throws()
+    {
+        var request = PrivacyRequest.Create(Guid.NewGuid(), PrivacyRequestType.Export);
+        request.Start();
+        request.Complete();
+
+        var act = () => request.Complete();
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*already-completed*");
+    }
+
+    [Fact]
+    public void Fail_on_already_completed_throws()
+    {
+        var request = PrivacyRequest.Create(Guid.NewGuid(), PrivacyRequestType.Erasure);
+        request.Start();
+        request.Complete();
+
+        var act = () => request.Fail();
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*terminal state*");
+    }
 }
