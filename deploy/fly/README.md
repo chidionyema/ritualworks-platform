@@ -1,6 +1,6 @@
 # Deploying to Fly.io
 
-End-to-end deploy for the seven ritualworks microservices on Fly.io. The
+End-to-end deploy for the seven haworks microservices on Fly.io. The
 local Aspire AppHost (`deploy/aspire/`) is unaffected by anything here —
 it keeps working for local dev. This directory only covers Fly.
 
@@ -41,13 +41,13 @@ want to understand what it's doing or override pieces.
 
 | Service | Fly app | Public? | Reachable at |
 |---|---|---|---|
-| BFF | `ritualworks-bffweb` | yes | `https://ritualworks-bffweb.fly.dev` |
-| Identity | `ritualworks-identity` | no | `http://ritualworks-identity.flycast:8080` |
-| Catalog | `ritualworks-catalog` | no | `http://ritualworks-catalog.flycast:8080` |
-| Orders | `ritualworks-orders` | no | `http://ritualworks-orders.flycast:8080` |
-| Payments | `ritualworks-payments` | no | `http://ritualworks-payments.flycast:8080` |
-| Checkout | `ritualworks-checkout` | no | `http://ritualworks-checkout.flycast:8080` |
-| Content | `ritualworks-content` | no, opt-in | `http://ritualworks-content.flycast:8080` |
+| BFF | `haworks-bffweb` | yes | `https://haworks-bffweb.fly.dev` |
+| Identity | `haworks-identity` | no | `http://haworks-identity.flycast:8080` |
+| Catalog | `haworks-catalog` | no | `http://haworks-catalog.flycast:8080` |
+| Orders | `haworks-orders` | no | `http://haworks-orders.flycast:8080` |
+| Payments | `haworks-payments` | no | `http://haworks-payments.flycast:8080` |
+| Checkout | `haworks-checkout` | no | `http://haworks-checkout.flycast:8080` |
+| Content | `haworks-content` | no, opt-in | `http://haworks-content.flycast:8080` |
 
 Backends are private — only the BFF gets a public IP. Inter-service traffic
 goes over Fly's flycast (private 6PN with load balancing).
@@ -73,7 +73,7 @@ Pick regions close to Fly `iad` (US East) — Neon `us-east-1`, Upstash
 ## First deploy — one command
 
 ```bash
-cd ritualworks-platform
+cd haworks-platform
 deploy/fly/up.sh
 ```
 
@@ -87,7 +87,7 @@ That's it. The wizard is idempotent — re-run safely. What it does:
    `deploy/fly/.env.local` (gitignored). Already-filled values are left
    alone, so partial re-runs are fine.
 4. **Bootstrap** — auto-generates an RSA-2048 JWT signing key, creates the
-   seven Fly apps, allocates a public IP only on `ritualworks-bffweb`,
+   seven Fly apps, allocates a public IP only on `haworks-bffweb`,
    stages every per-service secret via `flyctl secrets import --stage`.
 5. **First deploy** — `identity` first (others auth against it), then
    `catalog`/`orders`/`payments`/`checkout` in parallel, then BFF last.
@@ -145,7 +145,7 @@ Manual deploy options if you need them:
 ```bash
 deploy/fly/deploy.sh                            # all services in dependency order
 flyctl deploy -c fly.<svc>.toml --remote-only   # one specific service
-gh workflow run "Deploy" --repo chidionyema/ritualworks-platform
+gh workflow run "Deploy" --repo chidionyema/haworks-platform
                                                 # trigger the GH workflow manually
 ```
 
@@ -159,7 +159,7 @@ secret onto Fly via `flyctl secrets import --stage`; deploy applies them.
 overrides):
 
 ```bash
-flyctl secrets set -a ritualworks-payments \
+flyctl secrets set -a haworks-payments \
   Webhooks__Stripe__WebhookSecret='whsec_...'
 ```
 
@@ -178,23 +178,23 @@ discards the old one. The new token is never visible to you.
 Per-service:
 
 ```bash
-flyctl releases list -a ritualworks-<svc>
-flyctl releases rollback -a ritualworks-<svc>
+flyctl releases list -a haworks-<svc>
+flyctl releases rollback -a haworks-<svc>
 ```
 
 Cross-service rollback isn't automated — roll back each app individually.
 
 ## Adding Content service
 
-Default skips `ritualworks-content` because it needs S3-compatible storage.
+Default skips `haworks-content` because it needs S3-compatible storage.
 To opt in with Fly Tigris:
 
 ```bash
 # 1. Create the app first so storage attaches to it.
-flyctl apps create ritualworks-content
+flyctl apps create haworks-content
 
 # 2. Provision Tigris. flyctl prints the credentials to stdout.
-flyctl storage create -a ritualworks-content
+flyctl storage create -a haworks-content
 
 # 3. Copy the printed AWS_* values into .env.local's TIGRIS_* slots:
 #    AWS_ACCESS_KEY_ID         → TIGRIS_ACCESS_KEY
@@ -215,7 +215,7 @@ virus scanning — fine for a portfolio demo, not for real user uploads.
 After payments-svc is up, register the webhook in the Stripe dashboard:
 
 ```
-URL:    https://ritualworks-bffweb.fly.dev/api/payments/webhook
+URL:    https://haworks-bffweb.fly.dev/api/payments/webhook
 Events: payment_intent.succeeded, payment_intent.payment_failed
         checkout.session.completed
 ```
@@ -224,7 +224,7 @@ Copy the signing secret Stripe gives you and either re-run `bootstrap.sh`
 with `STRIPE_WEBHOOK_SECRET=whsec_...` in `.env.local`, or one-shot:
 
 ```bash
-flyctl secrets set -a ritualworks-payments \
+flyctl secrets set -a haworks-payments \
   Webhooks__Stripe__WebhookSecret='whsec_...'
 ```
 
@@ -235,7 +235,7 @@ The bootstrap didn't generate the key, or the env file was edited and the
 key field cleared. Re-run `up.sh` — it auto-generates if blank.
 
 **A backend service crashloops with "ConnectionStrings:rabbitmq is missing".**
-Bootstrap failed for that app. Run `flyctl secrets list -a ritualworks-<svc>`
+Bootstrap failed for that app. Run `flyctl secrets list -a haworks-<svc>`
 to confirm. Re-run `up.sh` — it restages secrets that aren't already set.
 
 **`up.sh` says "FLY_API_TOKEN already set" but I want to rotate it.**
@@ -260,14 +260,14 @@ the route is only mapped when credentials are present. Add them and redeploy.
 Backend service is asleep (auto-stop), or the `Services__<svc>__http__0`
 override doesn't match a real flycast hostname. Verify with:
 ```bash
-flyctl status -a ritualworks-<svc>
-flyctl secrets list -a ritualworks-bffweb | grep Services__
+flyctl status -a haworks-<svc>
+flyctl secrets list -a haworks-bffweb | grep Services__
 ```
 
 **EF migration fails on first deploy.** Neon's `default` role has owner
 privileges, so DDL should succeed. If it fails, check the migration
 dependency order — services migrate in parallel and only their own DBs.
-Manual fix: `flyctl ssh console -a ritualworks-<svc>` then run the
+Manual fix: `flyctl ssh console -a haworks-<svc>` then run the
 migration command directly.
 
 **`flyctl deploy` build errors on missing `Directory.Build.props`.** The
@@ -305,7 +305,7 @@ README.md          — this file
 | Change a runtime secret | edit `.env.local`, re-run `up.sh` |
 | Rotate the GitHub Actions deploy token | `FORCE_ROTATE_TOKEN=1 deploy/fly/up.sh` |
 | Deploy a single service manually | `flyctl deploy -c fly.<svc>.toml --remote-only` |
-| Roll back one service | `flyctl releases rollback -a ritualworks-<svc>` |
-| Tail logs | `flyctl logs -a ritualworks-<svc>` |
-| SSH into a running machine | `flyctl ssh console -a ritualworks-<svc>` |
-| See deploy status of all apps | `for s in bffweb identity catalog orders payments checkout; do flyctl status -a ritualworks-$s --json \| grep Status; done` |
+| Roll back one service | `flyctl releases rollback -a haworks-<svc>` |
+| Tail logs | `flyctl logs -a haworks-<svc>` |
+| SSH into a running machine | `flyctl ssh console -a haworks-<svc>` |
+| See deploy status of all apps | `for s in bffweb identity catalog orders payments checkout; do flyctl status -a haworks-$s --json \| grep Status; done` |

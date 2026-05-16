@@ -1,8 +1,10 @@
-using Haworks.Payments.Application.Interfaces;
-using Haworks.Contracts.Payments;
+using Haworks.BuildingBlocks.Common;
 using Haworks.BuildingBlocks.Resilience;
+using Haworks.Contracts.Payments;
+using Haworks.Payments.Application.Interfaces;
 using Haworks.Payments.Infrastructure.Options;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Polly;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -16,10 +18,12 @@ namespace Haworks.Payments.Infrastructure.PayPal;
 internal sealed class PayPalCheckoutService(
     IPayPalClientFactory clientFactory,
     IResiliencePolicyFactory resiliencePolicyFactory,
+    IOptions<BrandOptions> brandOptions,
     ILogger<PayPalCheckoutService> logger) : ICheckoutSessionService, ISubscriptionService
 {
-    private readonly IAsyncPolicy _resiliencePolicy = 
+    private readonly IAsyncPolicy _resiliencePolicy =
         resiliencePolicyFactory.CreateCombinedPolicy(ResilienceOptions.PayPal);
+    private readonly BrandOptions _brand = brandOptions.Value;
 
     /// <inheritdoc />
     public async Task<CheckoutSessionResult> CreateSessionAsync(
@@ -65,7 +69,7 @@ internal sealed class PayPalCheckoutService(
                 {
                     ReturnUrl = request.SuccessUrl,
                     CancelUrl = request.CancelUrl,
-                    BrandName = "RitualWorks",
+                    BrandName = _brand.Name,
                     UserAction = "PAY_NOW"
                 }
             };
@@ -123,7 +127,7 @@ internal sealed class PayPalCheckoutService(
                 {
                     ReturnUrl = request.SuccessUrl,
                     CancelUrl = request.CancelUrl,
-                    BrandName = "RitualWorks",
+                    BrandName = _brand.Name,
                     UserAction = "SUBSCRIBE_NOW"
                 }
             };
@@ -232,7 +236,7 @@ internal sealed class PayPalCheckoutService(
             throw new ArgumentException($"Invalid URL: {paramName}", paramName);
         if (uri.Scheme != "https" && uri.Scheme != "http")
             throw new ArgumentException($"URL must use HTTPS: {paramName}", paramName);
-        if (uri.Host is "localhost" or "127.0.0.1" or "0.0.0.0" || uri.Host.EndsWith(".internal"))
+        if (uri.Host is "localhost" or "127.0.0.1" or "0.0.0.0" || uri.Host.EndsWith(".internal", StringComparison.Ordinal))
             throw new ArgumentException($"URL must not point to internal hosts: {paramName}", paramName);
     }
 }

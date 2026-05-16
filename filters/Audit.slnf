@@ -1,6 +1,6 @@
 {
   "solution": {
-    "path": "../RitualworksPlatform.sln",
+    "path": "../HaworksPlatform.sln",
     "projects": [
       "src/Audit/Audit.Api/Audit.Api.csproj",
       "src/Audit/Audit.Application/Audit.Application.csproj",

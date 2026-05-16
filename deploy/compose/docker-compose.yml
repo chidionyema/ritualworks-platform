@@ -186,7 +186,7 @@ services:
     depends_on:
       - postgres
     environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@ritualworks.com
+      - PGADMIN_DEFAULT_EMAIL=admin@haworks.com
       - PGADMIN_DEFAULT_PASSWORD=admin
     ports:
       - "5055:80"
@@ -280,7 +280,7 @@ services:
       - Vault__SecretIdPath=/creds/catalog/secret_id
       - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
       - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=ritualworks-dev
+      - Authentication__Jwks__Audience=haworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -306,7 +306,7 @@ services:
       - Vault__SecretIdPath=/creds/catalog/secret_id
       - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
       - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=ritualworks-dev
+      - Authentication__Jwks__Audience=haworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -332,7 +332,7 @@ services:
       - Vault__SecretIdPath=/creds/orders/secret_id
       - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
       - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=ritualworks-dev
+      - Authentication__Jwks__Audience=haworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -358,7 +358,7 @@ services:
       - Vault__SecretIdPath=/creds/payments/secret_id
       - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
       - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=ritualworks-dev
+      - Authentication__Jwks__Audience=haworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -384,7 +384,7 @@ services:
       - Vault__SecretIdPath=/creds/checkout-orchestrator/secret_id
       - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
       - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=ritualworks-dev
+      - Authentication__Jwks__Audience=haworks-dev
       # CheckoutOptions has [Required] DataAnnotations on these; ValidateOnStart
       # blocks host boot without them. Dev-only placeholders pointing at the BFF.
       - Checkout__SuccessUrl=http://localhost:5050/checkout/success
@@ -424,7 +424,7 @@ services:
       - Vault__SecretIdPath=/creds/content/secret_id
       - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
       - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=ritualworks-dev
+      - Authentication__Jwks__Audience=haworks-dev
       # S3-compatible storage. LocalStack here in compose; Tigris in Fly.
       # Shape matches StorageOptions in feat/content/s3-presigned-storage.
       - Storage__ServiceUrl=http://localstack:4566
@@ -461,7 +461,7 @@ services:
       - Kafka__GroupId=search-svc-cdc
       - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
       - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=ritualworks-dev
+      - Authentication__Jwks__Audience=haworks-dev
 
   audit-svc:
     build:
@@ -485,7 +485,7 @@ services:
       - Vault__Enabled=false
       - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
       - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=ritualworks-dev
+      - Authentication__Jwks__Audience=haworks-dev
 
   # ===========================================================================
   # CDC PIPELINE (Kafka + Debezium)
@@ -580,7 +580,7 @@ services:
       - Kafka__GroupId=webhooks-svc-cdc
       - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
       - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=ritualworks-dev
+      - Authentication__Jwks__Audience=haworks-dev
 
   bff-web:
     build:
@@ -618,7 +618,7 @@ services:
       - Vault__SecretIdPath=/creds/bff-web/secret_id
       - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
       - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=ritualworks-dev
+      - Authentication__Jwks__Audience=haworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 

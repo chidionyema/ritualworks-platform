@@ -8,8 +8,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsAspireHost>true</IsAspireHost>
-    <UserSecretsId>ritualworks-platform-apphost</UserSecretsId>
-    <RootNamespace>RitualworksPlatform.AppHost</RootNamespace>
+    <UserSecretsId>haworks-platform-apphost</UserSecretsId>
+    <RootNamespace>HaworksPlatform.AppHost</RootNamespace>
     <!-- Aspire-generated code triggers some analyzer noise; relax here only -->
     <AnalysisLevel>none</AnalysisLevel>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>

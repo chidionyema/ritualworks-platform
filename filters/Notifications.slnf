@@ -1,6 +1,6 @@
 {
   "solution": {
-    "path": "../RitualworksPlatform.sln",
+    "path": "../HaworksPlatform.sln",
     "projects": [
       "src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj",
       "src/BuildingBlocks/Haworks.BuildingBlocks.csproj",

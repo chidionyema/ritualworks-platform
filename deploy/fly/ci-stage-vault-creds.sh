@@ -16,7 +16,7 @@
 #        a. Fetch role_id from auth/approle/role/haworks-<svc>/role-id
 #        b. Issue a *response-wrapped* secret_id (X-Vault-Wrap-TTL: 300)
 #        c. Stage the wrapping_token (NOT the raw secret_id) as
-#           Vault__SecretId on ritualworks-<svc>, plus role_id +
+#           Vault__SecretId on haworks-<svc>, plus role_id +
 #           Vault__SecretIdIsWrapped=true so the bootstrap library
 #           knows to unwrap on first boot.
 #        d. ::add-mask:: every secret value before any log line so a
@@ -28,9 +28,9 @@
 #   FLY_API_TOKEN — set in CI; also set in dev shell.
 #
 # Optional env:
-#   VAULT_APP            — default "ritualworks-vault"
+#   VAULT_APP            — default "haworks-vault"
 #   SERVICES_JSON        — default "infra/vault/services.json"
-#   FLY_APP_PREFIX       — default "ritualworks-"
+#   FLY_APP_PREFIX       — default "haworks-"
 #   WRAP_TTL_SECONDS     — default 1800 (30min). Sized to cover the worst-
 #                          case deploy lag: ci-stage-vault-creds runs once
 #                          before deploy-backends starts; a slow service
@@ -38,9 +38,9 @@
 #                          5min would expire mid-deploy.
 set -euo pipefail
 
-VAULT_APP="${VAULT_APP:-ritualworks-vault}"
+VAULT_APP="${VAULT_APP:-haworks-vault}"
 SERVICES_JSON="${SERVICES_JSON:-infra/vault/services.json}"
-FLY_APP_PREFIX="${FLY_APP_PREFIX:-ritualworks-}"
+FLY_APP_PREFIX="${FLY_APP_PREFIX:-haworks-}"
 WRAP_TTL_SECONDS="${WRAP_TTL_SECONDS:-1800}"
 
 log() { echo "[stage-vault-creds] $*"; }
@@ -56,7 +56,7 @@ mask() {
 }
 
 # Map vault service name → Fly app name. Most are 1:1 with the
-# ritualworks- prefix; two have historical aliases.
+# haworks- prefix; two have historical aliases.
 fly_app_for_service() {
   case "$1" in
     checkout-orchestrator) echo "${FLY_APP_PREFIX}checkout" ;;

@@ -2,7 +2,7 @@
 # Override per environment (kind-dev, staging, prod) via --values or --set.
 
 image:
-  repository: ghcr.io/ritualworks/catalog-svc
+  repository: ghcr.io/haworks/catalog-svc
   tag: "1.0.0"
   pullPolicy: IfNotPresent
 

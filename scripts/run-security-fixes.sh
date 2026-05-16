@@ -8,7 +8,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SPEC="$REPO_ROOT/docs/EDGE-CASE-AUDIT-SPEC.md"
 PLAN="$REPO_ROOT/docs/PARALLEL-AGENT-PLAN.md"
-RULES="$REPO_ROOT/.claude/projects/-Users-chidionyema-Documents-code-ritualworks-platform/memory/security-rules.md"
+RULES="$REPO_ROOT/.claude/projects/-Users-chidionyema-Documents-code-haworks-platform/memory/security-rules.md"
 BASE_BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)"
 
 AGENTS=(
@@ -165,7 +165,7 @@ echo "=== All agents completed successfully ==="
 echo ""
 echo "Next steps:"
 echo "  1. Review each branch: git log fix/security-agent-{1..7}-*"
-echo "  2. Run full test suite: dotnet test RitualworksPlatform.sln"
+echo "  2. Run full test suite: dotnet test HaworksPlatform.sln"
 echo "  3. Merge branches:"
 echo "     for i in 1 2 3 4 5 6 7; do"
 echo "       git merge fix/security-agent-\$i-* --no-ff"

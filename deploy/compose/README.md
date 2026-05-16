@@ -40,7 +40,7 @@ docker-compose down
 - **Initialization:** The `vault-init` and `vault-seed` containers are one-shot jobs that configure Vault with the required AppRoles and inject development secrets. They must complete successfully before the microservices start.
 - **Replication:** The `catalog-svc` is replicated (`catalog-svc-1` and `catalog-svc-2`) to mirror the Aspire setup, and the BFF load-balances across both instances.
 - **Developer Tools:**
-  - **pgAdmin:** `http://localhost:5055` (admin@ritualworks.com / admin)
+  - **pgAdmin:** `http://localhost:5055` (admin@haworks.com / admin)
   - **Redis Commander:** `http://localhost:8081`
   - **LocalStack S3:** `http://localhost:4566` (access/secret: `test` / `test`; bucket `content-dev` auto-created on boot)
   - **Pact Broker:** `http://localhost:9292`

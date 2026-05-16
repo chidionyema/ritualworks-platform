@@ -67,20 +67,20 @@ manually with `bypass_vault_capture: true`.
   microsoft, facebook}` (placeholders — overwrite via the CLI for real
   OAuth)
 * Database secrets engine + `haworks-identity` role pointing at
-  `ritualworks-vault-pg.internal:5432` (only when
+  `haworks-vault-pg.internal:5432` (only when
   `VAULT_PG_OPERATOR_PASSWORD` is staged — `bootstrap.sh` does that)
 
 ## Verification
 
 ```bash
 # Vault is up + AppRole auth works:
-curl -s https://ritualworks-bffweb.fly.dev/api/demo/vault/status | jq
+curl -s https://haworks-bffweb.fly.dev/api/demo/vault/status | jq
 
 # JWKS endpoint returns the active key ring:
-curl -s https://ritualworks-bffweb.fly.dev/api/identity/.well-known/jwks.json | jq
+curl -s https://haworks-bffweb.fly.dev/api/identity/.well-known/jwks.json | jq
 
 # Trigger a rotation (returns 200 immediately, stages stream via SignalR):
-curl -s -X POST 'https://ritualworks-bffweb.fly.dev/api/demo/vault/rotate?roleName=haworks-identity'
+curl -s -X POST 'https://haworks-bffweb.fly.dev/api/demo/vault/rotate?roleName=haworks-identity'
 ```
 
 ## Recovery
@@ -89,7 +89,7 @@ The unseal key + root token live in two places:
 
 1. `deploy/fly/.env.local` (gitignored) — captured by an earlier
    `bootstrap.sh` run. Lose this and you lose the only off-Fly copy.
-2. `Fly secrets on ritualworks-vault` — staged from `.env.local` /
+2. `Fly secrets on haworks-vault` — staged from `.env.local` /
    captured by CI. If the Fly app is deleted, only `.env.local` is left.
 
 For a portfolio demo this is fine. For real prod you'd back up the

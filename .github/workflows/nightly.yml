@@ -30,12 +30,12 @@ jobs:
           dotnet-version: "9.0.x"
 
       - name: Restore
-        run: dotnet restore RitualworksPlatform.sln
+        run: dotnet restore HaworksPlatform.sln
 
       - name: Check for vulnerable packages
         run: |
           echo "## Vulnerable Packages" >> $GITHUB_STEP_SUMMARY
-          output=$(dotnet list RitualworksPlatform.sln package --vulnerable --include-transitive 2>&1)
+          output=$(dotnet list HaworksPlatform.sln package --vulnerable --include-transitive 2>&1)
           echo "$output"
           if echo "$output" | grep -q "has the following vulnerable packages"; then
             echo '```' >> $GITHUB_STEP_SUMMARY
@@ -49,7 +49,7 @@ jobs:
       - name: Check for deprecated packages
         run: |
           echo "## Deprecated Packages" >> $GITHUB_STEP_SUMMARY
-          output=$(dotnet list RitualworksPlatform.sln package --deprecated 2>&1)
+          output=$(dotnet list HaworksPlatform.sln package --deprecated 2>&1)
           echo "$output"
           if echo "$output" | grep -q "has the following deprecated packages"; then
             echo '```' >> $GITHUB_STEP_SUMMARY
@@ -63,7 +63,7 @@ jobs:
       - name: Check for outdated packages
         run: |
           echo "## Outdated Packages" >> $GITHUB_STEP_SUMMARY
-          dotnet list RitualworksPlatform.sln package --outdated --include-transitive 2>&1 | tee /tmp/outdated.txt
+          dotnet list HaworksPlatform.sln package --outdated --include-transitive 2>&1 | tee /tmp/outdated.txt
           if grep -q ">" /tmp/outdated.txt; then
             echo '```' >> $GITHUB_STEP_SUMMARY
             grep -A 100 ">" /tmp/outdated.txt | head -50 >> $GITHUB_STEP_SUMMARY
@@ -87,10 +87,10 @@ jobs:
           dotnet-version: "9.0.x"
 
       - name: Restore
-        run: dotnet restore RitualworksPlatform.sln
+        run: dotnet restore HaworksPlatform.sln
 
       - name: Build with all analyzers
-        run: dotnet build RitualworksPlatform.sln --no-restore --configuration Release /p:TreatWarningsAsErrors=true
+        run: dotnet build HaworksPlatform.sln --no-restore --configuration Release /p:TreatWarningsAsErrors=true
 
       - name: Architecture checks
         run: bash scripts/check-architecture.sh
@@ -121,8 +121,8 @@ jobs:
 
       - name: Restore & build
         run: |
-          dotnet restore RitualworksPlatform.sln
-          dotnet build RitualworksPlatform.sln --no-restore --configuration Release
+          dotnet restore HaworksPlatform.sln
+          dotnet build HaworksPlatform.sln --no-restore --configuration Release
 
       - name: Run all integration tests
         run: |
@@ -173,14 +173,14 @@ jobs:
       - name: Build images
         run: |
           for svc in identity catalog orders payments; do
-            docker build -t ritualworks/$svc:scan -f src/${svc^}/${svc^}.Api/Dockerfile .
+            docker build -t haworks/$svc:scan -f src/${svc^}/${svc^}.Api/Dockerfile .
           done
 
       - name: Run Trivy
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
-          image-ref: ritualworks/identity:scan
+          image-ref: haworks/identity:scan
           format: sarif
           output: trivy-results.sarif
 

@@ -40,7 +40,7 @@ deploy_one() {
   # --ha=false → 1 machine per app instead of Fly's default of 2 (HA pair).
   # 7 services × 2 machines = 14, which busts the free-tier cap. Single-
   # machine deploys + auto-stop are plenty for portfolio traffic; flip to
-  # `flyctl scale count N -a ritualworks-<svc>` after upgrading the org if
+  # `flyctl scale count N -a haworks-<svc>` after upgrading the org if
   # you want real HA.
   flyctl deploy -c "fly.${svc}.toml" --remote-only --ha=false
 }

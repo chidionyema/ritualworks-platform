@@ -13,7 +13,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Haworks.BuildingBlocks.Test
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "deploy", "deploy", "{5BFEE26C-AF67-4CDD-A765-2A260F697B0E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RitualworksPlatform.AppHost", "deploy\aspire\RitualworksPlatform.AppHost.csproj", "{FF0FD29F-F9FA-482C-AC7B-1B891DE8E174}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HaworksPlatform.AppHost", "deploy\aspire\HaworksPlatform.AppHost.csproj", "{FF0FD29F-F9FA-482C-AC7B-1B891DE8E174}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Identity", "Identity", "{9DD20F2A-6DB3-43AA-A3B3-02CD47D4B5F2}"
 EndProject

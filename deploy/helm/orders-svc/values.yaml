@@ -1,5 +1,5 @@
 image:
-  repository: ghcr.io/ritualworks/orders-svc
+  repository: ghcr.io/haworks/orders-svc
   tag: "1.0.0"
   pullPolicy: IfNotPresent
 

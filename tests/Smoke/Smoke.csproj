@@ -19,6 +19,6 @@
   </ItemGroup>
 
   <ItemGroup>
-      <ProjectReference Include="../../deploy/aspire/RitualworksPlatform.AppHost.csproj" />
+      <ProjectReference Include="../../deploy/aspire/HaworksPlatform.AppHost.csproj" />
   </ItemGroup>
 </Project>

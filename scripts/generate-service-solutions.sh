@@ -3,7 +3,7 @@ set -uo pipefail
 
 # Generates per-service .sln files in the repo root.
 # Each includes: the service's 4 layers + BuildingBlocks + Contracts + test projects.
-# Master solution (RitualworksPlatform.sln) remains untouched for cross-cutting work.
+# Master solution (HaworksPlatform.sln) remains untouched for cross-cutting work.
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"

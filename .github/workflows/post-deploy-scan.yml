@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       target_url:
-        description: "Base URL to scan (e.g. https://ritualworks-bffweb.fly.dev)"
+        description: "Base URL to scan (e.g. https://haworks-bffweb.fly.dev)"
         required: true
         type: string
 
@@ -18,7 +18,7 @@ concurrency:
 
 env:
   # Default to Fly deployment URL; override via workflow_dispatch input
-  TARGET_URL: ${{ inputs.target_url || 'https://ritualworks-bffweb.fly.dev' }}
+  TARGET_URL: ${{ inputs.target_url || 'https://haworks-bffweb.fly.dev' }}
 
 jobs:
   # ── 1. Smoke check — is the site actually up? ────────────────────────
