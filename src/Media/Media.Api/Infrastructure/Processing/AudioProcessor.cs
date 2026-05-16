@@ -24,11 +24,7 @@ public sealed class AudioProcessor(
         try
         {
             var inputPath = Path.Combine(workDir, "input");
-            await using (var stream = await s3.DownloadAsync(s3Key, ct))
-            {
-                await using var fs = File.Create(inputPath);
-                await stream.CopyToAsync(fs, ct);
-            }
+            await s3.DownloadToFileAsync(s3Key, inputPath, ct);
 
             var probe = await ffmpeg.ProbeAsync(inputPath, ct);
             if (probe == null)
