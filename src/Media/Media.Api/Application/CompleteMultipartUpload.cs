@@ -23,6 +23,7 @@ public class CompleteMultipartUploadValidator : AbstractValidator<CompleteMultip
 public class CompleteMultipartUploadHandler(
     MediaDbContext context,
     IS3Service s3,
+    IVirusScanner virusScanner,
     ICurrentUserService currentUser) : IRequestHandler<CompleteMultipartUploadCommand, Result<Unit>>
 {
     public async Task<Result<Unit>> Handle(CompleteMultipartUploadCommand request, CancellationToken ct)
@@ -49,7 +50,36 @@ public class CompleteMultipartUploadHandler(
             .Select(p => new PartETag(p.PartNumber, p.ETag))
             .ToList();
 
+        // Stitch parts in S3
         await s3.CompleteMultipartUploadAsync(mediaFile.Id.ToString(), mediaFile.S3UploadId, parts, ct);
+
+        // Trigger virus scan — same as single-part POST /complete
+        await using var tx = await context.Database.BeginTransactionAsync(ct);
+        try
+        {
+            mediaFile.MarkAsQuarantined();
+            await context.SaveChangesAsync(ct);
+
+            await using var stream = await s3.DownloadAsync(mediaFile.Id.ToString(), ct);
+            var isClean = await virusScanner.ScanAsync(stream, ct);
+
+            if (isClean)
+                mediaFile.MarkAsActive();
+            else
+                mediaFile.MarkAsRejected();
+
+            await context.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        {
+            // Another process already started scanning — idempotent
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
 
         return Unit.Value;
     }
