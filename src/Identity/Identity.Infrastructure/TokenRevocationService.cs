@@ -87,6 +87,38 @@ public class TokenRevocationService : ITokenRevocationService
         return false;
     }
 
+    public bool IsTokenRevoked(string tokenValue)
+    {
+        if (string.IsNullOrEmpty(tokenValue))
+        {
+            return false;
+        }
+
+        var cacheKey = BuildCacheKey(tokenValue);
+
+        // Try cache first (sync-over-async for the cache layer)
+        try
+        {
+            // We use a short timeout to avoid blocking indefinitely if the cache is slow
+            var task = _cache.GetAsync<RevokedTokenMarker>(cacheKey).AsTask();
+            if (task.Wait(TimeSpan.FromSeconds(1)))
+            {
+                var cached = task.Result;
+                if (cached is not null)
+                {
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error checking revocation cache synchronously for {Token}", tokenValue);
+        }
+
+        // Fallback to synchronous DB check
+        return _context.RevokedTokens.Any(rt => rt.Token == tokenValue);
+    }
+
     private async Task CacheRevocationAsync(string tokenValue, DateTime expiryDate, CancellationToken ct)
     {
         var cacheKey = BuildCacheKey(tokenValue);

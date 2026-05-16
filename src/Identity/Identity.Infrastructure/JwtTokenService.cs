@@ -95,7 +95,18 @@ public class JwtTokenService : IJwtTokenService
             var validationParameters = GetTokenValidationParameters(validateLifetime);
             var principal = tokenHandler.ValidateToken(tokenString, validationParameters, out _);
 
-            _logger.LogDebug("Token signature validated for {User}",
+            // Extract JTI for revocation check
+            var jti = principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+            if (!string.IsNullOrEmpty(jti))
+            {
+                if (_revocationService.IsTokenRevoked(jti))
+                {
+                    _logger.LogWarning("Token {Jti} has been revoked (sync check)", jti);
+                    return null;
+                }
+            }
+
+            _logger.LogDebug("Token signature and revocation validated for {User}",
                 principal?.Identity?.Name ?? "unknown");
 
             return principal;
