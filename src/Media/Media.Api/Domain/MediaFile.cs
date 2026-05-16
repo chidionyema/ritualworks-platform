@@ -16,11 +16,12 @@ public class MediaFile
     public long Size { get; private set; }
     public string MimeType { get; private set; } = null!;
     public MediaStatus Status { get; private set; }
+    public string OwnerId { get; private set; } = null!;
     public DateTime CreatedAt { get; private set; }
 
     private MediaFile() { }
 
-    public static MediaFile Create(string fileName, string hash, long size, string mimeType)
+    public static MediaFile Create(string fileName, string hash, long size, string mimeType, string ownerId)
     {
         return new MediaFile
         {
@@ -30,6 +31,7 @@ public class MediaFile
             Size = size,
             MimeType = mimeType,
             Status = MediaStatus.Pending,
+            OwnerId = ownerId,
             CreatedAt = DateTime.UtcNow
         };
     }

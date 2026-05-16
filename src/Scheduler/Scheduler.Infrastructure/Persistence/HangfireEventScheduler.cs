@@ -13,7 +13,7 @@ public class HangfireEventScheduler : IEventScheduler
         _backgroundJobClient = backgroundJobClient;
     }
 
-    public Task ScheduleEventAsync(DateTimeOffset scheduledTime, string targetExchange, string routingKey, object payload)
+    public Task ScheduleEventAsync(DateTimeOffset scheduledTime, string targetExchange, string routingKey, string payload)
     {
         _backgroundJobClient.Schedule<EventPublisherJob>(
             job => job.PublishAsync(targetExchange, routingKey, payload),

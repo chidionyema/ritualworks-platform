@@ -1,27 +1,186 @@
+using System.Linq.Dynamic.Core;
+using System.Linq.Expressions;
+using System.Text;
 using Haworks.BuildingBlocks.Common;
 using Haworks.RulesEngine.Api.Domain;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Haworks.RulesEngine.Api.Infrastructure;
 
 public class RulesEvaluator : IRulesEvaluator
 {
-    public async Task<Result<bool>> EvaluateAsync(string expression, Dictionary<string, object> inputs, CancellationToken cancellationToken)
-    {
-        // Mock AST evaluation
-        await Task.Delay(100, cancellationToken); // Simulate work
+    private readonly RulesDbContext _db;
+    private readonly ILogger<RulesEvaluator> _logger;
 
-        if (expression.Contains("age > 18"))
+    // SQL injection guard: block common injection patterns in expressions
+    private static readonly string[] ForbiddenTokens =
+    [
+        "--", ";", "DROP", "DELETE", "INSERT", "UPDATE", "EXEC", "EXECUTE",
+        "SELECT", "UNION", "xp_", "sp_", "CAST(", "CONVERT(", "CHAR(",
+        "NCHAR(", "VARCHAR(", "DECLARE"
+    ];
+
+    public RulesEvaluator(RulesDbContext db, ILogger<RulesEvaluator> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
+
+    public async Task<Result<RuleEvaluationResult>> EvaluateAsync(
+        Guid ruleId,
+        Dictionary<string, object> inputs,
+        CancellationToken cancellationToken)
+    {
+        var rule = await _db.Rules
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == ruleId && r.IsActive, cancellationToken);
+
+        if (rule is null)
+            return Result.Failure<RuleEvaluationResult>(
+                Error.NotFound("RulesEngine.RuleNotFound", $"Active rule '{ruleId}' not found."));
+
+        var validationError = ValidateExpression(rule.Expression);
+        if (validationError is not null)
+            return Result.Failure<RuleEvaluationResult>(validationError);
+
+        try
         {
-            if (inputs.TryGetValue("age", out var ageValue) && ageValue is int age)
+            var trace = new StringBuilder();
+            trace.Append($"Rule: {rule.Name} | Expression: {rule.Expression} | Inputs: ");
+            foreach (var kv in inputs)
+                trace.Append($"{kv.Key}={kv.Value} ");
+
+            // Build a typed parameter list for Dynamic LINQ
+            // We project inputs into a flat anonymous-like object using DynamicClass
+            var paramNames = inputs.Keys.ToArray();
+            var paramValues = inputs.Values.ToArray();
+
+            // Use Dynamic LINQ to parse and evaluate the boolean expression
+            // We create a queryable of a single anonymous object containing all inputs
+            var dataSource = new[] { inputs }.AsQueryable();
+
+            // Transform the expression to reference dictionary access
+            // E.g. "age > 18" becomes accessing inputs["age"] > 18
+            bool outcome;
+            try
             {
-                return Result.Success(age > 18);
+                // Build a single-element array, use DynamicExpressionParser to parse
+                // the expression as a lambda over Dictionary<string,object>
+                var parameter = Expression.Parameter(typeof(Dictionary<string, object>), "inputs");
+                var lambdaExpression = DynamicExpressionParser.ParseLambda(
+                    new[] { parameter },
+                    typeof(bool),
+                    TransformExpression(rule.Expression, inputs),
+                    BuildDynamicArgs(inputs));
+
+                var compiled = (Func<Dictionary<string, object>, bool>)lambdaExpression.Compile();
+                outcome = compiled(inputs);
             }
-            if (inputs.TryGetValue("age", out var ageStr) && int.TryParse(ageStr.ToString(), out int ageInt))
+            catch (Exception parseEx)
             {
-                return Result.Success(ageInt > 18);
+                _logger.LogWarning(parseEx, "Dynamic expression parse failed for rule {RuleId}: {Expression}",
+                    ruleId, rule.Expression);
+                return Result.Failure<RuleEvaluationResult>(
+                    Error.Validation("RulesEngine.ParseError",
+                        $"Expression parse error: {parseEx.Message}"));
             }
+
+            trace.Append($"| Result: {outcome}");
+
+            _logger.LogInformation(
+                "Rule {RuleName} ({RuleId}) evaluated to {Outcome}. Trace: {Trace}",
+                rule.Name, ruleId, outcome, trace);
+
+            return Result.Success(new RuleEvaluationResult(outcome, rule.Expression, trace.ToString()));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error evaluating rule {RuleId}", ruleId);
+            return Result.Failure<RuleEvaluationResult>(
+                Error.Internal("RulesEngine.EvaluationError", $"Evaluation failed: {ex.Message}"));
+        }
+    }
+
+    /// <summary>
+    /// Transforms a plain expression like "age > 18 AND country == \"US\""
+    /// into a Dynamic LINQ expression over typed constants.
+    /// Variables in the expression are replaced with their literal values
+    /// so Dynamic LINQ can evaluate the boolean result without needing
+    /// a custom type.
+    /// </summary>
+    private static string TransformExpression(string expression, Dictionary<string, object> inputs)
+    {
+        var result = expression;
+        // Replace "AND" / "OR" / "NOT" with C# operators
+        result = result
+            .Replace(" AND ", " && ", StringComparison.OrdinalIgnoreCase)
+            .Replace(" OR ", " || ", StringComparison.OrdinalIgnoreCase)
+            .Replace(" NOT ", " !", StringComparison.OrdinalIgnoreCase)
+            .Replace("==", "==")
+            .Replace("!=", "!=");
+
+        // Substitute variable names with their typed literal values
+        foreach (var kv in inputs.OrderByDescending(k => k.Key.Length)) // longest first to avoid partial match
+        {
+            var literal = ToLiteral(kv.Value);
+            // Word-boundary replacement: only replace whole tokens
+            result = ReplaceWholeWord(result, kv.Key, literal);
         }
 
-        return Result.Success(true); // Default mock
+        return result;
+    }
+
+    private static string ReplaceWholeWord(string source, string word, string replacement)
+    {
+        var sb = new StringBuilder();
+        int i = 0;
+        while (i < source.Length)
+        {
+            int idx = source.IndexOf(word, i, StringComparison.Ordinal);
+            if (idx < 0) { sb.Append(source, i, source.Length - i); break; }
+
+            bool leftBound = idx == 0 || !char.IsLetterOrDigit(source[idx - 1]) && source[idx - 1] != '_';
+            bool rightBound = idx + word.Length >= source.Length
+                || !char.IsLetterOrDigit(source[idx + word.Length]) && source[idx + word.Length] != '_';
+
+            sb.Append(source, i, idx - i);
+            if (leftBound && rightBound)
+                sb.Append(replacement);
+            else
+                sb.Append(word);
+
+            i = idx + word.Length;
+        }
+        return sb.ToString();
+    }
+
+    private static string ToLiteral(object value) => value switch
+    {
+        bool b => b ? "true" : "false",
+        string s => $"\"{s.Replace("\"", "\\\"")}\"",
+        null => "null",
+        _ => value.ToString() ?? "null"
+    };
+
+    private static object[] BuildDynamicArgs(Dictionary<string, object> inputs) => [];
+
+    private static Error? ValidateExpression(string expression)
+    {
+        if (string.IsNullOrWhiteSpace(expression))
+            return Error.Validation("RulesEngine.EmptyExpression", "Rule expression cannot be empty.");
+
+        if (expression.Length > 4000)
+            return Error.Validation("RulesEngine.ExpressionTooLong",
+                "Rule expression must be 4000 characters or fewer.");
+
+        foreach (var token in ForbiddenTokens)
+        {
+            if (expression.Contains(token, StringComparison.OrdinalIgnoreCase))
+                return Error.Validation("RulesEngine.InvalidExpression",
+                    $"Expression contains a forbidden token: '{token}'.");
+        }
+
+        return null;
     }
 }

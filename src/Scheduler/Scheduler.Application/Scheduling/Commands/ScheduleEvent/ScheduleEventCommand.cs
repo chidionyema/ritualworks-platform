@@ -8,7 +8,7 @@ public record ScheduleEventCommand(
     DateTimeOffset ScheduledTime,
     string TargetExchange,
     string RoutingKey,
-    object Payload) : IRequest;
+    string Payload) : IRequest;
 
 public class ScheduleEventCommandValidator : AbstractValidator<ScheduleEventCommand>
 {

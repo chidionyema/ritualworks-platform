@@ -24,7 +24,7 @@ public static class DependencyInjection
 
         services.AddScoped<IEventScheduler, HangfireEventScheduler>();
 
-        if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Test")
+        if (!env.IsEnvironment("Test"))
         {
             services.AddMassTransit(x =>
             {
@@ -38,7 +38,8 @@ public static class DependencyInjection
                 x.UsingRabbitMq((context, cfg) =>
                 {
                     var rabbitMqConfig = configuration.GetSection("RabbitMq");
-                    cfg.Host(rabbitMqConfig["Host"], "/", h =>
+                    var host = rabbitMqConfig["Host"] ?? throw new InvalidOperationException("RabbitMq:Host is required");
+                    cfg.Host(host, "/", h =>
                     {
                         h.Username(rabbitMqConfig["Username"] ?? throw new InvalidOperationException("RabbitMq:Username is required"));
                         h.Password(rabbitMqConfig["Password"] ?? throw new InvalidOperationException("RabbitMq:Password is required"));
@@ -46,15 +47,15 @@ public static class DependencyInjection
                     cfg.ConfigureStandardRabbitMq(context);
                 });
             });
+
+            services.AddHangfire(config => config
+                .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+                .UseSimpleAssemblyNameTypeSerializer()
+                .UseRecommendedSerializerSettings()
+                .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(connectionString)));
+
+            services.AddHangfireServer();
         }
-
-        services.AddHangfire(config => config
-            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-            .UseSimpleAssemblyNameTypeSerializer()
-            .UseRecommendedSerializerSettings()
-            .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(connectionString)));
-
-        services.AddHangfireServer();
 
         return services;
     }

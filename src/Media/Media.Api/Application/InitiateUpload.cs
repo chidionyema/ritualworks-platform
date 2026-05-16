@@ -1,3 +1,5 @@
+using Haworks.BuildingBlocks.CurrentUser;
+
 namespace Haworks.Media.Api.Application;
 
 public record InitiateUploadCommand(string FileName, string Hash, long Size, string MimeType) : IRequest<Result<UploadResponse>>;
@@ -19,26 +21,34 @@ public class InitiateUploadHandler : IRequestHandler<InitiateUploadCommand, Resu
 {
     private readonly MediaDbContext _context;
     private readonly IS3Service _s3Service;
+    private readonly ICurrentUserService _currentUser;
 
-    public InitiateUploadHandler(MediaDbContext context, IS3Service s3Service)
+    public InitiateUploadHandler(MediaDbContext context, IS3Service s3Service, ICurrentUserService currentUser)
     {
         _context = context;
         _s3Service = s3Service;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<UploadResponse>> Handle(InitiateUploadCommand request, CancellationToken cancellationToken)
     {
-        // SHA-256 deduplication logic
+        var ownerId = _currentUser.UserId;
+        if (string.IsNullOrEmpty(ownerId))
+        {
+            return Result.Failure<UploadResponse>(new Error("Media.Unauthorized", "Authenticated user identity could not be resolved."));
+        }
+
+        // SHA-256 deduplication: if the same hash was already uploaded by this owner, skip re-upload
         var existingFile = await _context.MediaFiles
-            .FirstOrDefaultAsync(f => f.Hash == request.Hash, cancellationToken);
+            .FirstOrDefaultAsync(f => f.Hash == request.Hash && f.OwnerId == ownerId, cancellationToken);
 
         if (existingFile != null)
         {
             return new UploadResponse(existingFile.Id, string.Empty, true);
         }
 
-        var mediaFile = MediaFile.Create(request.FileName, request.Hash, request.Size, request.MimeType);
-        
+        var mediaFile = MediaFile.Create(request.FileName, request.Hash, request.Size, request.MimeType, ownerId);
+
         _context.MediaFiles.Add(mediaFile);
         await _context.SaveChangesAsync(cancellationToken);
 

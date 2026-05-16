@@ -2,11 +2,16 @@
   <PropertyGroup>
     <RootNamespace>Haworks.Media.Api</RootNamespace>
     <AssemblyName>Media.Api</AssemblyName>
+    <!-- CA1861: EF Core generated migration files use new[]{...}. Auto-gen, can't edit. -->
+    <NoWarn>$(NoWarn);CA1861</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../../src/BuildingBlocks/Haworks.BuildingBlocks.csproj" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
     <PackageReference Include="AWSSDK.S3" Version="3.7.401" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.0" />
+    <PackageReference Include="nClam" Version="7.0.0" />
   </ItemGroup>
 </Project>

@@ -1,12 +1,12 @@
 using Haworks.Scheduler.Application;
 using Haworks.Scheduler.Infrastructure;
 using Haworks.Scheduler.Infrastructure.Persistence;
-using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Extensions;
 using Haworks.BuildingBlocks.Persistence;
 using Haworks.BuildingBlocks.Startup;
 using Microsoft.EntityFrameworkCore;
 using Hangfire;
+using Hangfire.Dashboard;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,8 +23,7 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddStartupTaskRunner();
 
-builder.Services.AddJwksAuthentication(builder.Configuration);
-builder.Services.AddHttpContextAccessor();
+builder.Services.AddPlatformAuthentication(builder.Configuration);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -59,12 +58,33 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapDefaultEndpoints();
 
-// Configure Hangfire Dashboard
+// Configure Hangfire Dashboard — only in Development, with auth filter
 if (app.Environment.IsDevelopment())
 {
-    app.UseHangfireDashboard();
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = new[] { new HangfireLocalRequestFilter() }
+    });
 }
 
 app.Run();
 
 public partial class Program { }
+
+/// <summary>
+/// Hangfire dashboard authorization filter that restricts access to authenticated users
+/// or, in development, to local requests only.
+/// </summary>
+internal sealed class HangfireLocalRequestFilter : IDashboardAuthorizationFilter
+{
+    public bool Authorize(DashboardContext context)
+    {
+        var httpContext = context.GetHttpContext();
+        // Allow local loopback in development; require authentication otherwise.
+        var connection = httpContext.Connection;
+        bool isLocal = connection.RemoteIpAddress != null
+            && (connection.RemoteIpAddress.Equals(connection.LocalIpAddress)
+                || System.Net.IPAddress.IsLoopback(connection.RemoteIpAddress));
+        return isLocal || httpContext.User.Identity?.IsAuthenticated == true;
+    }
+}

@@ -4,6 +4,10 @@
     <AssemblyName>Haworks.Analytics.Api</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Aspire.Confluent.Kafka" Version="13.3.2" />
+    <PackageReference Include="Confluent.Kafka" Version="2.14.0" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../BuildingBlocks/Haworks.BuildingBlocks.csproj" />
   </ItemGroup>
 </Project>

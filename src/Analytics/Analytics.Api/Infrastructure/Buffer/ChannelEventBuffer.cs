@@ -6,18 +6,19 @@ public interface IEventBuffer
 {
     ValueTask EnqueueAsync(ClickstreamEvent @event, CancellationToken ct = default);
     IAsyncEnumerable<ClickstreamEvent> DequeueAllAsync(CancellationToken ct = default);
+    int TryReadBatch(IList<ClickstreamEvent> destination, int maxItems);
+    int Count { get; }
 }
 
 public class ChannelEventBuffer : IEventBuffer
 {
+    private const int Capacity = 10_000;
     private readonly Channel<ClickstreamEvent> _channel;
+    private int _count;
 
     public ChannelEventBuffer()
     {
-        // Staff-level hardening: Bounded channel prevents memory exhaustion (OOM).
-        // DropOldest strategy ensures the most recent (and relevant) events are preserved 
-        // if the background consumer slows down.
-        _channel = Channel.CreateBounded<ClickstreamEvent>(new BoundedChannelOptions(10000)
+        _channel = Channel.CreateBounded<ClickstreamEvent>(new BoundedChannelOptions(Capacity)
         {
             FullMode = BoundedChannelFullMode.DropOldest,
             SingleReader = true,
@@ -25,22 +26,50 @@ public class ChannelEventBuffer : IEventBuffer
         });
     }
 
+    /// <summary>Approximate number of events currently in the buffer.</summary>
+    public int Count => _count;
+
+    /// <summary>
+    /// Attempts to synchronously read up to <paramref name="maxItems"/> events into
+    /// <paramref name="destination"/>, returning the number added.  Used by the flushing
+    /// service to drain the channel in batches without blocking.
+    /// </summary>
+    public int TryReadBatch(IList<ClickstreamEvent> destination, int maxItems)
+    {
+        var read = 0;
+        while (read < maxItems && _channel.Reader.TryRead(out var item))
+        {
+            Interlocked.Decrement(ref _count);
+            destination.Add(item);
+            read++;
+        }
+        return read;
+    }
+
     public ValueTask EnqueueAsync(ClickstreamEvent @event, CancellationToken ct = default)
     {
-        // Staff-level hardening: Metrics instrumentation
         Haworks.Analytics.Api.Infrastructure.Telemetry.AnalyticsMetrics.EventsEnqueued.Add(1);
 
-        // TryWrite is used here because with DropOldest, WriteAsync would only block
-        // if the channel was full without a drop strategy. 
-        if (!_channel.Writer.TryWrite(@event))
+        if (_channel.Writer.TryWrite(@event))
         {
+            Interlocked.Increment(ref _count);
+        }
+        else
+        {
+            // DropOldest silently drops; count stays the same but we record the drop.
             Haworks.Analytics.Api.Infrastructure.Telemetry.AnalyticsMetrics.EventsDropped.Add(1);
         }
+
         return ValueTask.CompletedTask;
     }
 
-    public IAsyncEnumerable<ClickstreamEvent> DequeueAllAsync(CancellationToken ct = default)
+    public async IAsyncEnumerable<ClickstreamEvent> DequeueAllAsync(
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
-        return _channel.Reader.ReadAllAsync(ct);
+        await foreach (var item in _channel.Reader.ReadAllAsync(ct))
+        {
+            Interlocked.Decrement(ref _count);
+            yield return item;
+        }
     }
 }

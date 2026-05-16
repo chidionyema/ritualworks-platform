@@ -1,3 +1,7 @@
+using System;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 
@@ -5,24 +9,42 @@ namespace Haworks.Scheduler.Infrastructure.Messaging;
 
 public class EventPublisherJob
 {
-    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ISendEndpointProvider _sendEndpointProvider;
     private readonly ILogger<EventPublisherJob> _logger;
 
-    public EventPublisherJob(IPublishEndpoint publishEndpoint, ILogger<EventPublisherJob> logger)
+    public EventPublisherJob(ISendEndpointProvider sendEndpointProvider, ILogger<EventPublisherJob> logger)
     {
-        _publishEndpoint = publishEndpoint;
-        _logger = logger;
+        _sendEndpointProvider = sendEndpointProvider ?? throw new ArgumentNullException(nameof(sendEndpointProvider));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task PublishAsync(string targetExchange, string routingKey, object payload)
+    public async Task PublishAsync(string targetExchange, string routingKey, string payload)
     {
-        _logger.LogInformation("Publishing scheduled event to {Exchange}/{RoutingKey}", targetExchange, routingKey);
+        if (string.IsNullOrWhiteSpace(targetExchange))
+            throw new ArgumentException("targetExchange must not be empty", nameof(targetExchange));
+        if (string.IsNullOrWhiteSpace(payload))
+            throw new ArgumentException("payload must not be empty", nameof(payload));
 
-        // Note: In a real system, we might need more advanced logic to target specific exchanges 
-        // if not using the standard MassTransit publish topology.
-        // For now, we use the standard Publish which maps to exchange by type.
-        // If we need raw exchange/routingKey, we'd use ISendEndpointProvider.
-        
-        await _publishEndpoint.Publish(payload);
+        _logger.LogInformation("Publishing scheduled event to exchange={Exchange} routingKey={RoutingKey}", targetExchange, routingKey);
+
+        // Build a RabbitMQ exchange URI so MassTransit routes to the exact exchange/routing-key
+        // rather than using the generic publish topology.
+        var exchangeUri = string.IsNullOrWhiteSpace(routingKey)
+            ? new Uri($"rabbitmq://{targetExchange}")
+            : new Uri($"rabbitmq://{targetExchange}/{routingKey}");
+
+        var endpoint = await _sendEndpointProvider.GetSendEndpoint(exchangeUri);
+
+        // Deserialize the raw JSON payload to object so MassTransit can serialise it
+        // with full header metadata (MessageId, CorrelationId, etc.).
+        // The payload was stored as raw JSON string to survive Hangfire serialization intact.
+        using var document = JsonDocument.Parse(payload);
+        var envelope = document.RootElement.Clone();
+
+        await endpoint.Send<object>(envelope, ctx =>
+        {
+            ctx.Headers.Set("X-Scheduler-Exchange", targetExchange);
+            ctx.Headers.Set("X-Scheduler-RoutingKey", routingKey ?? string.Empty);
+        });
     }
 }

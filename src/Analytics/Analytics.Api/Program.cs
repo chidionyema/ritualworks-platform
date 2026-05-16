@@ -8,6 +8,17 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
+builder.Host.UseSerilog((context, services, loggerConfiguration) =>
+{
+    loggerConfiguration
+        .ReadFrom.Configuration(context.Configuration)
+        .WriteTo.Console()
+        .Enrich.FromLogContext();
+});
+
+// Auth
+builder.Services.AddPlatformAuthentication(builder.Configuration);
+
 // MediatR & Validation
 builder.Services.AddMediatR(cfg =>
 {
@@ -17,6 +28,12 @@ builder.Services.AddMediatR(cfg =>
 });
 builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 
+// Kafka producer (connection name matches ConnectionStrings:kafka in config)
+if (builder.Configuration.GetConnectionString("kafka") is not null)
+{
+    builder.AddKafkaProducer<string, string>("kafka");
+}
+
 // Analytics Infrastructure
 builder.Services.AddSingleton<IEventBuffer, ChannelEventBuffer>();
 builder.Services.AddHostedService<KafkaFlushingService>();
@@ -24,24 +41,13 @@ builder.Services.AddHostedService<KafkaFlushingService>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-builder.Host.UseSerilog((context, services, loggerConfiguration) =>
-{
-    loggerConfiguration
-        .ReadFrom.Configuration(context.Configuration)
-        .WriteTo.Console()
-        .Enrich.FromLogContext();
-});
-
 var app = builder.Build();
 
 app.MapDefaultEndpoints();
 
-if (app.Environment.IsDevelopment())
-{
-// removed UseSwagger
-}
-
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 
 app.Run();

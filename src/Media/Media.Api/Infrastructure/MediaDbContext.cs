@@ -15,10 +15,12 @@ public class MediaDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.FileName).IsRequired().HasMaxLength(255);
             entity.Property(e => e.Hash).IsRequired().HasMaxLength(64);
-            // Staff-level hardening: Unique index prevents race conditions in SHA-256 deduplication
+            // Unique index prevents race conditions in SHA-256 deduplication
             entity.HasIndex(e => e.Hash).IsUnique();
             entity.Property(e => e.MimeType).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Status).HasConversion<string>();
+            entity.Property(e => e.OwnerId).IsRequired().HasMaxLength(128);
+            entity.HasIndex(e => e.OwnerId);
         });
     }
 }
