@@ -18,6 +18,14 @@ Start here. Find what you need by role.
 | Shared building blocks | `src/BuildingBlocks/` — Result monad, outbox, resilience, JWKS |
 | Solution filters (fast builds) | `filters/*.slnf` — one per service (~15s vs ~90s) |
 
+## Code Review & Audit
+
+| Topic | Location |
+|---|---|
+| 12-lens audit protocol | [agent-briefs/audit-protocol.md](agent-briefs/audit-protocol.md) |
+| Wave protocol (systematic sweep) | `.claude/projects/*/memory/wave-protocol.md` |
+| Security review findings | `.claude/projects/*/memory/security-review-findings.md` |
+
 ## Testing
 
 | Topic | Location |

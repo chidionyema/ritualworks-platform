@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-net/master/src/Stryker.Core/Stryker.Core/stryker-config.schema.json",
+  "stryker-config": {
+    "project": "Payments.Application.csproj",
+    "test-projects": ["tests/Payments/Payments.Unit/Payments.Unit.csproj"],
+    "reporters": ["html", "json", "markdown"],
+    "concurrency": 4,
+    "threshold-high": 75,
+    "threshold-low": 55,
+    "threshold-break": 45,
+    "ignore-mutations": ["string", "linq"],
+    "ignore-methods": ["ToString", "GetHashCode", "Dispose", "Log*"],
+    "mutate": [
+      "src/Payments/Payments.Application/**/*.cs",
+      "!**/obj/**",
+      "!**/GlobalUsings.cs",
+      "!**/Sagas/**",
+      "!**/Telemetry/**"
+    ]
+  }
+}

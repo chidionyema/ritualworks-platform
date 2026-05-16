@@ -1,3 +1,7 @@
 namespace Haworks.Contracts.FeatureFlags;
 
-public record FeatureFlagUpdated(string FlagName, bool IsEnabled);
+public sealed record FeatureFlagUpdated : DomainEvent
+{
+    public string FlagName { get; init; } = "";
+    public bool IsEnabled { get; init; }
+}

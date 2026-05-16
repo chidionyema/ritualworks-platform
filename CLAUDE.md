@@ -11,6 +11,8 @@
 - .NET 9.0 microservices platform (Clean Architecture)
 - See `.claude/projects/*/memory/` for full architecture reference
 - See `.claude/projects/*/memory/security-rules.md` for mandatory security rules
+- See `.claude/projects/*/memory/audit-protocol.md` for 12-lens service audit process
+- See `docs/agent-briefs/audit-protocol.md` for the same protocol (Gemini agent compatible)
 
 # Integration Test Rules (ENFORCED BY CI)
 - NEVER create raw Testcontainers (PostgreSqlBuilder, ContainerBuilder, etc.) in test projects

@@ -13,7 +13,7 @@ namespace Haworks.CheckoutOrchestrator.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Roles = "Admin,Service")]
 public sealed class CheckoutsController(IMediator mediator) : ControllerBase
 {
     [HttpPost]

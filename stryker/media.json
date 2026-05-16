@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-net/master/src/Stryker.Core/Stryker.Core/stryker-config.schema.json",
+  "stryker-config": {
+    "project": "Media.Api.csproj",
+    "test-projects": ["tests/Media/Media.Unit/Media.Unit.csproj"],
+    "reporters": ["html", "json", "markdown"],
+    "concurrency": 4,
+    "threshold-high": 75,
+    "threshold-low": 55,
+    "threshold-break": 45,
+    "ignore-mutations": ["string", "linq"],
+    "ignore-methods": ["ToString", "GetHashCode", "Dispose", "Log*"],
+    "mutate": [
+      "src/Media/Media.Api/Application/**/*.cs",
+      "src/Media/Media.Api/Domain/**/*.cs",
+      "!**/obj/**",
+      "!**/Migrations/**",
+      "!**/GlobalUsings.cs"
+    ]
+  }
+}

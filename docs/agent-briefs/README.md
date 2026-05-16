@@ -2,6 +2,14 @@
 
 Self-contained instructions for autonomous coding agents (Gemini, Claude, etc.) to do focused work in this repo without needing the originating chat context.
 
+## Cross-Cutting Protocols (read FIRST)
+
+- **[audit-protocol.md](audit-protocol.md)** — 12-lens deep review process. MANDATORY before any service ships to production. Covers money correctness, concurrency, security, state machines, idempotency, and 7 more categories.
+- **[SUPERPROMPT.md](SUPERPROMPT.md)** — parallel agent execution protocol (Mode B wave launches).
+- **[WAVE.md](WAVE.md)** — wave execution framework for parallel-track work.
+
+## Brief Format
+
 Each brief includes:
 - The mission and what "done" looks like
 - Conventions and anti-patterns specific to this codebase

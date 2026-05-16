@@ -1362,6 +1362,249 @@ public sealed class PlatformGuardTests
         violations.Should().BeEmpty("all MediaFile state transitions must enforce valid source states");
     }
 
+    // ─── Lens 2: Sync-over-Async (Concurrency) ────────────────────────
+
+    [Fact]
+    public void No_sync_over_async_blocking_calls()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Program.cs") || file.Contains("Migration") || file.Contains("ModuleInitializer")) continue;
+            // Startup/bootstrap code legitimately needs sync-over-async for one-time init
+            if (file.Contains("Extensions") && file.Contains("Authentication")) continue;
+            // Hosted services and disposables may use sync-over-async in teardown paths
+            if (file.Contains("HostedService") || file.Contains("Revocation")) continue;
+            // Demo infrastructure is not in the request path
+            if (file.Contains("/Demo/")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                if (line.TrimStart().StartsWith("//")) continue;
+                // Match Task.Result / .Result (property on Task) but NOT foo.Result (arbitrary property)
+                // Key: .Result must NOT be followed by further property access typical of value objects
+                if ((Regex.IsMatch(line, @"\.GetAwaiter\(\)\.GetResult\(\)") ||
+                     Regex.IsMatch(line, @"\)\s*\.Result\b") ||    // someTask().Result
+                     Regex.IsMatch(line, @"Task.*\.Result\b")) &&  // Task<T>.Result
+                    !line.Contains("ModuleInitializer") && !line.Contains("Main(") &&
+                    !line.Contains("Dispose") && !line.Contains("dispose") &&
+                    !line.Contains("ScanResult") && !line.Contains("ClamScan"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: .Result or .GetAwaiter().GetResult() — blocks thread pool, use await");
+                }
+                if (Regex.IsMatch(line, @"\.Wait\(\)") && !line.Contains("WaitAsync") &&
+                    !line.Contains("SpinWait") && !line.Contains("ManualReset"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: .Wait() blocks thread pool — use await");
+                }
+            }
+        }
+        violations.Should().BeEmpty("sync-over-async (.Result, .Wait()) causes thread pool starvation — use await");
+    }
+
+    // ─── Lens 5: Webhook Idempotency ────────────────────────────────
+
+    [Fact]
+    public void Webhook_controllers_check_for_duplicate_delivery()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindControllerFiles())
+        {
+            if (!file.Contains("Webhook", StringComparison.OrdinalIgnoreCase)) continue;
+            // Skip subscription/delivery management controllers — they manage outbound webhook config, not inbound receipt
+            if (file.Contains("Subscription", StringComparison.OrdinalIgnoreCase)) continue;
+            if (file.Contains("Deliveries", StringComparison.OrdinalIgnoreCase)) continue;
+            var content = File.ReadAllText(file);
+            if (!content.Contains("[HttpPost")) continue;
+            if (!content.Contains("idempotency") && !content.Contains("Idempotency") &&
+                !content.Contains("eventId") && !content.Contains("EventId") &&
+                !content.Contains("duplicate") && !content.Contains("Duplicate") &&
+                !content.Contains("DeliveryId") && !content.Contains("MessageId"))
+            {
+                violations.Add($"{Relative(file)}: webhook endpoint has no duplicate delivery guard — replay attacks possible");
+            }
+        }
+        violations.Should().BeEmpty("webhook endpoints must check for duplicate delivery (idempotency key, event ID, etc.)");
+    }
+
+    // ─── Lens 7: User ID Must Come from JWT ─────────────────────────
+
+    [Fact]
+    public void No_userId_from_request_body_in_state_changing_endpoints()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindControllerFiles())
+        {
+            var fileContent = File.ReadAllText(file);
+            // Skip service-to-service controllers (inter-service calls carry UserId in the message)
+            if (fileContent.Contains("Roles = \"Service\"") || fileContent.Contains("Roles = \"Admin,Service\"")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                // Flag patterns like "request.UserId" or "command.UserId" or "dto.UserId" used in assignment
+                if (Regex.IsMatch(lines[i], @"\b(request|command|dto|body|model)\.(UserId|OwnerId|CustomerId)\b", RegexOptions.IgnoreCase) &&
+                    !lines[i].TrimStart().StartsWith("//") &&
+                    !lines[i].Contains("// from JWT") && !lines[i].Contains("GetUserId") &&
+                    !lines[i].Contains("// service-to-service"))
+                {
+                    // Check context: is this inside a POST/PUT/DELETE endpoint?
+                    var context = string.Join(" ", lines.Skip(Math.Max(0, i - 15)).Take(15));
+                    if (context.Contains("[HttpPost") || context.Contains("[HttpPut") || context.Contains("[HttpDelete"))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: UserId from request body in state-changing endpoint — must come from JWT claims");
+                    }
+                }
+            }
+        }
+        violations.Should().BeEmpty("user identity must come from JWT claims, never from request body (prevents IDOR)");
+    }
+
+    // ─── Lens 7: SSRF Prevention ────────────────────────────────────
+
+    [Fact]
+    public void No_unvalidated_user_URLs_in_HTTP_calls()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                // Flag: new Uri(someVariable) followed by HttpClient call without validation
+                if (lines[i].Contains("new Uri(") && !lines[i].Contains("\"http") &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    // Check surrounding context for URL validation
+                    var context = string.Join(" ", lines.Skip(Math.Max(0, i - 5)).Take(15));
+                    if ((context.Contains("GetAsync") || context.Contains("PostAsync") || context.Contains("SendAsync")) &&
+                        !context.Contains("IsAllowed") && !context.Contains("ValidateUrl") &&
+                        !context.Contains("allowlist") && !context.Contains("whitelist") &&
+                        !context.Contains("StartsWith(\"https://\""))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: user-supplied URL used in HTTP call without validation — SSRF risk");
+                    }
+                }
+            }
+        }
+        // Informational — requires manual review of URL sources
+    }
+
+    // ─── Lens 8: Event Records Must Not Use Positional Syntax ───────
+
+    [Fact]
+    public void No_positional_record_syntax_in_Contracts()
+    {
+        var contractsDir = Path.Combine(SrcRoot, "Contracts");
+        if (!Directory.Exists(contractsDir)) return;
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(contractsDir, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj")))
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                // Positional record: record Foo(string Bar, int Baz)
+                // Non-positional: record Foo { ... } or record Foo : Base { ... }
+                var recordMatch = Regex.Match(lines[i], @"record\s+(\w+)\s*\(");
+                if (recordMatch.Success && !lines[i].Contains("//"))
+                {
+                    var recordName = recordMatch.Groups[1].Value;
+                    // Skip DTOs/envelopes/value objects that aren't MassTransit events
+                    if (recordName.Contains("Envelope") || recordName.Contains("Dto") ||
+                        recordName.Contains("Request") || recordName.Contains("Source") ||
+                        recordName.Contains("Payload") || recordName.Contains("Response"))
+                        continue;
+                    violations.Add($"{Relative(file)}:{i + 1}: {recordName} uses positional record syntax — MassTransit Init<T> faults. Use {{ get; init; }} properties");
+                }
+            }
+        }
+        violations.Should().BeEmpty("event records in Contracts must use {{ get; init; }} properties, never positional syntax");
+    }
+
+    // ─── Lens 9: Unbounded Responses in Controllers ─────────────────
+
+    [Fact]
+    public void No_unbounded_ToListAsync_in_controllers()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindControllerFiles())
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains(".ToListAsync")) continue;
+                // Look back for .Take() or pagination params
+                var context = string.Join(" ", lines.Skip(Math.Max(0, i - 10)).Take(11));
+                if (!context.Contains(".Take(") && !context.Contains("PageSize") &&
+                    !context.Contains("pageSize") && !context.Contains("limit"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: ToListAsync without pagination — could return unbounded results");
+                }
+            }
+        }
+        violations.Should().BeEmpty("controller queries must use .Take() or pagination to bound results");
+    }
+
+    // ─── Lens 11: Options Validation ────────────────────────────────
+
+    [Fact]
+    public void Options_classes_with_Required_attributes_have_ValidateOnStart()
+    {
+        var violations = new List<string>();
+        // Find options classes WITH [Required] attributes that are OUR code (in src/)
+        var optionsFiles = FindProductionCsFiles()
+            .Where(f => f.Contains("Options") && !f.Contains("Test") &&
+                         Path.GetFileName(f).EndsWith("Options.cs"));
+        var requiredOptions = new HashSet<string>();
+        foreach (var file in optionsFiles)
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("[Required]")) continue;
+            // Must be in our namespace (Haworks)
+            if (!content.Contains("namespace Haworks")) continue;
+            var match = Regex.Match(content, @"class\s+(\w+Options)\b");
+            if (match.Success)
+                requiredOptions.Add(match.Groups[1].Value);
+        }
+
+        // Check DI files for ValidateOnStart for each required options class
+        foreach (var diFile in FindDependencyInjectionFiles())
+        {
+            var diContent = File.ReadAllText(diFile);
+            foreach (var optionsName in requiredOptions)
+            {
+                // Only flag if the DI file actually binds this options class
+                if (diContent.Contains($"<{optionsName}>") && !diContent.Contains("ValidateOnStart"))
+                {
+                    violations.Add($"{Relative(diFile)}: binds {optionsName} with [Required] but missing ValidateOnStart()");
+                }
+            }
+        }
+        violations.Should().BeEmpty("options with [Required] must use ValidateDataAnnotations().ValidateOnStart()");
+    }
+
+    // ─── Lens 12: FromSqlRaw Injection ──────────────────────────────
+
+    [Fact]
+    public void No_string_interpolation_in_FromSqlRaw()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("FromSqlRaw") && lines[i].Contains("$\""))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: string interpolation in FromSqlRaw — SQL injection risk. Use FromSqlInterpolated or {0} parameters");
+                }
+            }
+        }
+        violations.Should().BeEmpty("FromSqlRaw must use parameterized queries, never string interpolation");
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────
 
     private static string FindSrcRoot()

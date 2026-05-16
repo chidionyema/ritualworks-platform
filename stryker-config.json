@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-net/master/src/Stryker.Core/Stryker.Core/stryker-config.schema.json",
+  "stryker-config": {
+    "reporters": ["html", "json", "markdown"],
+    "log-level": "info",
+    "concurrency": 4,
+    "threshold-high": 80,
+    "threshold-low": 60,
+    "threshold-break": 50,
+    "ignore-mutations": [
+      "string",
+      "linq"
+    ],
+    "ignore-methods": [
+      "ToString",
+      "GetHashCode",
+      "Dispose",
+      "Log*"
+    ],
+    "mutate": [
+      "!**/obj/**",
+      "!**/Migrations/**",
+      "!**/GlobalUsings.cs"
+    ]
+  }
+}

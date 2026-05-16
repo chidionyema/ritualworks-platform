@@ -1,6 +1,9 @@
 # .NET
 bin/
 obj/
+
+# Stryker mutation testing output
+StrykerOutput/
 *.user
 *.suo
 .vs/

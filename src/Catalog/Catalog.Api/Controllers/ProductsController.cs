@@ -85,6 +85,7 @@ public sealed class ProductsController(
     }
 
     [HttpPost("{id:guid}/reserve")]
+    [Authorize(Roles = "Admin,Service")]
     public async Task<IActionResult> Reserve(Guid id, [FromBody] ReserveStockRequest body, CancellationToken ct)
     {
         var command = new ReserveStockCommand(

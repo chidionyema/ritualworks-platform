@@ -189,7 +189,78 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
-  # ── 6. Claude deep code review ─────────────────────────────────────────
+  # ── 6. Mutation testing (Stryker.NET) ─────────────────────────────────
+  mutation-testing:
+    name: Mutation Testing (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: payments-domain
+            config: stryker/payments.json
+            test-project: tests/Payments/Payments.Unit/Payments.Unit.csproj
+          - service: payments-application
+            config: stryker/payments-application.json
+            test-project: tests/Payments/Payments.Unit/Payments.Unit.csproj
+          - service: media
+            config: stryker/media.json
+            test-project: tests/Media/Media.Unit/Media.Unit.csproj
+          - service: checkout-orchestrator
+            config: stryker/checkout-orchestrator.json
+            test-project: tests/CheckoutOrchestrator/CheckoutOrchestrator.Unit/CheckoutOrchestrator.Unit.csproj
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Install Stryker.NET
+        run: dotnet tool install --global dotnet-stryker
+
+      - name: Restore test project
+        run: dotnet restore ${{ matrix.test-project }}
+
+      - name: Run Stryker
+        run: |
+          dotnet stryker \
+            --config-file ${{ matrix.config }} \
+            --output StrykerOutput/${{ matrix.service }} \
+            --dashboard-api-key "${{ secrets.STRYKER_DASHBOARD_API_KEY }}" \
+            || true  # Don't fail the job on threshold breach — report only
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stryker-${{ matrix.service }}
+          path: StrykerOutput/${{ matrix.service }}
+          retention-days: 30
+
+      - name: Post mutation score to summary
+        if: always()
+        run: |
+          echo "## 🧬 Mutation Testing: ${{ matrix.service }}" >> $GITHUB_STEP_SUMMARY
+          if [ -f "StrykerOutput/${{ matrix.service }}/reports/mutation-report.md" ]; then
+            cat "StrykerOutput/${{ matrix.service }}/reports/mutation-report.md" >> $GITHUB_STEP_SUMMARY
+          elif ls StrykerOutput/${{ matrix.service }}/**/reports/mutation-report.md 2>/dev/null; then
+            cat StrykerOutput/${{ matrix.service }}/**/reports/mutation-report.md >> $GITHUB_STEP_SUMMARY
+          else
+            # Try to extract score from JSON
+            json=$(find StrykerOutput/${{ matrix.service }} -name "*.json" -path "*/reports/*" | head -1)
+            if [ -n "$json" ]; then
+              score=$(jq -r '.mutationScore // "N/A"' "$json" 2>/dev/null || echo "N/A")
+              echo "Mutation score: **${score}%**" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⚠️ No mutation report found" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
+  # ── 7. Claude deep code review ─────────────────────────────────────────
   claude-review:
     name: Claude Deep Review
     runs-on: ubuntu-latest
@@ -359,11 +430,11 @@ jobs:
               labels,
             });
 
-  # ── 7. Nightly summary notification ───────────────────────────────────
+  # ── 8. Nightly summary notification ───────────────────────────────────
   notify:
     name: Summary
     runs-on: ubuntu-latest
-    needs: [dependency-audit, architecture, integration-full, secret-scan, claude-review]
+    needs: [dependency-audit, architecture, integration-full, secret-scan, mutation-testing, claude-review]
     if: always()
 
     steps:
@@ -377,6 +448,7 @@ jobs:
           echo "| Architecture | ${{ needs.architecture.result == 'success' && '✅' || '❌' }} ${{ needs.architecture.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Integration Tests | ${{ needs.integration-full.result == 'success' && '✅' || '❌' }} ${{ needs.integration-full.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Secret Scan | ${{ needs.secret-scan.result == 'success' && '✅' || '⚠️' }} ${{ needs.secret-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Mutation Testing | ${{ needs.mutation-testing.result == 'success' && '✅' || '⚠️' }} ${{ needs.mutation-testing.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Claude Deep Review | ${{ needs.claude-review.result == 'success' && '✅' || '⚠️' }} ${{ needs.claude-review.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY

@@ -28,14 +28,16 @@ public sealed class CreateRefundCommandHandler(
             return Result.Failure<Guid>(Error.NotFound("Payment.NotFound", $"Payment {request.PaymentId} not found"));
         }
 
-        if (payment.Status != Domain.PaymentStatus.Completed)
+        if (payment.Status != Domain.PaymentStatus.Completed && payment.Status != Domain.PaymentStatus.Refunded)
         {
             return Result.Failure<Guid>(Error.Validation("Payment.NotCompleted", $"Payment must be completed before refund. Current status: {payment.Status}"));
         }
 
-        if (request.Amount > payment.Amount)
+        var remainingRefundable = payment.Amount - payment.TotalRefunded;
+        if (request.Amount > remainingRefundable)
         {
-            return Result.Failure<Guid>(Error.Validation("Refund.ExceedsPayment", $"Refund amount {request.Amount} exceeds payment amount {payment.Amount}"));
+            return Result.Failure<Guid>(Error.Validation("Refund.ExceedsRemaining",
+                $"Refund amount {request.Amount} exceeds remaining refundable amount {remainingRefundable} (already refunded: {payment.TotalRefunded})"));
         }
 
         var refundId = Guid.NewGuid();

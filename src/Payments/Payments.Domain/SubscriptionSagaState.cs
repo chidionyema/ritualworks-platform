@@ -11,6 +11,7 @@ public class SubscriptionSagaState : SagaStateMachineInstance, ISagaVersion
     public string ProviderSubscriptionId { get; set; } = string.Empty;
     public string UserId { get; set; } = string.Empty;
     public string PlanId { get; set; } = string.Empty;
+    public string Provider { get; set; } = "Stripe";
     public string Currency { get; set; } = "USD";
     public decimal Amount { get; set; }
     
