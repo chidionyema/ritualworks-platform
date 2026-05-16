@@ -17,14 +17,14 @@ public sealed class IdempotencyKeyGenerator : IIdempotencyKeyGenerator
         ArgumentException.ThrowIfNullOrWhiteSpace(userId);
         ArgumentException.ThrowIfNullOrWhiteSpace(operation);
 
+        // Purely deterministic from inputs — no time component.
+        // The caller passes OrderId as a component, so different orders produce different keys.
+        // Same OrderId always produces same key → Stripe deduplicates retries correctly.
         var payload = new
         {
             UserId = userId,
             Operation = operation,
             Components = components.OrderBy(c => c, StringComparer.Ordinal).ToList(),
-            // Include timestamp bucket to allow retry with same cart after some time
-            // This creates 1-hour buckets to prevent duplicate orders within same hour
-            TimeBucket = DateTime.UtcNow.ToString("yyyyMMddHH")
         };
 
         var json = JsonSerializer.Serialize(payload);

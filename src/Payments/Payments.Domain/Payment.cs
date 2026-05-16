@@ -47,6 +47,8 @@ public class Payment : AuditableEntity
     public string PaymentMethod { get; private set; } = string.Empty;
     public bool IsComplete { get; private set; }
 
+    public decimal TotalRefunded { get; private set; }
+
     public PaymentProvider Provider { get; private set; } = PaymentProvider.Stripe;
     public string? ProviderSessionId { get; private set; }
     public string? ProviderCheckoutUrl { get; private set; }
@@ -119,12 +121,29 @@ public class Payment : AuditableEntity
     }
 
     /// <summary>Marks the payment as cancelled (user abandoned checkout).</summary>
-    /// <summary>Marks the payment as refunded.</summary>
+    /// <summary>Records a partial or full refund amount. Transitions to Refunded when fully refunded.</summary>
+    public void RecordRefund(decimal amount)
+    {
+        if (Status != PaymentStatus.Completed && Status != PaymentStatus.Refunded)
+            throw new InvalidOperationException($"Cannot refund a payment with status {Status}");
+        if (amount <= 0)
+            throw new ArgumentException("Refund amount must be positive", nameof(amount));
+        if (TotalRefunded + amount > Amount)
+            throw new InvalidOperationException($"Total refunded ({TotalRefunded + amount}) would exceed payment amount ({Amount})");
+
+        TotalRefunded += amount;
+        if (TotalRefunded >= Amount)
+            Status = PaymentStatus.Refunded;
+        LastModifiedDate = DateTime.UtcNow;
+    }
+
+    /// <summary>Marks the payment as fully refunded (legacy — prefer RecordRefund for partial support).</summary>
     public void MarkRefunded()
     {
         if (Status != PaymentStatus.Completed)
             throw new InvalidOperationException($"Cannot refund a payment with status {Status}");
 
+        TotalRefunded = Amount;
         Status = PaymentStatus.Refunded;
         LastModifiedDate = DateTime.UtcNow;
     }

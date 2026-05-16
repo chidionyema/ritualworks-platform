@@ -43,6 +43,7 @@ public sealed class SubscriptionSaga : MassTransitStateMachine<SubscriptionSagaS
                     saga.ProviderSubscriptionId = msg.SubscriptionId;
                     saga.UserId = msg.UserId;
                     saga.PlanId = msg.PlanId;
+                    saga.Provider = msg.Provider.ToString();
                     saga.PeriodEnd = msg.CurrentPeriodEnd;
                     saga.CreatedAt = DateTime.UtcNow;
 
@@ -166,7 +167,7 @@ public sealed class SubscriptionSaga : MassTransitStateMachine<SubscriptionSagaS
                         {
                             SubscriptionId = ctx.Saga.ProviderSubscriptionId,
                             UserId = ctx.Saga.UserId,
-                            Provider = PaymentProvider.Stripe,
+                            Provider = Enum.TryParse<PaymentProvider>(ctx.Saga.Provider, out var p) ? p : PaymentProvider.Stripe,
                             Reason = "dunning_exhausted",
                             CancelledAt = DateTime.UtcNow
                         }))

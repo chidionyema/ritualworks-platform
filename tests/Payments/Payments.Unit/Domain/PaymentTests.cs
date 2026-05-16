@@ -176,4 +176,65 @@ public class PaymentTests
     }
 
     #endregion
+
+    #region RecordRefund (C4 — cumulative tracking)
+
+    [Fact]
+    public void RecordRefund_partial_tracks_amount()
+    {
+        var payment = CreateCompleted();
+        payment.RecordRefund(30m);
+        payment.TotalRefunded.Should().Be(30m);
+        payment.Status.Should().Be(PaymentStatus.Completed); // not fully refunded yet
+    }
+
+    [Fact]
+    public void RecordRefund_full_transitions_to_Refunded()
+    {
+        var payment = CreateCompleted();
+        payment.RecordRefund(100m); // Amount = 100
+        payment.TotalRefunded.Should().Be(100m);
+        payment.Status.Should().Be(PaymentStatus.Refunded);
+    }
+
+    [Fact]
+    public void RecordRefund_multiple_partials_accumulate()
+    {
+        var payment = CreateCompleted();
+        payment.RecordRefund(40m);
+        payment.RecordRefund(40m);
+        payment.TotalRefunded.Should().Be(80m);
+        payment.Status.Should().Be(PaymentStatus.Completed);
+        payment.RecordRefund(20m); // now fully refunded
+        payment.Status.Should().Be(PaymentStatus.Refunded);
+    }
+
+    [Fact]
+    public void RecordRefund_exceeding_total_throws()
+    {
+        var payment = CreateCompleted();
+        payment.RecordRefund(60m);
+        var act = () => payment.RecordRefund(50m); // 60 + 50 = 110 > 100
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*exceed*");
+    }
+
+    [Fact]
+    public void RecordRefund_on_Pending_throws()
+    {
+        var payment = CreateDefault();
+        var act = () => payment.RecordRefund(10m);
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Pending*");
+    }
+
+    [Fact]
+    public void RecordRefund_zero_throws()
+    {
+        var payment = CreateCompleted();
+        var act = () => payment.RecordRefund(0m);
+        act.Should().Throw<ArgumentException>();
+    }
+
+    #endregion
 }

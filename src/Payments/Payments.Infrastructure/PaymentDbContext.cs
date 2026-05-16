@@ -55,6 +55,7 @@ public class PaymentDbContext : DbContext, IPaymentDbContext
             entity.HasKey(p => p.Id);
 
             entity.Property(p => p.Amount).HasColumnType("numeric(18,2)");
+            entity.Property(p => p.TotalRefunded).HasColumnType("numeric(18,2)").HasDefaultValue(0m);
             entity.Property(p => p.Currency).HasMaxLength(3);
             entity.Property(p => p.Status).HasConversion<string>();
             entity.Property(p => p.Provider).HasConversion<string>();
@@ -65,6 +66,11 @@ public class PaymentDbContext : DbContext, IPaymentDbContext
             entity.HasIndex(p => p.OrderId).IsUnique();
             entity.HasIndex(p => p.ProviderTransactionId);
             entity.HasIndex(p => p.ProviderSessionId);
+
+            // C1: Concurrency protection — prevents double-completion from parallel webhooks
+            entity.Property<uint>("xmin")
+                .HasColumnName("xmin").HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
         });
 
         modelBuilder.Entity<Subscription>(entity =>
@@ -140,6 +146,7 @@ public class PaymentDbContext : DbContext, IPaymentDbContext
             entity.Property(s => s.ProviderSubscriptionId).HasMaxLength(255).IsRequired();
             entity.Property(s => s.UserId).HasMaxLength(100).IsRequired();
             entity.Property(s => s.PlanId).HasMaxLength(100).IsRequired();
+            entity.Property(s => s.Provider).HasMaxLength(20).HasDefaultValue("Stripe");
             entity.Property(s => s.Currency).HasMaxLength(3).IsRequired();
             entity.Property(s => s.Amount).HasColumnType("numeric(18,2)").IsRequired();
             entity.Property(s => s.CurrentState).HasMaxLength(100);

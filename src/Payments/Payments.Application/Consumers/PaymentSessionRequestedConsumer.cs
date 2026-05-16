@@ -46,7 +46,7 @@ public sealed class PaymentSessionRequestedConsumer(
     public async Task Consume(ConsumeContext<PaymentSessionRequestedEvent> context)
     {
         var evt = context.Message;
-        var isDemoMode = configuration.GetValue<bool>("Payments:DemoMode", true);
+        var isDemoMode = configuration.GetValue<bool>("Payments:DemoMode", false);
 
         using var activity = PaymentsActivities.Source.StartActivity("payments.session.create");
         activity?.SetTag("order.id", evt.OrderId);
