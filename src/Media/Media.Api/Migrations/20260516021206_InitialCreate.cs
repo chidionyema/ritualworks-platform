@@ -34,10 +34,10 @@ namespace Haworks.Media.Api.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_MediaFiles_Hash",
+                name: "IX_MediaFiles_Hash_OwnerId",
                 schema: "media",
                 table: "MediaFiles",
-                column: "Hash",
+                columns: new[] { "Hash", "OwnerId" },
                 unique: true);
 
             migrationBuilder.CreateIndex(

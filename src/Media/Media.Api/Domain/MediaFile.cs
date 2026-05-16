@@ -36,7 +36,24 @@ public class MediaFile
         };
     }
 
-    public void MarkAsQuarantined() => Status = MediaStatus.Quarantined;
-    public void MarkAsActive() => Status = MediaStatus.Active;
-    public void MarkAsRejected() => Status = MediaStatus.Rejected;
+    public void MarkAsQuarantined()
+    {
+        if (Status != MediaStatus.Pending)
+            throw new InvalidOperationException($"Cannot quarantine from {Status}; only Pending files can be quarantined.");
+        Status = MediaStatus.Quarantined;
+    }
+
+    public void MarkAsActive()
+    {
+        if (Status != MediaStatus.Quarantined)
+            throw new InvalidOperationException($"Cannot activate from {Status}; only Quarantined (scanned) files can be activated.");
+        Status = MediaStatus.Active;
+    }
+
+    public void MarkAsRejected()
+    {
+        if (Status != MediaStatus.Quarantined)
+            throw new InvalidOperationException($"Cannot reject from {Status}; only Quarantined (scanned) files can be rejected.");
+        Status = MediaStatus.Rejected;
+    }
 }

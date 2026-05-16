@@ -61,10 +61,15 @@ namespace Haworks.Media.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Hash")
+                    b.HasIndex("Hash", "OwnerId")
                         .IsUnique();
 
                     b.HasIndex("OwnerId");
+
+                    b.Property<uint>("xmin")
+                        .HasColumnType("xid")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .IsConcurrencyToken();
 
                     b.ToTable("MediaFiles", "media");
                 });

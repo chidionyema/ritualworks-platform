@@ -21,6 +21,11 @@ public class MediaDbContext : DbContext
             entity.Property(e => e.Status).HasConversion<string>();
             entity.Property(e => e.OwnerId).IsRequired().HasMaxLength(128);
             entity.HasIndex(e => e.OwnerId);
+
+            entity.Property<uint>("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
         });
     }
 }

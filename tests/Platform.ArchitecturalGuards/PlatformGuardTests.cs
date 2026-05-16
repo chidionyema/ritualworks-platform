@@ -1287,44 +1287,21 @@ public sealed class PlatformGuardTests
     }
 
     [Fact]
-    public void Privacy_events_extend_DomainEvent()
+    public void All_event_records_in_Contracts_extend_DomainEvent()
     {
-        var contractsDir = Path.Combine(SrcRoot, "Contracts", "Privacy");
+        var contractsDir = Path.Combine(SrcRoot, "Contracts");
         if (!Directory.Exists(contractsDir)) return;
         var violations = new List<string>();
-        foreach (var file in Directory.GetFiles(contractsDir, "*.cs")
+        foreach (var file in Directory.GetFiles(contractsDir, "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains("obj")))
         {
             var lines = File.ReadAllLines(file);
             foreach (var line in lines)
             {
-                if (Regex.IsMatch(line, @"public\s+(sealed\s+)?record\s+\w+\s*$") ||
-                    (Regex.IsMatch(line, @"public\s+(sealed\s+)?record\s+\w+\s*\{") && !line.Contains(":")))
-                {
-                    violations.Add($"{Relative(file)}: event record doesn't extend DomainEvent — MassTransit Init<T> will fault");
-                }
-            }
-        }
-        violations.Should().BeEmpty("all Privacy events must extend DomainEvent for MassTransit compatibility");
-    }
-
-    [Fact]
-    public void Media_events_extend_DomainEvent()
-    {
-        var contractsDir = Path.Combine(SrcRoot, "Contracts", "Media");
-        if (!Directory.Exists(contractsDir)) return;
-        var violations = new List<string>();
-        foreach (var file in Directory.GetFiles(contractsDir, "*.cs")
-            .Where(f => !f.Contains("obj")))
-        {
-            var lines = File.ReadAllLines(file);
-            foreach (var line in lines)
-            {
-                // Match records ending in Event, Message, or Notification (actual MassTransit events)
-                // Skip value objects like MediaVariant
                 var m = Regex.Match(line, @"public\s+(sealed\s+)?record\s+(\w+)");
                 if (!m.Success) continue;
                 var name = m.Groups[2].Value;
+                // Only check types that are MassTransit events (not value objects)
                 if (!name.EndsWith("Event") && !name.EndsWith("Message") && !name.EndsWith("Notification"))
                     continue;
                 if (!line.Contains(": DomainEvent") && !line.Contains(":DomainEvent"))
@@ -1333,7 +1310,7 @@ public sealed class PlatformGuardTests
                 }
             }
         }
-        violations.Should().BeEmpty("all Media events must extend DomainEvent for MassTransit compatibility");
+        violations.Should().BeEmpty("all event records in Contracts must extend DomainEvent for MassTransit compatibility");
     }
 
     [Fact]

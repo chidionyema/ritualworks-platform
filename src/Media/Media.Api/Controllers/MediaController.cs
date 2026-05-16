@@ -14,7 +14,6 @@ public sealed record MediaFileResponse(
     string MimeType,
     long Size,
     string Status,
-    string OwnerId,
     DateTime CreatedAt);
 
 [ApiController]
@@ -65,7 +64,6 @@ public class MediaController : ControllerBase
             file.MimeType,
             file.Size,
             file.Status.ToString(),
-            file.OwnerId,
             file.CreatedAt);
 
         return Ok(response);
