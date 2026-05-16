@@ -53,7 +53,7 @@ public sealed class SuppressionRepository : ISuppressionRepository
 
         try
         {
-            await _dbContext.SaveChangesAsync().ConfigureAwait(false);
+            await _dbContext.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
         }
         catch (DbUpdateException)
         {

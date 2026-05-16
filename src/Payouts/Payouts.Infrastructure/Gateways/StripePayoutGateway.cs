@@ -7,12 +7,13 @@ namespace Haworks.Payouts.Infrastructure.Gateways;
 
 public class StripePayoutGateway : IPayoutGateway
 {
-    private readonly IConfiguration _configuration;
+    private readonly StripeClient _client;
 
     public StripePayoutGateway(IConfiguration configuration)
     {
-        _configuration = configuration;
-        StripeConfiguration.ApiKey = _configuration["Stripe:SecretKey"];
+        var secretKey = configuration["Stripe:SecretKey"]
+            ?? throw new InvalidOperationException("Stripe:SecretKey is required for payouts");
+        _client = new StripeClient(secretKey);
     }
 
     public async Task<string> CreateConnectedAccountAsync(Guid sellerId, string email)
@@ -27,7 +28,7 @@ public class StripePayoutGateway : IPayoutGateway
             }
         };
 
-        var service = new AccountService();
+        var service = new AccountService(_client);
         var account = await service.CreateAsync(options);
         return account.Id;
     }
@@ -42,7 +43,7 @@ public class StripePayoutGateway : IPayoutGateway
             Type = "account_onboarding",
         };
 
-        var service = new AccountLinkService();
+        var service = new AccountLinkService(_client);
         var accountLink = await service.CreateAsync(options);
         return accountLink.Url;
     }
@@ -57,7 +58,7 @@ public class StripePayoutGateway : IPayoutGateway
             Description = description
         };
 
-        var service = new TransferService();
+        var service = new TransferService(_client);
         var transfer = await service.CreateAsync(options);
 
         return (transfer.Id, PayoutStatus.Succeeded);

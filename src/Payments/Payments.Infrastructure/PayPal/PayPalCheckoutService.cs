@@ -32,6 +32,10 @@ internal sealed class PayPalCheckoutService(
             throw new ArgumentException("Total amount must be greater than zero", nameof(request));
         }
 
+        // SSRF guard: validate redirect URLs are HTTPS and point to known domains
+        ValidateRedirectUrl(request.SuccessUrl, nameof(request.SuccessUrl));
+        ValidateRedirectUrl(request.CancelUrl, nameof(request.CancelUrl));
+
         return await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
         {
             var client = await clientFactory.GetAuthenticatedClientAsync(token);
@@ -219,5 +223,16 @@ internal sealed class PayPalCheckoutService(
             return error?.Message ?? error?.Details?.FirstOrDefault()?.Description;
         }
         catch { return null; }
+    }
+
+    private static void ValidateRedirectUrl(string? url, string paramName)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            throw new ArgumentException($"Invalid URL: {paramName}", paramName);
+        if (uri.Scheme != "https" && uri.Scheme != "http")
+            throw new ArgumentException($"URL must use HTTPS: {paramName}", paramName);
+        if (uri.Host is "localhost" or "127.0.0.1" or "0.0.0.0" || uri.Host.EndsWith(".internal"))
+            throw new ArgumentException($"URL must not point to internal hosts: {paramName}", paramName);
     }
 }

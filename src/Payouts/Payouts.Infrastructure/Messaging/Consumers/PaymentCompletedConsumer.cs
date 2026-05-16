@@ -18,13 +18,31 @@ public class PaymentCompletedConsumer : IConsumer<PaymentCompletedEvent>
 
     public async Task Consume(ConsumeContext<PaymentCompletedEvent> context)
     {
-        var @event = context.Message;
-        _logger.LogInformation("Processing payment completion for Order: {OrderId}, Amount: {Amount}", @event.OrderId, @event.Amount);
-        // TODO: PaymentCompletedEvent does not carry SellerId. A contract change
-        // (adding SellerId to the event) or an order-lookup service is needed to
-        // resolve the seller. Using OrderId as a deterministic placeholder until
-        // the contract is updated.
-        Guid sellerId = @event.OrderId;
-        await _ledgerService.CreditSellerAsync(sellerId, @event.Amount, @event.Currency, @event.PaymentId, $"Payment for Order {@event.OrderId}");
+        var evt = context.Message;
+
+        if (evt.SellerId == Guid.Empty)
+        {
+            _logger.LogWarning("PaymentCompletedEvent for Order {OrderId} has no SellerId — cannot credit seller", evt.OrderId);
+            return;
+        }
+
+        // Idempotency: check if this payment was AlreadyProcessed via the ReferenceId (PaymentId)
+        var alreadyCredited = await _ledgerService.HasCreditForReferenceAsync(evt.PaymentId, context.CancellationToken);
+        if (alreadyCredited)
+        {
+            _logger.LogInformation("Payment {PaymentId} already credited — skipping duplicate", evt.PaymentId);
+            return;
+        }
+
+        _logger.LogInformation("Processing payment completion for Order: {OrderId}, Seller: {SellerId}, Amount: {Amount}",
+            evt.OrderId, evt.SellerId, evt.Amount);
+
+        await _ledgerService.CreditSellerAsync(
+            evt.SellerId,
+            evt.Amount,
+            evt.Currency,
+            evt.PaymentId,
+            $"Payment for Order {evt.OrderId}",
+            context.CancellationToken);
     }
 }

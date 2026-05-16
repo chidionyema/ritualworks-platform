@@ -49,7 +49,7 @@ public sealed class ProviderRefundCancellationConsumer(
                 await context.Publish(new RefundCancelledEvent
                 {
                     RefundId = msg.RefundId,
-                    OrderId = Guid.Empty, // OrderId not carried on this event — saga state holds it
+                    OrderId = msg.RefundId, // Correlation: RefundId is the saga CorrelationId; saga resolves OrderId from state
                     Reason = "provider_confirmed_cancelled"
                 }, context.CancellationToken);
                 return;
@@ -80,7 +80,7 @@ public sealed class ProviderRefundCancellationConsumer(
             await context.Publish(new RefundCancelledEvent
             {
                 RefundId = msg.RefundId,
-                OrderId = Guid.Empty,
+                OrderId = msg.RefundId, // Correlation: saga resolves OrderId from its state via RefundId
                 Reason = "operator_cancellation_requested"
             }, context.CancellationToken);
         }

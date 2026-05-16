@@ -28,6 +28,7 @@ public sealed class EventFanOutConsumer(
 
     private async Task FanOutAsync<T>(ConsumeContext<T> context, string externalEventName, T data) where T : class
     {
+        // Idempotency: unique index on (SubscriptionId, EventId) in WebhooksDbContext prevents duplicate delivery
         var eventId = context.MessageId?.ToString() ?? Guid.NewGuid().ToString();
         
         // 1. Resolve subscriptions

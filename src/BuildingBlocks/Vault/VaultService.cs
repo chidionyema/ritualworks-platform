@@ -371,7 +371,7 @@ public class VaultService : IVaultService
                 _telemetry.TrackException(ex);
 
                 var errorJitterMs = jitterRng.Next(0, 10000);
-                await Task.Delay(TimeSpan.FromMinutes(1).Add(TimeSpan.FromMilliseconds(errorJitterMs)), stoppingToken);
+                await Task.Delay(TimeSpan.FromMinutes(1).Add(TimeSpan.FromMilliseconds(errorJitterMs)), stoppingToken).ConfigureAwait(false);
             }
         }
     }
@@ -396,7 +396,6 @@ public class VaultService : IVaultService
             {
                 store.Current.Password?.Dispose();
             }
-            (_client as IDisposable)?.Dispose();
             _clientGate.Dispose();
         }
         _disposed = true;

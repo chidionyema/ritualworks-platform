@@ -56,7 +56,7 @@ internal sealed class TemplateRepository : ITemplateRepository
         ArgumentNullException.ThrowIfNull(template);
 
         await _dbContext.NotificationTemplates.AddAsync(template).ConfigureAwait(false);
-        await _dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     public async Task UpdateAsync(NotificationTemplate template)
@@ -64,6 +64,6 @@ internal sealed class TemplateRepository : ITemplateRepository
         ArgumentNullException.ThrowIfNull(template);
 
         _dbContext.NotificationTemplates.Update(template);
-        await _dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
     }
 }

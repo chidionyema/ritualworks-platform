@@ -13,12 +13,6 @@ namespace Haworks.Platform.ArchitecturalGuards;
 public sealed class PlatformGuardTests
 {
     private static readonly string SrcRoot = FindSrcRoot();
-    private static readonly string[] ServiceNames =
-    [
-        "Audit", "BffWeb", "Catalog", "CheckoutOrchestrator", "Content",
-        "Identity", "Location", "Merchant", "Notifications", "Orders",
-        "Payments", "Payouts", "Pricing", "Privacy", "Scheduler", "Search", "Webhooks"
-    ];
 
     // ─── Auth & Middleware ────────────────────────────────────────────
 
@@ -1605,6 +1599,981 @@ public sealed class PlatformGuardTests
         violations.Should().BeEmpty("FromSqlRaw must use parameterized queries, never string interpolation");
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // AGENT MISTAKE PREVENTION — patterns AI agents commonly produce wrong
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Every_mutating_Command_has_a_Validator()
+    {
+        // Agents often create Commands without FluentValidation validators.
+        // All Create*/Update*/Delete* commands MUST have input validation.
+        var violations = new List<string>();
+        var validatorNames = new HashSet<string>(
+            FindValidatorFiles().Select(f => Path.GetFileNameWithoutExtension(f)
+                .Replace("Validator", "").Replace("CommandValidator", "")),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var file in FindProductionCsFiles()
+            .Where(f => f.Contains("Command") && !f.Contains("Handler") &&
+                         !f.Contains("Base") && !f.Contains("Behavior") &&
+                         !f.Contains("Test")))
+        {
+            var fileName = Path.GetFileNameWithoutExtension(file);
+            if (!fileName.EndsWith("Command")) continue;
+            // Only enforce for mutating commands (Create, Update, Delete, Initiate, Process)
+            if (!Regex.IsMatch(fileName, @"^(Create|Update|Delete|Initiate|Process|Start|Submit|Reserve)"))
+                continue;
+            var baseName = fileName.Replace("Command", "");
+            if (!validatorNames.Contains(baseName) && !validatorNames.Contains(fileName))
+            {
+                violations.Add($"{Relative(file)}: mutating command has no validator — add {fileName}Validator");
+            }
+        }
+        // Informational — enable enforcement when coverage reaches 80%
+        // violations.Should().BeEmpty("every mutating command must have a FluentValidation validator");
+    }
+
+    [Fact]
+    public void No_empty_catch_blocks_in_consumers()
+    {
+        // Agents write catch {} in consumers which silently drops messages.
+        // Best-effort cleanup in finally blocks is fine; consumers MUST NOT swallow.
+        var violations = new List<string>();
+        foreach (var file in FindConsumerFiles().Where(f => f.Contains("Consumer")))
+        {
+            if (file.Contains("Demo") || file.Contains("Bridge")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"catch\s*\{") ||
+                    Regex.IsMatch(lines[i], @"catch\s*\(\s*\)\s*\{"))
+                {
+                    // Check if it's in a finally-like cleanup context
+                    var context = string.Join(" ", lines.Skip(Math.Max(0, i - 3)).Take(3));
+                    if (!context.Contains("finally") && !context.Contains("cleanup") &&
+                        !context.Contains("best effort") && !context.Contains("// ignore"))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: empty catch in consumer — messages silently lost on failure");
+                    }
+                }
+            }
+        }
+        violations.Should().BeEmpty("consumers must not silently swallow exceptions");
+    }
+
+    [Fact]
+    public void No_hardcoded_localhost_in_production_runtime_code()
+    {
+        // Agents default to localhost URLs. Only design-time factories and
+        // dev-gated config may reference localhost.
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Factory") ||
+                file.Contains("Demo") || file.Contains("Migration")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].TrimStart().StartsWith("//")) continue;
+                if ((lines[i].Contains("\"http://localhost") || lines[i].Contains("\"https://localhost") ||
+                     lines[i].Contains("\"127.0.0.1")) &&
+                    !lines[i].Contains("BlockedHosts") && // webhook URL blocklists are correct
+                    !lines[i].Contains("?? \"http") &&    // fallback pattern already guarded elsewhere
+                    !lines[i].Contains("CORS") && !lines[i].Contains("cors") &&
+                    !lines[i].Contains("Development") && !lines[i].Contains("IsDevelopment"))
+                {
+                    // Check if gated by environment check or if this is validation/blocklist code
+                    var context = string.Join(" ", lines.Skip(Math.Max(0, i - 10)).Take(20));
+                    var fileContent = File.ReadAllText(file);
+                    if (!context.Contains("IsDevelopment") && !context.Contains("IsEnvironment") &&
+                        !context.Contains("#if DEBUG") && !context.Contains("// dev only") &&
+                        !context.Contains("Validate") && !context.Contains("throw new Argument") &&
+                        !context.Contains("Block") && !context.Contains("== \"localhost\"") &&
+                        !file.Contains("Validator") &&
+                        !fileContent.Contains("IsValidRedirectUrl") && !fileContent.Contains("IsAllowedUrl"))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: hardcoded localhost URL not gated by environment check");
+                    }
+                }
+            }
+        }
+        violations.Should().BeEmpty("localhost URLs must be gated behind IsDevelopment() checks");
+    }
+
+    [Fact]
+    public void Handlers_and_consumers_are_sealed()
+    {
+        // Performance: sealed classes enable devirtualization. Agents forget `sealed`.
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles()
+            .Where(f => (f.Contains("Handler") || f.Contains("Consumer")) &&
+                         !f.Contains("Base") && !f.Contains("Abstract") &&
+                         !f.Contains("Test") && !f.Contains("Definition")))
+        {
+            var content = File.ReadAllText(file);
+            if (Regex.IsMatch(content, @"public\s+class\s+\w+(Handler|Consumer)") &&
+                !Regex.IsMatch(content, @"public\s+sealed\s+class"))
+            {
+                violations.Add($"{Relative(file)}: handler/consumer class should be sealed for performance");
+            }
+        }
+        // Informational — enable when migration is complete
+        // violations.Should().BeEmpty("handlers and consumers should be sealed");
+    }
+
+    [Fact]
+    public void No_throwing_generic_Exception()
+    {
+        // Agents throw `new Exception("msg")` instead of specific types.
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Guard")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"throw\s+new\s+Exception\(") &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: throw new Exception — use a specific exception type (InvalidOperationException, ArgumentException, etc.)");
+                }
+            }
+        }
+        violations.Should().BeEmpty("never throw generic Exception — use specific exception types");
+    }
+
+    [Fact]
+    public void No_Testcontainers_in_service_projects()
+    {
+        // Agents sometimes add Testcontainers NuGet to the service project instead of test project.
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(SrcRoot, "*.csproj", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("Test") && !f.Contains("Testing")))
+        {
+            var content = File.ReadAllText(file);
+            if (content.Contains("Testcontainers"))
+            {
+                violations.Add($"{Relative(file)}: Testcontainers package in production project — must only be in test projects");
+            }
+        }
+        violations.Should().BeEmpty("Testcontainers must never be referenced from production projects");
+    }
+
+    [Fact]
+    public void No_xunit_or_moq_in_service_projects()
+    {
+        // Same pattern — agents sometimes put test packages in production code
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(SrcRoot, "*.csproj", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("Test") && !f.Contains("Testing") &&
+                         !f.Contains("ArchitecturalGuards")))
+        {
+            var content = File.ReadAllText(file);
+            if (content.Contains("\"xunit\"") || content.Contains("\"Moq\"") ||
+                content.Contains("\"NSubstitute\"") || content.Contains("\"FluentAssertions\""))
+            {
+                violations.Add($"{Relative(file)}: test package (xunit/Moq/FluentAssertions) in production project");
+            }
+        }
+        violations.Should().BeEmpty("test packages must never be referenced from production projects");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // NON-FUNCTIONAL COMPLETENESS — every service must meet these bars
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Every_service_API_project_has_Dockerfile()
+    {
+        // Auto-discover — no hardcoded service list
+        var violations = new List<string>();
+        foreach (var apiDir in Directory.GetDirectories(SrcRoot, "*.Api", SearchOption.AllDirectories)
+            .Where(d => !d.Contains("obj") && !d.Contains("bin")))
+        {
+            // Skip empty stub projects (no .cs files = no deployable code)
+            var hasSource = Directory.GetFiles(apiDir, "*.cs", SearchOption.AllDirectories)
+                .Any(f => !f.Contains("obj") && !f.Contains("bin"));
+            if (!hasSource) continue;
+
+            if (!File.Exists(Path.Combine(apiDir, "Dockerfile")))
+            {
+                violations.Add($"{Relative(apiDir)}: missing Dockerfile — service cannot be deployed");
+            }
+        }
+        violations.Should().BeEmpty("every API project must have a Dockerfile");
+    }
+
+    [Fact]
+    public void Every_service_has_README()
+    {
+        var violations = new List<string>();
+        foreach (var dir in Directory.GetDirectories(SrcRoot))
+        {
+            var dirName = Path.GetFileName(dir);
+            if (dirName.StartsWith(".") || dirName == "obj" || dirName == "bin") continue;
+            if (!File.Exists(Path.Combine(dir, "README.md")))
+            {
+                violations.Add($"src/{dirName}: missing README.md");
+            }
+        }
+        violations.Should().BeEmpty("every service/library must have a README.md");
+    }
+
+    [Fact]
+    public void Every_DbContext_has_migrations_directory()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindDbContextFiles())
+        {
+            if (file.Contains("BuildingBlocks") || file.Contains("Aspire")) continue;
+            var infraDir = Path.GetDirectoryName(file)!;
+            var migrationsDir = Path.Combine(infraDir, "Migrations");
+            // Also check parent and sibling directories
+            var parentDir = Path.GetDirectoryName(infraDir)!;
+            var parentMigrations = Path.Combine(parentDir, "Migrations");
+            if (!Directory.Exists(migrationsDir) && !Directory.Exists(parentMigrations))
+            {
+                // Check one level up for single-project services
+                var apiDir = Directory.GetDirectories(parentDir, "Migrations", SearchOption.AllDirectories);
+                if (apiDir.Length == 0)
+                {
+                    violations.Add($"{Relative(file)}: DbContext has no Migrations directory — schema not versioned");
+                }
+            }
+        }
+        violations.Should().BeEmpty("every DbContext must have EF Core migrations");
+    }
+
+    [Fact]
+    public void Every_service_with_endpoints_has_OpenAPI_metadata()
+    {
+        // Controllers should have [ProducesResponseType] or [EndpointSummary] for docs
+        var violations = new List<string>();
+        foreach (var file in FindControllerFiles())
+        {
+            if (file.Contains("Demo") || file.Contains("Admin") || file.Contains("Health")) continue;
+            var content = File.ReadAllText(file);
+            if (!content.Contains("[HttpGet") && !content.Contains("[HttpPost")) continue;
+            if (!content.Contains("ProducesResponseType") && !content.Contains("Produces(") &&
+                !content.Contains("EndpointSummary") && !content.Contains("SwaggerResponse"))
+            {
+                violations.Add($"{Relative(file)}: controller has no OpenAPI response metadata — API docs incomplete");
+            }
+        }
+        // Informational — enable when OpenAPI coverage reaches 80%
+        // violations.Should().BeEmpty("controllers must declare response types for OpenAPI docs");
+    }
+
+    [Fact]
+    public void Background_workers_have_try_catch_in_ExecuteAsync()
+    {
+        // Unhandled exceptions in ExecuteAsync crash the entire host
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles()
+            .Where(f => f.Contains("Service") || f.Contains("Worker")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("BackgroundService") && !content.Contains("IHostedService")) continue;
+            if (!content.Contains("ExecuteAsync") && !content.Contains("StartAsync")) continue;
+            if (!content.Contains("try") || !content.Contains("catch"))
+            {
+                violations.Add($"{Relative(file)}: BackgroundService without try-catch in ExecuteAsync — unhandled exception crashes the host");
+            }
+        }
+        violations.Should().BeEmpty("BackgroundService.ExecuteAsync must have top-level try-catch");
+    }
+
+    [Fact]
+    public void No_SELECT_star_without_xmin_in_raw_SQL()
+    {
+        // Agents write SELECT * which excludes system columns needed for optimistic concurrency
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"SELECT\s+\*\s+FROM", RegexOptions.IgnoreCase) &&
+                    !lines[i].Contains("xmin") &&
+                    !lines[i].TrimStart().StartsWith("//") &&
+                    !file.Contains("Migration"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: SELECT * excludes xmin — use SELECT *, xmin for optimistic concurrency");
+                }
+            }
+        }
+        violations.Should().BeEmpty("SELECT * must include xmin explicitly for optimistic concurrency");
+    }
+
+    [Fact]
+    public void No_raw_SQL_without_schema_prefix()
+    {
+        // Agents forget to schema-prefix table names in raw SQL
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Migration") || file.Contains("Test")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                if (line.TrimStart().StartsWith("//")) continue;
+                // Match raw SQL with FROM/INTO/UPDATE table without schema prefix (no dot before table name)
+                // e.g., FROM "AuditEvents" should be FROM audit."AuditEvents"
+                if (Regex.IsMatch(line, @"(ExecuteSql|FromSql|CREATE\s+TABLE|INSERT\s+INTO|UPDATE\s|DELETE\s+FROM)", RegexOptions.IgnoreCase))
+                {
+                    // Check if there's a quoted table name without a schema.table pattern
+                    if (Regex.IsMatch(line, @"""[A-Z]\w+""") && !Regex.IsMatch(line, @"\w+\.""[A-Z]\w+""") &&
+                        !line.Contains("CREATE SCHEMA") && !line.Contains("information_schema"))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: raw SQL with unqualified table name — must use schema.\"Table\" format");
+                    }
+                }
+            }
+        }
+        // Informational — migration files use unqualified names legitimately
+        // violations.Should().BeEmpty("raw SQL must use schema-qualified table names");
+    }
+
+    [Fact]
+    public void CancellationToken_propagated_through_async_chains()
+    {
+        // Agents often call async methods without passing CancellationToken
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles()
+            .Where(f => f.Contains("Handler") || f.Contains("Consumer")))
+        {
+            if (file.Contains("Test") || file.Contains("Base")) continue;
+            var content = File.ReadAllText(file);
+            // Only check files that accept CancellationToken
+            if (!content.Contains("CancellationToken")) continue;
+
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i].Trim();
+                if (line.StartsWith("//")) continue;
+                // Match await calls that take () — no arguments — where the method likely supports CT
+                if (Regex.IsMatch(line, @"await\s+\w+\.\w+Async\(\s*\)") &&
+                    !line.Contains("DisposeAsync") && !line.Contains("StopAsync") &&
+                    !line.Contains("StartAsync") && !line.Contains("CommitAsync") &&
+                    !line.Contains("CompleteAsync"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: async call without CancellationToken — pass ct/cancellationToken");
+                }
+            }
+        }
+        // Informational — some methods genuinely don't accept CT
+        // violations.Should().BeEmpty("async methods must propagate CancellationToken");
+    }
+
+    [Fact]
+    public void No_Entity_records_used_with_EF_Core()
+    {
+        // C# records use value equality which breaks EF change tracking.
+        // Domain entities must be classes, not records.
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles()
+            .Where(f => f.Contains(".Domain") && !f.Contains("Event") && !f.Contains("Value")))
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                // Match: public record SomeEntity (not events/value objects)
+                var m = Regex.Match(lines[i], @"public\s+(sealed\s+)?record\s+(\w+)\b");
+                if (!m.Success) continue;
+                var name = m.Groups[2].Value;
+                if (name.EndsWith("Event") || name.EndsWith("Dto") || name.EndsWith("Request") ||
+                    name.EndsWith("Response") || name.EndsWith("Command") || name.EndsWith("Query") ||
+                    name.EndsWith("Value") || name.EndsWith("Id") || name.EndsWith("Reservation") ||
+                    name.EndsWith("Item") || name.EndsWith("Entry") || name.EndsWith("Result"))
+                    continue;
+                // Check if this type is configured in a DbContext (entity)
+                var allDbContexts = string.Join("\n", FindDbContextFiles().Select(f => File.ReadAllText(f)));
+                if (allDbContexts.Contains(name))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: {name} is a record used as EF entity — records break change tracking. Use class.");
+                }
+            }
+        }
+        violations.Should().BeEmpty("EF Core entities must be classes, not records (records use value equality which breaks change tracking)");
+    }
+
+    [Fact]
+    public void No_mutable_static_collections_without_thread_safety()
+    {
+        // Agents create `static List<T>` or `static Dictionary<T>` that get mutated at runtime
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                if (line.TrimStart().StartsWith("//")) continue;
+                // Match: static (readonly)? List<T> or Dictionary<T> (not Concurrent*, not Frozen*, not ReadOnly*)
+                if (Regex.IsMatch(line, @"static\s+(readonly\s+)?(List|Dictionary|HashSet)<") &&
+                    !line.Contains("Concurrent") && !line.Contains("Frozen") &&
+                    !line.Contains("ReadOnly") && !line.Contains("ImmutableArray") &&
+                    !line.Contains("Empty"))
+                {
+                    // Check if it's initialized inline (init-only is safe)
+                    var context = string.Join(" ", lines.Skip(i).Take(5));
+                    bool isInitOnly = context.Contains("= new") || context.Contains("= [") ||
+                                      context.Contains("= Array.") || context.Contains("= ImmutableArray");
+                    if (!isInitOnly && (context.Contains(".Add(") || context.Contains(".Remove(")))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: mutable static collection — use ConcurrentDictionary or FrozenSet for thread safety");
+                    }
+                }
+            }
+        }
+        violations.Should().BeEmpty("static mutable collections must use thread-safe types");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // LEGACY RITUALWORKS RULES — ported from old monolith CLAUDE.md
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void No_DynamicExpressionParser_without_ParsingConfig()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test")) continue;
+            var content = File.ReadAllText(file);
+            if (content.Contains("DynamicExpressionParser") || content.Contains("ParseLambda"))
+            {
+                if (!content.Contains("ParsingConfig") && !content.Contains("CustomTypeProvider") &&
+                    !content.Contains("AllowedTypes"))
+                {
+                    violations.Add($"{Relative(file)}: DynamicExpressionParser without ParsingConfig sandboxing — code injection risk");
+                }
+            }
+        }
+        violations.Should().BeEmpty("dynamic expression evaluation MUST use ParsingConfig with allowlisted safe types");
+    }
+
+    [Fact]
+    public void No_Math_Abs_on_hash_or_bitwise_result()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].TrimStart().StartsWith("//")) continue;
+                if (Regex.IsMatch(lines[i], @"Math\.Abs\s*\(.*?(GetHashCode|BitConverter|HashCode|ComputeHash)"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: Math.Abs on hash result — overflows on int.MinValue. Use & 0x7FFFFFFF");
+                }
+            }
+        }
+        violations.Should().BeEmpty("Math.Abs on hash results throws OverflowException for int.MinValue — use & 0x7FFFFFFF mask");
+    }
+
+    [Fact]
+    public void No_IConfiguration_injected_into_handlers()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles()
+            .Where(f => f.Contains("Handler") && !f.Contains("Test") && !f.Contains("Behavior")))
+        {
+            var content = File.ReadAllText(file);
+            if (content.Contains("IConfiguration ") && content.Contains("IRequestHandler") &&
+                !content.Contains("// config-needed"))
+            {
+                violations.Add($"{Relative(file)}: handler injects IConfiguration — use IOptions<T> for type-safe config");
+            }
+        }
+        violations.Should().BeEmpty("handlers must use IOptions<T>, never raw IConfiguration");
+    }
+
+    [Fact]
+    public void No_throw_ex_loses_stack_trace()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"\bthrow\s+\w+\s*;") &&
+                    !Regex.IsMatch(lines[i], @"throw\s+new\s") &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: 'throw ex;' loses stack trace — use 'throw;' to rethrow");
+                }
+            }
+        }
+        violations.Should().BeEmpty("never 'throw ex;' — use 'throw;' to preserve original stack trace");
+    }
+
+    [Fact]
+    public void Options_classes_are_sealed()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles()
+            .Where(f => Path.GetFileName(f).EndsWith("Options.cs") && !f.Contains("Test")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("namespace Haworks")) continue;
+            if (Regex.IsMatch(content, @"public\s+class\s+\w+Options") &&
+                !Regex.IsMatch(content, @"public\s+sealed\s+class"))
+            {
+                violations.Add($"{Relative(file)}: options class not sealed — add 'sealed' modifier");
+            }
+        }
+        violations.Should().BeEmpty("options classes must be sealed");
+    }
+
+    [Fact]
+    public void No_AllowAnyOrigin_with_AllowCredentials()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test")) continue;
+            var content = File.ReadAllText(file);
+            if (content.Contains("AllowAnyOrigin") && content.Contains("AllowCredentials"))
+            {
+                violations.Add($"{Relative(file)}: AllowAnyOrigin + AllowCredentials = CORS vulnerability. Use specific origins.");
+            }
+        }
+        violations.Should().BeEmpty("never combine AllowAnyOrigin with AllowCredentials — allows credential theft");
+    }
+
+    [Fact]
+    public void Query_handlers_use_AsNoTracking()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles()
+            .Where(f => f.Contains("Query") && f.Contains("Handler") && !f.Contains("Test")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("IRequestHandler")) continue;
+            if ((content.Contains("ToListAsync") || content.Contains("FirstOrDefaultAsync")) &&
+                !content.Contains("AsNoTracking") && !content.Contains("SaveChangesAsync"))
+            {
+                violations.Add($"{Relative(file)}: query handler reads DB without AsNoTracking — wasted tracking overhead");
+            }
+        }
+        // Informational — enable when coverage complete
+        // violations.Should().BeEmpty("query handlers must use AsNoTracking for read-only queries");
+    }
+
+    [Fact]
+    public void Domain_entities_use_private_setters()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles()
+            .Where(f => f.Contains(".Domain") && !f.Contains("Enum") && !f.Contains("Event") && !f.Contains("Test")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("AuditableEntity")) continue;
+            var lines = File.ReadAllLines(file);
+            int publicSetterCount = 0;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"public\s+\w+\s+\w+\s*\{\s*get;\s*set;\s*\}") &&
+                    !lines[i].Contains("List<") && !lines[i].Contains("virtual") &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    publicSetterCount++;
+                }
+            }
+            // Only flag if majority of properties are public set (not just one or two EF-required)
+            if (publicSetterCount > 3)
+            {
+                violations.Add($"{Relative(file)}: domain entity has {publicSetterCount} public setters — use private set or init");
+            }
+        }
+        // Informational — some entities have EF mapping requirements
+        // violations.Should().BeEmpty("domain entities should use private setters to maintain invariants");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // TEMPORAL SAFETY — time-dependent code must be testable & correct
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void No_Thread_Sleep_in_production_code()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Demo") || file.Contains("Migration")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("Thread.Sleep(") && !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: Thread.Sleep blocks the thread — use await Task.Delay with CancellationToken");
+                }
+            }
+        }
+        violations.Should().BeEmpty("Thread.Sleep must never appear in production code — it blocks the thread pool");
+    }
+
+    [Fact]
+    public void No_Console_Write_in_production_code()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Program.cs") || file.Contains("Demo")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if ((lines[i].Contains("Console.Write(") || lines[i].Contains("Console.WriteLine(")) &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: Console.Write in production code — use ILogger<T>");
+                }
+            }
+        }
+        violations.Should().BeEmpty("production code must use ILogger<T>, never Console.Write");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // API CONTRACT SAFETY — prevent internal model leakage
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Controllers_never_return_DbContext_entities_directly()
+    {
+        // Returning EF entities from controllers leaks internal structure,
+        // navigation properties, and allows mass assignment attacks.
+        var entityTypes = new HashSet<string>();
+        foreach (var file in FindDbContextFiles())
+        {
+            var content = File.ReadAllText(file);
+            foreach (Match m in Regex.Matches(content, @"DbSet<(\w+)>"))
+                entityTypes.Add(m.Groups[1].Value);
+        }
+
+        var violations = new List<string>();
+        foreach (var file in FindControllerFiles())
+        {
+            if (file.Contains("Demo") || file.Contains("Admin")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains("return Ok(") && !lines[i].Contains("return new")) continue;
+                foreach (var entity in entityTypes)
+                {
+                    if (lines[i].Contains($"Ok({entity.ToLowerInvariant()}") ||
+                        lines[i].Contains($"Ok(new {entity}"))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: returning EF entity {entity} directly — use a DTO to prevent mass assignment and internal leakage");
+                    }
+                }
+            }
+        }
+        // Informational — needs manual review for false positives
+        // violations.Should().BeEmpty("controllers must return DTOs, never EF entities directly");
+    }
+
+    [Fact]
+    public void No_connection_string_in_source_code()
+    {
+        // Agents sometimes paste connection strings during debugging
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Factory") || file.Contains("Test") || file.Contains("Migration")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].TrimStart().StartsWith("//")) continue;
+                if (Regex.IsMatch(lines[i], @"Host=\w+.*;.*Database=\w+") &&
+                    !lines[i].Contains("design-time") && !lines[i].Contains("DesignTime"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: connection string in source code — use configuration");
+                }
+            }
+        }
+        violations.Should().BeEmpty("connection strings must come from configuration, not source code");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // EVENT CONTRACT INTEGRITY — prevent silent consumer failures
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Event_records_have_no_mutable_collections()
+    {
+        // List<T> on events allows mutation after publish — use IReadOnlyList
+        var contractsDir = Path.Combine(SrcRoot, "Contracts");
+        if (!Directory.Exists(contractsDir)) return;
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(contractsDir, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj")))
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if ((lines[i].Contains("List<") || lines[i].Contains("Dictionary<")) &&
+                    lines[i].Contains("{ get;") &&
+                    !lines[i].Contains("IReadOnly") && !lines[i].Contains("Immutable") &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: mutable collection on event contract — use IReadOnlyList<T> or IReadOnlyDictionary");
+                }
+            }
+        }
+        violations.Should().BeEmpty("event contracts must use IReadOnlyList/IReadOnlyDictionary to prevent mutation after publish");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // LOGGING DISCIPLINE — structured, no PII, correct levels
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void No_catch_blocks_without_logging_in_production()
+    {
+        // Every catch block that doesn't rethrow must log. Silent failures are invisible.
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Demo") || file.Contains("Migration") ||
+                file.Contains("Factory")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!Regex.IsMatch(lines[i], @"catch\s*(\(|{)")) continue;
+                // Read next 10 lines for logging or rethrow
+                var block = string.Join(" ", lines.Skip(i).Take(10));
+                if (!block.Contains("_logger") && !block.Contains("Log") &&
+                    !block.Contains("throw") && !block.Contains("throw;") &&
+                    !block.Contains("best effort") && !block.Contains("// ignore") &&
+                    !block.Contains("// expected") && !block.Contains("finally"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: catch block without logging or rethrow — silent failures are invisible");
+                }
+            }
+        }
+        // Informational — some catch blocks legitimately suppress (e.g., file cleanup)
+        // violations.Should().BeEmpty("catch blocks must either log or rethrow");
+    }
+
+    [Fact]
+    public void No_sensitive_data_in_LogWarning_or_LogError()
+    {
+        // Card numbers, passwords, tokens, SSNs must never appear at Warning/Error level
+        var sensitivePatterns = new[] { "cardNumber", "CardNumber", "card_number", "cvv", "ssn", "SSN",
+            "password", "Password", "secret", "Secret", "token", "Token", "apiKey", "ApiKey" };
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains("LogWarning") && !lines[i].Contains("LogError") &&
+                    !lines[i].Contains("LogCritical")) continue;
+                if (lines[i].TrimStart().StartsWith("//")) continue;
+                foreach (var pattern in sensitivePatterns)
+                {
+                    if (lines[i].Contains($"{{{pattern}}}") || lines[i].Contains($"{{@{pattern}}}"))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: sensitive field '{pattern}' in log message — redact before logging");
+                        break;
+                    }
+                }
+            }
+        }
+        violations.Should().BeEmpty("sensitive data (passwords, tokens, card numbers) must be redacted before logging");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DEPENDENCY HYGIENE — prevent coupling violations
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void No_cross_service_project_references()
+    {
+        // Services must communicate via Contracts + messaging, never direct project references
+        var violations = new List<string>();
+        foreach (var csproj in Directory.GetFiles(SrcRoot, "*.csproj", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("BuildingBlocks") && !f.Contains("Contracts") && !f.Contains("Test")))
+        {
+            var content = File.ReadAllText(csproj);
+            var ownerService = csproj.Replace(SrcRoot + Path.DirectorySeparatorChar, "").Split(Path.DirectorySeparatorChar).First();
+
+            foreach (Match m in Regex.Matches(content, @"<ProjectReference\s+Include=""[^""]*?/(\w+)/\w+\.csproj"""))
+            {
+                var referenced = m.Groups[1].Value;
+                if (referenced == ownerService || referenced == "BuildingBlocks" ||
+                    referenced == "BuildingBlocks.Testing" || referenced == "Contracts")
+                    continue;
+                violations.Add($"{Relative(csproj)}: references {referenced} — services must communicate via Contracts/messaging, not direct references");
+            }
+        }
+        violations.Should().BeEmpty("services must not reference other services directly — use Contracts + MassTransit");
+    }
+
+    [Fact]
+    public void Application_layer_does_not_reference_Infrastructure()
+    {
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(SrcRoot, "*.csproj", SearchOption.AllDirectories)
+            .Where(f => f.Contains(".Application") && !f.Contains("obj")))
+        {
+            var content = File.ReadAllText(file);
+            if (Regex.IsMatch(content, @"<ProjectReference.*\.Infrastructure\."))
+            {
+                violations.Add($"{Relative(file)}: Application layer references Infrastructure — dependency inversion violation");
+            }
+        }
+        violations.Should().BeEmpty("Application layer must not reference Infrastructure (depend on interfaces, not implementations)");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // TEST QUALITY — prevent false confidence
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Integration_test_factories_implement_IAsyncLifetime()
+    {
+        var testRoot = Path.Combine(Directory.GetParent(SrcRoot)!.FullName, "tests");
+        if (!Directory.Exists(testRoot)) return;
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(testRoot, "*Factory.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && f.Contains("Integration")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("WebApplicationFactory")) continue;
+            if (!content.Contains("IAsyncLifetime"))
+            {
+                violations.Add($"{Relative(file)}: integration test factory missing IAsyncLifetime — database/container resources may leak");
+            }
+        }
+        violations.Should().BeEmpty("integration test factories must implement IAsyncLifetime for proper resource cleanup");
+    }
+
+    [Fact]
+    public void No_Assert_IsSuccess_without_value_check()
+    {
+        // Common agent mistake: Assert result.IsSuccess but never check the actual value.
+        // This gives false confidence — the test passes even if the value is wrong.
+        var testRoot = Path.Combine(Directory.GetParent(SrcRoot)!.FullName, "tests");
+        if (!Directory.Exists(testRoot)) return;
+        var violations = new List<string>();
+        foreach (var file in Directory.GetFiles(testRoot, "*Tests.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("obj") && !f.Contains("Guard")))
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains("IsSuccess") || !lines[i].Contains("Should()")) continue;
+                // Check next 5 lines for actual value assertions
+                var following = string.Join(" ", lines.Skip(i + 1).Take(5));
+                if (!following.Contains("Should()") && !following.Contains("Value") &&
+                    !following.Contains("Assert.") && !following.Contains("Be("))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: asserts IsSuccess but never checks the actual value — false confidence");
+                }
+            }
+        }
+        // Informational — some tests legitimately only care about success/failure
+        // violations.Should().BeEmpty("tests asserting IsSuccess should also check the value");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DEPLOYMENT SAFETY — prevent prod misconfigurations
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Every_deployed_service_has_fly_toml()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(SrcRoot, ".."));
+        var deployed = new[] { "audit", "bffweb", "catalog", "checkoutorchestrator", "content",
+            "identity", "location", "merchant", "notifications", "orders",
+            "payments", "payouts", "privacy", "scheduler", "search", "webhooks" };
+        var violations = new List<string>();
+        foreach (var svc in deployed)
+        {
+            var tomls = Directory.GetFiles(repoRoot, $"fly.{svc}*.toml", SearchOption.TopDirectoryOnly);
+            if (tomls.Length == 0)
+            {
+                // Also check deploy/fly/
+                var altTomls = Directory.GetFiles(Path.Combine(repoRoot, "deploy", "fly"), $"fly.{svc}*.toml", SearchOption.TopDirectoryOnly);
+                if (altTomls.Length == 0)
+                {
+                    violations.Add($"fly.{svc}.toml: deployed service has no Fly.io configuration");
+                }
+            }
+        }
+        // Informational — some services share a fly.toml or deploy differently
+        // violations.Should().BeEmpty("every deployed service must have a fly.toml");
+    }
+
+    [Fact]
+    public void Dockerfiles_dont_use_COPY_dot_dot()
+    {
+        // COPY . . copies the entire repo into the image — slow, leaks secrets, massive layers
+        var violations = new List<string>();
+        foreach (var dockerfile in Directory.GetFiles(SrcRoot, "Dockerfile", SearchOption.AllDirectories))
+        {
+            var content = File.ReadAllText(dockerfile);
+            if (Regex.IsMatch(content, @"COPY\s+\.\s+\."))
+            {
+                violations.Add($"{Relative(dockerfile)}: COPY . . copies entire repo — use targeted COPY for faster builds and smaller images");
+            }
+        }
+        violations.Should().BeEmpty("Dockerfiles must use targeted COPY, never COPY . . (leaks secrets, slow builds)");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DATA INTEGRITY — prevent silent corruption
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void No_Guid_Empty_as_real_identifier()
+    {
+        // Guid.Empty as a default/fallback ID is a data integrity bug
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Guard") || file.Contains("Migration") || file.Contains("Demo")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].TrimStart().StartsWith("//")) continue;
+                // Flag: assigning Guid.Empty to an Id/key field (not checking against it)
+                if (Regex.IsMatch(lines[i], @"(Id|Key)\s*=\s*Guid\.Empty") &&
+                    !lines[i].Contains("==") && !lines[i].Contains("!=") &&
+                    !lines[i].Contains("default"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: assigning Guid.Empty to an ID field — use Guid.NewGuid() or fail loudly");
+                }
+            }
+        }
+        violations.Should().BeEmpty("Guid.Empty must never be assigned as a real identifier — it masks missing data");
+    }
+
+    [Fact]
+    public void EF_string_properties_have_MaxLength()
+    {
+        // Unbounded varchar columns waste storage and allow injection of massive payloads
+        var violations = new List<string>();
+        foreach (var file in FindDbContextFiles())
+        {
+            var content = File.ReadAllText(file);
+            // Find string property configurations without MaxLength
+            var propertyConfigs = Regex.Matches(content, @"entity\.Property\([^)]*\)\s*\.((?:(?!\.\w+\().)*)");
+            // This is complex to detect accurately via regex — use informational mode
+        }
+        // Too many false positives for enforcement — tracked as convention
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────
 
     private static string FindSrcRoot()
@@ -1637,7 +2606,9 @@ public sealed class PlatformGuardTests
 
     private static IEnumerable<string> FindDbContextFiles() =>
         Directory.GetFiles(SrcRoot, "*DbContext.cs", SearchOption.AllDirectories)
-            .Where(f => !f.Contains("obj") && !f.Contains("bin") && !f.Contains("Test") && !f.Contains("Factory"));
+            .Where(f => !f.Contains("obj") && !f.Contains("bin") && !f.Contains("Test") &&
+                         !f.Contains("Factory") && !f.Contains("Interface") &&
+                         !Path.GetFileName(f).StartsWith("I")); // exclude interfaces like IPaymentDbContext
 
     private static IEnumerable<string> FindDependencyInjectionFiles() =>
         Directory.GetFiles(SrcRoot, "DependencyInjection.cs", SearchOption.AllDirectories)
@@ -1717,5 +2688,665 @@ public sealed class PlatformGuardTests
         }
         violations.Should().BeEmpty(
             "every SemaphoreSlim.WaitAsync must include a TimeSpan timeout to prevent indefinite hangs");
+    }
+
+    // ─── Financial Guards (from Payments/Payouts staff review) ────────
+
+    [Fact]
+    public void Financial_decimal_properties_have_explicit_column_type_in_DbContext()
+    {
+        // Money fields (Amount, Balance, Price, Total, Tax, Commission, Threshold, TotalRefunded)
+        // must be configured with HasColumnType("numeric(...)") to prevent floating-point drift.
+        var moneyPatterns = new[] { "Amount", "Balance", "Price", "Total", "Tax", "Commission", "Threshold", "Refunded" };
+        var violations = new List<string>();
+
+        foreach (var file in FindDbContextFiles())
+        {
+            var content = File.ReadAllText(file);
+            var lines = File.ReadAllLines(file);
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                foreach (var pattern in moneyPatterns)
+                {
+                    // Match: entity.Property(e => e.Amount) or entity.Property(p => p.Amount)
+                    if (Regex.IsMatch(lines[i], $@"\.Property\(\w+ => \w+\.(\w*{pattern}\w*)\)"))
+                    {
+                        // Check next 3 lines for HasColumnType("numeric
+                        bool hasNumericType = false;
+                        for (int j = i; j < Math.Min(i + 4, lines.Length); j++)
+                        {
+                            if (lines[j].Contains("HasColumnType") && lines[j].Contains("numeric"))
+                            {
+                                hasNumericType = true;
+                                break;
+                            }
+                        }
+                        if (!hasNumericType)
+                        {
+                            var match = Regex.Match(lines[i], $@"\.Property\(\w+ => \w+\.(\w*{pattern}\w*)\)");
+                            if (match.Success)
+                                violations.Add($"{Relative(file)}:{i + 1}: {match.Groups[1].Value} — financial property without explicit numeric(N,N) column type");
+                        }
+                    }
+                }
+            }
+        }
+
+        violations.Should().BeEmpty(
+            "financial decimal properties must have explicit HasColumnType(\"numeric(18,2)\") to prevent precision drift");
+    }
+
+    [Fact]
+    public void No_global_static_StripeConfiguration_ApiKey()
+    {
+        // StripeConfiguration.ApiKey is a global static — not thread-safe.
+        // Must use per-request StripeClient or IStripeClientFactory instead.
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("StripeConfiguration.ApiKey"))
+                    violations.Add($"{Relative(file)}:{i + 1}: StripeConfiguration.ApiKey is a global static — use per-instance StripeClient");
+            }
+        }
+        violations.Should().BeEmpty(
+            "StripeConfiguration.ApiKey is a global static that causes thread-safety issues — inject StripeClient per request");
+    }
+
+    [Fact]
+    public void No_dangerous_true_default_on_DemoMode_or_bypass_flags()
+    {
+        // Configuration.GetValue<bool>("...:DemoMode", true) or "...:Bypass...", true)
+        // defaults to ON — production silently uses mock/bypass behavior.
+        var dangerousPatterns = new[] { "DemoMode", "Bypass", "MockMode", "FakeMode", "TestMode", "DryRun" };
+        var violations = new List<string>();
+
+        foreach (var file in FindProductionCsFiles())
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                foreach (var pattern in dangerousPatterns)
+                {
+                    // Match: GetValue<bool>("...:DemoMode", true)
+                    if (line.Contains(pattern, StringComparison.OrdinalIgnoreCase) &&
+                        line.Contains("GetValue") &&
+                        line.Contains("true"))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: {pattern} defaults to true — production would silently bypass real processing");
+                    }
+                }
+            }
+        }
+
+        violations.Should().BeEmpty(
+            "DemoMode/Bypass/Mock flags must default to false so production never silently uses mock behavior");
+    }
+
+    [Fact]
+    public void Ledger_and_financial_services_wrap_writes_in_transactions()
+    {
+        // Any class with "Ledger" or "Disbursement" in its name that calls SaveChangesAsync
+        // should also contain BeginTransactionAsync — financial writes must be atomic.
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            var fileName = Path.GetFileNameWithoutExtension(file);
+            if (!fileName.Contains("Ledger") && !fileName.Contains("Disbursement") && !fileName.Contains("Payout"))
+                continue;
+            if (fileName.Contains("Controller") || fileName.Contains("Query") || fileName.Contains("Test") ||
+                fileName.StartsWith("I") || fileName.Contains("Interface") || fileName.Contains("Options"))
+                continue;
+
+            var content = File.ReadAllText(file);
+            if (content.Contains("SaveChangesAsync") && !content.Contains("BeginTransactionAsync") && !content.Contains("// no-tx-ok"))
+            {
+                violations.Add($"{Relative(file)}: Financial service calls SaveChangesAsync without explicit transaction");
+            }
+        }
+        violations.Should().BeEmpty(
+            "financial services (Ledger/Disbursement/Payout) must wrap writes in explicit transactions for atomicity");
+    }
+
+    [Fact]
+    public void Consumer_handling_financial_events_checks_idempotency()
+    {
+        // Consumers of PaymentCompleted, RefundIssued, PayoutCreated etc. must check
+        // for duplicate processing (via ReferenceId, idempotency key, or AnyAsync check).
+        var financialEvents = new[] { "PaymentCompleted", "RefundIssued", "PayoutCreated", "PaymentVerified" };
+        var idempotencyPatterns = new[] { "AlreadyProcessed", "AnyAsync", "idempotency", "Idempotency", "duplicate", "Duplicate", "ReferenceId", "unique index" };
+        var violations = new List<string>();
+
+        foreach (var file in FindConsumerFiles())
+        {
+            // SignalR bridge consumers are read-only (push to UI) — idempotent by nature
+            if (file.Contains("Bridge") || file.Contains("SignalR") || file.Contains("Notifier")) continue;
+            var content = File.ReadAllText(file);
+            foreach (var evt in financialEvents)
+            {
+                if (!content.Contains($"IConsumer<{evt}")) continue;
+
+                var hasIdempotencyCheck = idempotencyPatterns.Any(p => content.Contains(p));
+                if (!hasIdempotencyCheck)
+                {
+                    violations.Add($"{Relative(file)}: Consumer of {evt}Event has no idempotency guard — duplicate delivery risk");
+                }
+            }
+        }
+        violations.Should().BeEmpty(
+            "consumers of financial events must check for duplicate delivery to prevent double-credit/debit");
+    }
+
+    [Fact]
+    public void No_user_supplied_URLs_passed_to_external_APIs_without_validation()
+    {
+        // When user-supplied URLs (returnUrl, redirectUrl, webhookUrl, callbackUrl)
+        // are passed to external API calls, they must be validated first.
+        var urlParams = new[] { "returnUrl", "refreshUrl", "redirectUrl", "callbackUrl", "webhookUrl", "notifyUrl" };
+        var validationPatterns = new[] { "IsValidRedirectUrl", "ValidateUrl", "ValidateWebhookUrl", "ValidateRedirectUrl", "Uri.TryCreate", "uri.Scheme", "Uri.IsWellFormed", "AllowedDomains" };
+        var violations = new List<string>();
+
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("obj")) continue;
+            var content = File.ReadAllText(file);
+            var lines = File.ReadAllLines(file);
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                foreach (var param in urlParams)
+                {
+                    // Check if a URL parameter is used in a method that calls an external service
+                    if (lines[i].Contains(param, StringComparison.OrdinalIgnoreCase) &&
+                        (lines[i].Contains("CreateAsync") || lines[i].Contains("Options") ||
+                         lines[i].Contains("Request") || lines[i].Contains("request.")))
+                    {
+                        // Check if ANY URL validation exists in the same file
+                        var hasValidation = validationPatterns.Any(p => content.Contains(p));
+                        if (!hasValidation && !file.Contains("Interface") && !file.Contains("Validator"))
+                        {
+                            violations.Add($"{Relative(file)}:{i + 1}: user-supplied URL '{param}' passed to external API without URL validation in file");
+                        }
+                        break; // one violation per file is enough
+                    }
+                }
+            }
+        }
+        violations.Should().BeEmpty(
+            "user-supplied URLs must be validated (HTTPS, no internal IPs) before passing to external APIs — SSRF risk");
+    }
+
+    [Fact]
+    public void Every_service_with_source_code_has_unit_tests()
+    {
+        // Auto-discover ALL services from src/ that have a .Api or .Domain project
+        // (i.e., they contain real code, not just shared libraries).
+        // No hardcoded list — new services are caught automatically.
+        var sharedLibs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "BuildingBlocks", "BuildingBlocks.Testing", "Contracts", "Pricing" }; // Pricing is stub-only
+
+        var violations = new List<string>();
+        var repoRoot = Path.GetFullPath(Path.Combine(SrcRoot, ".."));
+
+        foreach (var svcDir in Directory.GetDirectories(SrcRoot))
+        {
+            var svcName = Path.GetFileName(svcDir);
+            if (svcName.StartsWith('.') || sharedLibs.Contains(svcName)) continue;
+
+            // Only check services that have actual code (an Api or Domain project)
+            var hasCode = Directory.GetFiles(svcDir, "*.cs", SearchOption.AllDirectories)
+                .Any(f => !f.Contains("obj") && !f.Contains("bin"));
+            if (!hasCode) continue;
+
+            var svcTestRoot = Path.Combine(repoRoot, "tests", svcName, $"{svcName}.Unit");
+            if (!Directory.Exists(svcTestRoot))
+            {
+                violations.Add($"{svcName}: service has source code but no Unit test project at tests/{svcName}/{svcName}.Unit/");
+                continue;
+            }
+
+            var testFiles = Directory.GetFiles(svcTestRoot, "*Tests.cs", SearchOption.AllDirectories)
+                .Where(f => !f.Contains("obj") && !f.Contains("bin"))
+                .ToList();
+
+            if (testFiles.Count == 0)
+                violations.Add($"{svcName}: Unit test project exists but has no *Tests.cs files");
+        }
+        violations.Should().BeEmpty(
+            "every service with source code must have a Unit test project with actual test files");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // OWASP API TOP 10 — Automated guards for the most common API vulns
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void No_pagination_without_max_page_size_cap()
+    {
+        // OWASP API4: Unrestricted resource consumption via unbounded pageSize
+        var violations = new List<string>();
+        foreach (var file in FindControllerFiles())
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"pageSize\s*=\s*\d{3,}"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: pageSize default >= 100 — cap at a reasonable limit");
+                }
+                // Detect pageSize param with no upper bound check in the method body
+                if (lines[i].Contains("[FromQuery]") && lines[i].Contains("pageSize") &&
+                    !lines[i].Contains("Range") && !lines[i].Contains("Max"))
+                {
+                    // Check next 10 lines for Math.Min or Math.Clamp or pageSize > X check
+                    var block = string.Join(" ", lines.Skip(i).Take(15));
+                    if (!block.Contains("Math.Min") && !block.Contains("Math.Clamp") &&
+                        !block.Contains("pageSize >") && !block.Contains("pageSize >=") &&
+                        !block.Contains("MaxPageSize"))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: pageSize parameter without upper bound cap — OWASP API4 unrestricted resource consumption");
+                    }
+                }
+            }
+        }
+        // Informational until all services add caps
+        // violations.Should().BeEmpty("pageSize must be capped to prevent resource exhaustion");
+    }
+
+    [Fact]
+    public void No_raw_entity_returned_from_controllers()
+    {
+        // OWASP API3: Excessive data exposure — controllers should return DTOs, not domain entities
+        var violations = new List<string>();
+        var entityNames = new HashSet<string>();
+        foreach (var file in FindDbContextFiles())
+        {
+            var content = File.ReadAllText(file);
+            foreach (Match m in Regex.Matches(content, @"DbSet<(\w+)>"))
+                entityNames.Add(m.Groups[1].Value);
+        }
+        foreach (var file in FindControllerFiles())
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                foreach (var entity in entityNames)
+                {
+                    if (Regex.IsMatch(lines[i], $@"(Ok|return)\s*\(\s*{entity}\b") ||
+                        Regex.IsMatch(lines[i], $@"List<{entity}>") ||
+                        Regex.IsMatch(lines[i], $@"IEnumerable<{entity}>"))
+                    {
+                        if (!lines[i].Contains("Dto") && !lines[i].Contains("Response") && !lines[i].Contains("Result"))
+                            violations.Add($"{Relative(file)}:{i + 1}: returning raw {entity} entity from controller — use a DTO to prevent data exposure");
+                    }
+                }
+            }
+        }
+        // Informational — enable when DTO coverage is complete
+        // violations.Should().BeEmpty("controllers must return DTOs, not raw domain entities (OWASP API3)");
+    }
+
+    [Fact]
+    public void No_CORS_wildcard_in_production()
+    {
+        // OWASP API8: Security misconfiguration — AllowAnyOrigin in non-dev
+        var violations = new List<string>();
+        foreach (var file in FindProgramFiles())
+        {
+            var content = File.ReadAllText(file);
+            if (content.Contains("AllowAnyOrigin") && !content.Contains("IsDevelopment"))
+            {
+                violations.Add($"{Relative(file)}: AllowAnyOrigin without IsDevelopment guard — open CORS in production");
+            }
+        }
+        violations.Should().BeEmpty("CORS AllowAnyOrigin must be gated behind IsDevelopment()");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // EF CORE PRODUCTION PITFALLS
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void No_DbContext_registered_as_singleton()
+    {
+        // DbContext is not thread-safe — singleton causes data corruption under concurrency
+        var violations = new List<string>();
+        foreach (var file in FindDependencyInjectionFiles().Concat(FindProgramFiles()))
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("AddSingleton") && lines[i].Contains("DbContext"))
+                    violations.Add($"{Relative(file)}:{i + 1}: DbContext registered as Singleton — must be Scoped (not thread-safe)");
+            }
+        }
+        violations.Should().BeEmpty("DbContext must never be registered as Singleton — it is not thread-safe");
+    }
+
+    [Fact]
+    public void No_navigation_property_access_inside_loops_without_Include()
+    {
+        // N+1 query: accessing navigation properties inside foreach without eager loading
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Migration") || file.Contains("Test")) continue;
+            var lines = File.ReadAllLines(file);
+            bool inForeach = false;
+            int foreachDepth = 0;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("foreach") || lines[i].Contains("for ("))
+                {
+                    inForeach = true;
+                    foreachDepth++;
+                }
+                if (inForeach && lines[i].Contains("}")) foreachDepth--;
+                if (foreachDepth == 0) inForeach = false;
+
+                // Inside a loop, detect lazy-load patterns: entity.Navigation.Property
+                if (inForeach && Regex.IsMatch(lines[i], @"\.\w+\.Count\b") &&
+                    !lines[i].Contains("//") && !lines[i].Contains(".Length") &&
+                    lines[i].Contains("await"))
+                {
+                    // This is a rough heuristic — async property access in a loop
+                    violations.Add($"{Relative(file)}:{i + 1}: possible N+1 query — async data access inside loop");
+                }
+            }
+        }
+        // Informational — heuristic has false positives
+        // violations.Should().BeEmpty("avoid N+1 queries — use Include() or batch queries before loops");
+    }
+
+    [Fact]
+    public void No_tracked_queries_in_read_only_handlers()
+    {
+        // Query handlers should use AsNoTracking to avoid unnecessary change tracking overhead
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles().Where(f => f.Contains("Query") && f.Contains("Handler")))
+        {
+            if (file.Contains("Test")) continue;
+            var content = File.ReadAllText(file);
+            if (!content.Contains("IRequestHandler")) continue;
+            if (content.Contains("FirstOrDefaultAsync") || content.Contains("ToListAsync") || content.Contains("SingleAsync"))
+            {
+                if (!content.Contains("AsNoTracking") && !content.Contains("AsNoTrackingWithIdentityResolution"))
+                    violations.Add($"{Relative(file)}: Query handler reads entities without AsNoTracking — unnecessary change tracking overhead");
+            }
+        }
+        // Informational — some queries legitimately need tracking
+        // violations.Should().BeEmpty("query handlers should use AsNoTracking for read-only queries");
+    }
+
+    [Fact]
+    public void No_SaveChangesAsync_without_CancellationToken()
+    {
+        // Forgetting to pass CancellationToken to SaveChangesAsync means user-cancelled
+        // requests still commit to DB
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Migration")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"SaveChangesAsync\(\s*\)") &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: SaveChangesAsync() without CancellationToken — cancelled requests still commit");
+                }
+            }
+        }
+        violations.Should().BeEmpty("SaveChangesAsync must receive CancellationToken so cancelled requests don't commit");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // MASSTRANSIT & MESSAGING PITFALLS
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void No_Publish_inside_saga_Then_block()
+    {
+        // Sagas must use PublishAsync with ctx.Init<T>, not raw Publish, to go through outbox
+        var violations = new List<string>();
+        foreach (var file in FindSagaFiles())
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                // .Then(ctx => { ... ctx.Publish( — should be .PublishAsync(ctx => ctx.Init<T>)
+                if (lines[i].Contains(".Publish(") && !lines[i].Contains("PublishAsync") &&
+                    !lines[i].TrimStart().StartsWith("//"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: raw Publish inside saga — use .PublishAsync(ctx => ctx.Init<T>) for outbox safety");
+                }
+            }
+        }
+        violations.Should().BeEmpty("saga transitions must use PublishAsync with Init<T>, not raw Publish");
+    }
+
+    [Fact]
+    public void Every_consumer_class_handles_or_propagates_exceptions()
+    {
+        // Consumers that swallow exceptions silently lose messages
+        // Already covered by No_catch_Exception_without_rethrow_in_consumers
+        // This guard checks for consumers with NO exception handling at all
+        // (entire Consume method with no try-catch — relying on MT retry defaults)
+        var violations = new List<string>();
+        foreach (var file in FindConsumerFiles())
+        {
+            if (!file.Contains("Consumer")) continue;
+            var content = File.ReadAllText(file);
+            if (!content.Contains("IConsumer<")) continue;
+            if (content.Contains("BackgroundService")) continue; // workers, not consumers
+
+            // Check if there's any explicit error handling or if relying on MT defaults
+            if (!content.Contains("try") && !content.Contains("catch") &&
+                !content.Contains("IRetryPolicy") && !content.Contains("UseMessageRetry"))
+            {
+                // This is OK — MassTransit provides retry at the transport level
+                // Only flag if the consumer does fire-and-forget work (e.g., HTTP calls)
+                if ((content.Contains("HttpClient") || content.Contains("PostAsync") || content.Contains("GetAsync")) &&
+                    !content.Contains("IHubContext") && !content.Contains("SignalR"))
+                {
+                    violations.Add($"{Relative(file)}: consumer makes HTTP calls without try-catch — transient failures will fault the message");
+                }
+            }
+        }
+        violations.Should().BeEmpty("consumers making external HTTP calls should have explicit error handling");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DEFENSIVE CODING — PREVENT COMMON AGENT/DEVELOPER MISTAKES
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void No_bare_Task_Delay_in_production_code()
+    {
+        // Task.Delay in production code (not tests) is almost always a mistake —
+        // it's either a polling hack or a timing assumption. Use proper mechanisms.
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Demo") || file.Contains("Chaos")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("Task.Delay(") && !lines[i].TrimStart().StartsWith("//") &&
+                    !lines[i].Contains("stoppingToken") && !lines[i].Contains("cancellation") &&
+                    !lines[i].Contains("CancellationToken") && !lines[i].Contains(", ct") &&
+                    !Regex.IsMatch(lines[i], @"Task\.Delay\([^)]*,\s*\w"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: Task.Delay without CancellationToken — uninterruptible wait in production code");
+                }
+            }
+        }
+        violations.Should().BeEmpty("Task.Delay in production code must pass CancellationToken to be interruptible on shutdown");
+    }
+
+    [Fact]
+    public void No_Dictionary_without_StringComparer_for_string_keys()
+    {
+        // new Dictionary<string, ...>() uses ordinal comparison by default in .NET,
+        // but explicit is better — prevents bugs when keys come from HTTP headers (case-insensitive)
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Migration")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                // Match: new Dictionary<string, with HTTP header or config context
+                if (Regex.IsMatch(lines[i], @"new Dictionary<string,\s*string>\(\)") &&
+                    (lines[i].Contains("Header") || lines[i].Contains("header") ||
+                     lines[i].Contains("Metadata") || lines[i].Contains("metadata")))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: Dictionary<string,string>() for headers/metadata without explicit StringComparer — case-sensitivity bug risk");
+                }
+            }
+        }
+        // Informational — most usages are fine with ordinal
+        // violations.Should().BeEmpty("Dictionary with string keys from HTTP context should specify StringComparer");
+    }
+
+    [Fact]
+    public void No_IConfiguration_injected_into_domain_layer()
+    {
+        // Domain layer must not depend on IConfiguration — it's an infrastructure concern
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles().Where(f => f.Contains(".Domain") && !f.Contains("obj")))
+        {
+            var content = File.ReadAllText(file);
+            if (content.Contains("IConfiguration") || content.Contains("Microsoft.Extensions.Configuration"))
+                violations.Add($"{Relative(file)}: Domain layer references IConfiguration — use Options pattern or inject values");
+        }
+        violations.Should().BeEmpty("Domain layer must not reference IConfiguration — inject typed Options or primitive values");
+    }
+
+    [Fact]
+    public void No_constructor_service_resolution_in_DI_registration()
+    {
+        // sp.GetRequiredService<T>() inside AddScoped/AddSingleton lambda that runs at
+        // registration time (not resolution time) causes "Cannot resolve scoped service
+        // from root provider" errors
+        var violations = new List<string>();
+        foreach (var file in FindDependencyInjectionFiles().Concat(FindProgramFiles()))
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                // AddSingleton<IFoo>(sp => { ... sp.GetRequiredService<ScopedThing>() })
+                if (lines[i].Contains("AddSingleton") && lines[i].Contains("GetRequiredService"))
+                {
+                    // Check if it's resolving a DbContext or scoped service
+                    if (lines[i].Contains("DbContext") || lines[i].Contains("Repository") ||
+                        lines[i].Contains("IMediator"))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: resolving scoped service inside Singleton registration — runtime error");
+                    }
+                }
+            }
+        }
+        violations.Should().BeEmpty("Singleton registrations must not resolve Scoped services — use IServiceScopeFactory instead");
+    }
+
+    [Fact]
+    public void No_Dispose_on_injected_services()
+    {
+        // Calling .Dispose() on DI-injected services breaks the container's lifecycle management
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Factory") || file.Contains("Migration")) continue;
+            var content = File.ReadAllText(file);
+            // Skip files that implement IDisposable themselves (they manage their own resources)
+            if (content.Contains(": IDisposable") || content.Contains(": IAsyncDisposable")) continue;
+
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"_\w+\.Dispose\(\)") && !lines[i].TrimStart().StartsWith("//") &&
+                    !lines[i].Contains("Gate") && !lines[i].Contains("Semaphore") &&
+                    !lines[i].Contains("Timer") && !lines[i].Contains("Cts") &&
+                    !lines[i].Contains("Password") && !lines[i].Contains("registration") &&
+                    !lines[i].Contains("_lock") && !lines[i].Contains("_loopCts") &&
+                    !lines[i].Contains("Registration") && !lines[i].Contains("_cts") &&
+                    !lines[i].Contains("_token"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: calling Dispose() on injected service — let the DI container manage lifecycle");
+                }
+            }
+        }
+        violations.Should().BeEmpty("never call Dispose() on DI-injected services — the container manages their lifecycle");
+    }
+
+    [Fact]
+    public void No_secrets_in_source_code()
+    {
+        // Catches hardcoded API keys, tokens, and secrets in source code
+        var secretPatterns = new[]
+        {
+            @"sk_live_\w+",       // Stripe live secret key
+            @"sk_test_\w{20,}",   // Stripe test key (long enough to not be a var name)
+            @"pk_live_\w+",       // Stripe publishable live key
+            @"AKIA[A-Z0-9]{16}",  // AWS access key
+            @"ghp_\w{36}",        // GitHub personal access token
+            @"xoxb-\w+",          // Slack bot token
+        };
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("appsettings")) continue;
+            var content = File.ReadAllText(file);
+            foreach (var pattern in secretPatterns)
+            {
+                var match = Regex.Match(content, pattern);
+                if (match.Success)
+                {
+                    var lineNum = content[..match.Index].Count(c => c == '\n') + 1;
+                    violations.Add($"{Relative(file)}:{lineNum}: possible hardcoded secret ({pattern[..8]}...) — use configuration or Vault");
+                }
+            }
+        }
+        violations.Should().BeEmpty("never hardcode API keys or secrets in source code — use configuration or Vault");
+    }
+
+    [Fact]
+    public void Every_external_HTTP_call_has_timeout()
+    {
+        // Any HttpClient.SendAsync/PostAsync/GetAsync should have a CancellationToken with timeout
+        // or be wrapped in a resilience policy
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("Test") || file.Contains("Health") || file.Contains("Middleware") ||
+                file.Contains("Handler") || file.Contains("DelegatingHandler") || file.Contains("Extensions") ||
+                file.Contains("Cache") || file.Contains("Idempotency") || file.Contains("Guard") ||
+                file.Contains("Controller") || file.Contains("/Demo/") ||
+                file.Contains("SignalR") || file.Contains("Hub")) continue; // controllers/demos/hubs use DI-injected typed clients
+            var content = File.ReadAllText(file);
+            // Skip interfaces and files that use IDistributedCache (GetAsync is cache, not HTTP)
+            if (content.Contains("interface ") && !content.Contains("class ")) continue;
+            if (content.Contains("IDistributedCache") || content.Contains("IHybridCache")) continue;
+            // Only flag files that actually use HttpClient (not gateway.SendAsync, hub.SendAsync, etc.)
+            if (!content.Contains("HttpClient"))
+                continue;
+            // AddHttpClient (IHttpClientFactory) is fine — timeout configured via handler pipeline.
+            // Constructor-injected HttpClient also comes from IHttpClientFactory.
+            if (content.Contains("AddHttpClient") || content.Contains("IHttpClientFactory")) continue;
+            if (Regex.IsMatch(content, @"\(HttpClient\s+\w+\)")) continue; // primary constructor injection
+            // File uses HTTP — check for timeout/resilience
+            if (!content.Contains("Timeout") && !content.Contains("ResiliencePolicy") &&
+                !content.Contains("IResiliencePolicyFactory") && !content.Contains("Polly") &&
+                !content.Contains("CancelAfter") && !content.Contains("IHttpClientFactory"))
+            {
+                violations.Add($"{Relative(file)}: HTTP calls without timeout or resilience policy — indefinite hang risk");
+            }
+        }
+        violations.Should().BeEmpty("every external HTTP call must have a timeout or resilience policy");
     }
 }

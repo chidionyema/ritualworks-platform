@@ -28,16 +28,24 @@ public sealed class PaymentSessionCreatedConsumer(
             "Pushing CheckoutReady to SignalR group for sagaId={SagaId}, paymentId={PaymentId}",
             evt.SagaId, evt.PaymentId);
 
-        await hub.Clients.Group(CheckoutHub.GroupNameFor(evt.SagaId))
-            .SendAsync("CheckoutReady", new
-            {
-                sagaId = evt.SagaId,
-                orderId = evt.OrderId,
-                paymentId = evt.PaymentId,
-                checkoutUrl = evt.CheckoutUrl,
-                provider = evt.Provider,
-                amount = evt.Amount,
-                currency = evt.Currency,
-            }, context.CancellationToken);
+        try
+        {
+            await hub.Clients.Group(CheckoutHub.GroupNameFor(evt.SagaId))
+                .SendAsync("CheckoutReady", new
+                {
+                    sagaId = evt.SagaId,
+                    orderId = evt.OrderId,
+                    paymentId = evt.PaymentId,
+                    checkoutUrl = evt.CheckoutUrl,
+                    provider = evt.Provider,
+                    amount = evt.Amount,
+                    currency = evt.Currency,
+                }, context.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to push CheckoutReady to SignalR group for sagaId={SagaId}", evt.SagaId);
+            throw;
+        }
     }
 }

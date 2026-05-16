@@ -47,14 +47,14 @@ public sealed class PreferencesRepository : IPreferencesRepository
     }
 
     /// <inheritdoc />
-    public async Task UpsertAsync(NotificationPreference preference)
+    public async Task UpsertAsync(NotificationPreference preference, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(preference);
 
         var existing = await _dbContext.NotificationPreferences
             .FirstOrDefaultAsync(p => p.UserId == preference.UserId
                                    && p.Category == preference.Category
-                                   && p.Channel == preference.Channel)
+                                   && p.Channel == preference.Channel, ct)
             .ConfigureAwait(false);
 
         if (existing is null)
@@ -69,7 +69,7 @@ public sealed class PreferencesRepository : IPreferencesRepository
             CopyMutableFields(from: preference, onto: existing);
         }
 
-        await _dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

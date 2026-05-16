@@ -68,7 +68,7 @@ public class DisbursementService : IDisbursementService
 
             var payout = Payout.Create(profile.SellerId, payoutAmount, account.Currency);
             _context.Payouts.Add(payout);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(CancellationToken.None);
 
             try
             {
@@ -94,7 +94,7 @@ public class DisbursementService : IDisbursementService
                 payout.MarkFailed(ex.Message);
             }
 
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(CancellationToken.None);
             await tx.CommitAsync();
         }
         catch

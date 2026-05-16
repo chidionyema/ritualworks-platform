@@ -22,7 +22,7 @@ public interface IPreferencesRepository
     /// Inserts or updates a preference row. Composite PK is
     /// (UserId, Category, Channel).
     /// </summary>
-    Task UpsertAsync(NotificationPreference preference);
+    Task UpsertAsync(NotificationPreference preference, CancellationToken ct = default);
 
     /// <summary>
     /// Returns the total <c>Count</c> across <c>RateLimitBuckets</c> rows for

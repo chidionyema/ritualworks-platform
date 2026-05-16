@@ -58,7 +58,7 @@ builder.Services.AddSingleton<IAmazonS3>(sp =>
     {
         return new AmazonS3Client(
             "disabled", "disabled",
-            new AmazonS3Config { ServiceURL = "http://localhost:9999", ForcePathStyle = true });
+            new AmazonS3Config { ServiceURL = "http://disabled.invalid:9999", ForcePathStyle = true });
     }
 
     var cfg = new AmazonS3Config

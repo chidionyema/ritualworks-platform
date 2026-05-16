@@ -39,7 +39,7 @@ public sealed record PaymentSessionRequestedEvent : DomainEvent
     public required string CancelUrl { get; init; }
 
     /// <summary>Additional metadata to attach to the session.</summary>
-    public Dictionary<string, string>? Metadata { get; init; }
+    public IReadOnlyDictionary<string, string>? Metadata { get; init; }
 
     /// <summary>Idempotency key for the payment provider.</summary>
     public string? IdempotencyKey { get; init; }

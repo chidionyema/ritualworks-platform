@@ -61,7 +61,9 @@ public class TokenRevocationService : ITokenRevocationService
         var cacheKey = BuildCacheKey(tokenValue);
 
         // Check hybrid cache (L1 → L2)
-        var cached = await _cache.GetAsync<RevokedTokenMarker>(cacheKey, ct);
+        using var cacheCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cacheCts.CancelAfter(TimeSpan.FromSeconds(10));
+        var cached = await _cache.GetAsync<RevokedTokenMarker>(cacheKey, cacheCts.Token);
         if (cached is not null)
         {
             return true;
@@ -98,7 +100,9 @@ public class TokenRevocationService : ITokenRevocationService
             L2Duration = ttl
         };
 
-        await _cache.SetAsync(cacheKey, RevokedTokenMarker.Instance, options, ct);
+        using var cacheCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cacheCts.CancelAfter(TimeSpan.FromSeconds(10));
+        await _cache.SetAsync(cacheKey, RevokedTokenMarker.Instance, options, cacheCts.Token);
     }
 
     private static string BuildCacheKey(string tokenValue) =>
