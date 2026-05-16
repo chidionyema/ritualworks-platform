@@ -65,11 +65,17 @@ public class MediaController(IMediator mediator) : ControllerBase
     /// Returns media file metadata as a DTO — never the raw entity.
     /// </summary>
     [HttpGet("{id}")]
-    public async Task<IActionResult> GetMedia(Guid id, [FromServices] MediaDbContext context)
+    public async Task<IActionResult> GetMedia(
+        Guid id,
+        [FromServices] MediaDbContext context,
+        [FromServices] Haworks.BuildingBlocks.CurrentUser.ICurrentUserService currentUser)
     {
+        var ownerId = currentUser.UserId;
+        if (string.IsNullOrEmpty(ownerId)) return Unauthorized();
+
         var file = await context.MediaFiles
             .AsNoTracking()
-            .FirstOrDefaultAsync(f => f.Id == id);
+            .FirstOrDefaultAsync(f => f.Id == id && f.OwnerId == ownerId);
 
         if (file == null) return NotFound();
 
