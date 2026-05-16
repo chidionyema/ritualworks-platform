@@ -3,11 +3,13 @@ using Haworks.Identity.Application.Commands.Auth;
 
 namespace Haworks.Identity.Application.Validators.Auth;
 
-public sealed class CreateServiceTokenCommandValidator : AbstractValidator<CreateServiceTokenCommand>
+/// <summary>
+/// CreateServiceTokenCommand has no parameters — validator exists so every
+/// IRequest type is covered and the validation pipeline never short-circuits.
+/// </summary>
+internal sealed class CreateServiceTokenCommandValidator : AbstractValidator<CreateServiceTokenCommand>
 {
     public CreateServiceTokenCommandValidator()
     {
-        // No properties to validate in the current version of the command,
-        // but the architectural guard requires a validator to be present.
     }
 }

@@ -109,6 +109,17 @@ public class JwtTokenService : IJwtTokenService
             _logger.LogDebug("Token signature and revocation validated for {User}",
                 principal?.Identity?.Name ?? "unknown");
 
+            // Check revocation. IsTokenRevokedAsync is safe to block here: ASP.NET Core
+            // runs on thread-pool threads (no SynchronizationContext), so GetAwaiter().GetResult()
+            // cannot deadlock. Prefer ValidateTokenAsync for callers that are already async.
+            var jti = principal?.FindFirstValue(JwtRegisteredClaimNames.Jti);
+            if (!string.IsNullOrEmpty(jti) &&
+                _revocationService.IsTokenRevokedAsync(jti).GetAwaiter().GetResult())
+            {
+                _logger.LogWarning("Token {Jti} has been revoked", jti);
+                return null;
+            }
+
             return principal;
         }
         catch (SecurityTokenExpiredException)
@@ -138,12 +149,40 @@ public class JwtTokenService : IJwtTokenService
         bool validateLifetime = true,
         CancellationToken ct = default)
     {
-        // First validate signature and expiry
-        var principal = ValidateToken(tokenString, validateLifetime);
-        if (principal == null)
+        if (string.IsNullOrEmpty(tokenString))
         {
             return null;
         }
+
+        var tokenHandler = new JwtSecurityTokenHandler();
+        ClaimsPrincipal principal;
+        try
+        {
+            var validationParameters = GetTokenValidationParameters(validateLifetime);
+            principal = tokenHandler.ValidateToken(tokenString, validationParameters, out _);
+        }
+        catch (SecurityTokenExpiredException)
+        {
+            _logger.LogWarning("Token expired");
+            return null;
+        }
+        catch (SecurityTokenInvalidSignatureException)
+        {
+            _logger.LogWarning("Invalid token signature");
+            return null;
+        }
+        catch (SecurityTokenValidationException ex)
+        {
+            _logger.LogWarning(ex, "Token validation failed");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error validating token");
+            return null;
+        }
+
+        _logger.LogDebug("Token signature validated for {User}", principal.Identity?.Name ?? "unknown");
 
         // Extract JTI for revocation check
         var jti = principal.FindFirstValue(JwtRegisteredClaimNames.Jti);
@@ -153,15 +192,14 @@ public class JwtTokenService : IJwtTokenService
             return principal; // Allow tokens without JTI (backwards compatibility)
         }
 
-        // Check if token is revoked
+        // Check if token is revoked using the proper async path
         if (await _revocationService.IsTokenRevokedAsync(jti, ct))
         {
             _logger.LogWarning("Token {Jti} has been revoked", jti);
             return null;
         }
 
-        _logger.LogInformation("Token fully validated for {User}",
-            principal.Identity?.Name ?? "unknown");
+        _logger.LogInformation("Token fully validated for {User}", principal.Identity?.Name ?? "unknown");
 
         return principal;
     }

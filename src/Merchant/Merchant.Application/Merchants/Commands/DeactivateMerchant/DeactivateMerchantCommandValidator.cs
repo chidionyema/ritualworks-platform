@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace Haworks.Merchant.Application.Merchants.Commands.DeactivateMerchant;
 
-public sealed class DeactivateMerchantCommandValidator : AbstractValidator<DeactivateMerchantCommand>
+internal sealed class DeactivateMerchantCommandValidator : AbstractValidator<DeactivateMerchantCommand>
 {
     public DeactivateMerchantCommandValidator()
     {
