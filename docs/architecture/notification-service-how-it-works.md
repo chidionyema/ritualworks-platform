@@ -367,7 +367,7 @@ triggers `.github/workflows/deploy.yml`:
 4. **Deploy notifications-svc** via `flyctl deploy -c fly.notifications.toml --remote-only`.
 
 App reachable internally at
-`http://ritualworks-notifications.flycast:8080`. No public IP — only
+`http://haworks-notifications.flycast:8080`. No public IP — only
 the BFF is internet-facing. Calling services hit it via Aspire-style
 service discovery (`https+http://notifications-svc`).
 
@@ -390,7 +390,7 @@ log path (never bound to `IConfiguration` for general use; loaded into
 `IOptions<T>` from Vault and held in the provider's own field).
 
 OTel resource: `service.name=notifications-svc`,
-`service.namespace=ritualworks`. OTLP endpoint set as a Fly secret so
+`service.namespace=haworks`. OTLP endpoint set as a Fly secret so
 the prod cluster can swap collectors without redeploy.
 
 ---

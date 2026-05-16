@@ -95,7 +95,7 @@ Skip in Test so integration tests can drive the sweeper deterministically via `S
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/Catalog.Integration -c Release --filter "FullyQualifiedName~ReservationSweeperTests"
 dotnet test tests/Catalog.Integration -c Release   # full suite — no regressions
 ```

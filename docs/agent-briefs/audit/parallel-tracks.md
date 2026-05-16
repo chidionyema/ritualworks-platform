@@ -5,8 +5,8 @@ After L0 lands on `feat/audit-service`, the four L1 phases (extractors+redactor,
 Use this with `docs/agent-briefs/SUPERPROMPT.md` Mode B. Set:
 
 ```
-REPO=/Users/chidionyema/Documents/code/ritualworks-platform
-GH_REPO=chidionyema/ritualworks-platform
+REPO=/Users/chidionyema/Documents/code/haworks-platform
+GH_REPO=chidionyema/haworks-platform
 BASE_BRANCH=feat/audit-service                          # NOT main — we merge into the audit integration branch
 BRIEF_FILE=docs/agent-briefs/audit/parallel-tracks.md
 TRACK_PREFIX=feat/audit-
@@ -244,7 +244,7 @@ cd /Users/chidionyema/Documents/code/rw-audit
 git checkout feat/audit-service
 git pull --ff-only origin feat/audit-service
 
-dotnet build deploy/aspire/RitualworksPlatform.AppHost.csproj -c Release --nologo --verbosity quiet
+dotnet build deploy/aspire/HaworksPlatform.AppHost.csproj -c Release --nologo --verbosity quiet
 dotnet test  tests/Audit.Unit/Audit.Unit.csproj                -c Release --nologo
 dotnet test  tests/Audit.Integration/Audit.Integration.csproj  -c Release --nologo
 ```

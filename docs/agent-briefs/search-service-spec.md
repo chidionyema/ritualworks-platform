@@ -41,7 +41,7 @@ The "for Gemini" framing means the result envelope is shaped to feed an LLM (sta
                                                  │ (HTTP, flycast)
                                                  ▼
                                     ┌───────────────────────────┐
-                                    │ ritualworks-elasticsearch │
+                                    │ haworks-elasticsearch │
                                     │ (Fly, 1 vm + data volume) │
                                     │ index = "products"        │
                                     │ index = "saved_searches"  │
@@ -67,7 +67,7 @@ The "for Gemini" framing means the result envelope is shaped to feed an LLM (sta
 
 **Why Meilisearch.** Best-in-class typo tolerance and relevance out of the box, no FTS tuning required, Rust-fast (sub-30ms p99 for 100k–1M docs on a small VM), tiny operational surface vs OpenSearch. Self-host on a single Fly machine + 1 GB persistent volume keeps cost ~$3–5/mo and avoids Meilisearch Cloud's per-tier pricing.
 
-**Why a single machine (not HA=2).** Cost-tradeoff per user direction. Both `ritualworks-search` (stateless) and `ritualworks-meilisearch` (stateful) run as one VM each. Brief unavailability during Fly machine restart is accepted. Upgrade path documented: `flyctl scale count 2 --ha=true` on `ritualworks-search` is a one-command flip; Meilisearch HA needs a different topology (master/replicas via dump+restore or paid Cloud) and is out of scope until catalog size or query volume justifies it.
+**Why a single machine (not HA=2).** Cost-tradeoff per user direction. Both `haworks-search` (stateless) and `haworks-meilisearch` (stateful) run as one VM each. Brief unavailability during Fly machine restart is accepted. Upgrade path documented: `flyctl scale count 2 --ha=true` on `haworks-search` is a one-command flip; Meilisearch HA needs a different topology (master/replicas via dump+restore or paid Cloud) and is out of scope until catalog size or query volume justifies it.
 
 **Why search-svc is still its own service (not just hitting Meilisearch from the BFF).** Three reasons: (1) authn/authz lives at the search-svc boundary so we never expose Meilisearch's master key publicly; (2) the indexer needs to consume catalog events from RabbitMQ — that lifecycle belongs in a service, not the BFF; (3) the response shape gets translated to the Gemini-friendly envelope (`score`, `snippet`) in one place.
 
@@ -185,7 +185,7 @@ This is a 1+1 round-trip per index event. At expected volume (catalog edits, not
 1. `ProductCacheInvalidatedConsumer` lives in `Search.Application/Consumers/`.
 2. On `ProductCacheInvalidatedEvent`:
    - If `Reason == "deleted"` → call `index.deleteDocument(productIdKey)`. (Hard delete, not soft. Meilisearch has no `isListed=false` filter cost benefit and a hard-deleted doc is just gone from the index.)
-   - Else → call catalog read API: `GET http://ritualworks-catalog.flycast:8080/api/products/{id}` returning the Product+Category projection.
+   - Else → call catalog read API: `GET http://haworks-catalog.flycast:8080/api/products/{id}` returning the Product+Category projection.
    - Apply OOO version guard from §4, then `index.addDocuments([…])`.
 3. On `CategoryUpdatedEvent` → query Meilisearch for all products in that category (`filter: categoryId = <guid>`), update `categoryName` on each, batch `addDocuments`. Meilisearch handles up to ~10k docs per batch comfortably; if a category has more, the indexer paginates.
 4. Retries: MassTransit default exponential backoff. After max retries, message goes to error queue. **No DLQ-replay tooling for v1** — operator can re-trigger by republishing from catalog.
@@ -228,17 +228,17 @@ Catalog publishes this in the existing outbox transaction whenever `UpdateCatego
 
 ## 8. Topology & deployment
 
-**Two new Fly apps.** `ritualworks-search` (stateless) and `ritualworks-meilisearch` (stateful, with a 1 GB persistent volume mounted at `/meili_data`). Both single-machine, `shared-cpu-1x` 256 MB, region `iad`. Both internal (flycast only — no public IP).
+**Two new Fly apps.** `haworks-search` (stateless) and `haworks-meilisearch` (stateful, with a 1 GB persistent volume mounted at `/meili_data`). Both single-machine, `shared-cpu-1x` 256 MB, region `iad`. Both internal (flycast only — no public IP).
 
 `fly.search.toml` clones the catalog template:
 - `min_machines_running = 1` (no auto-stop — kills tail latency)
 - single-machine deploy (`--ha=false` in `deploy/fly/deploy.sh`, or just don't pass `--ha=true`)
-- env: `Meilisearch__Url = http://ritualworks-meilisearch.flycast:7700`
+- env: `Meilisearch__Url = http://haworks-meilisearch.flycast:7700`
 
 `fly.meilisearch.toml` is new and is a stock Meilisearch container deploy:
 
 ```toml
-app            = "ritualworks-meilisearch"
+app            = "haworks-meilisearch"
 primary_region = "iad"
 
 [build]
@@ -269,25 +269,25 @@ primary_region = "iad"
 ```
 
 The `MEILI_MASTER_KEY` is a Fly secret on both apps:
-- on `ritualworks-meilisearch` → Meilisearch reads it on startup and locks down the API.
-- on `ritualworks-search` → the SDK uses it as the bearer token.
+- on `haworks-meilisearch` → Meilisearch reads it on startup and locks down the API.
+- on `haworks-search` → the SDK uses it as the bearer token.
 
 **bootstrap.sh changes (B1 brief):**
 
 ```bash
 INTERNAL_APPS=(
-  ritualworks-identity ritualworks-catalog ritualworks-orders
-  ritualworks-payments ritualworks-checkout
-  ritualworks-search                         # new
-  ritualworks-meilisearch                    # new
+  haworks-identity haworks-catalog haworks-orders
+  haworks-payments haworks-checkout
+  haworks-search                         # new
+  haworks-meilisearch                    # new
 )
 ```
 
-Plus a per-Meili-app block that creates the volume on first run and stages `MEILI_MASTER_KEY` (auto-generated like `JWT_SIGNING_KEY_PEM` is today, persisted to `.env.local`). The DB-string loop (`for app in "${INTERNAL_APPS[@]}"`) needs to skip `ritualworks-meilisearch` since it doesn't have a Postgres dependency — handled by an `if [[ "$app" != "ritualworks-meilisearch" ]]` guard.
+Plus a per-Meili-app block that creates the volume on first run and stages `MEILI_MASTER_KEY` (auto-generated like `JWT_SIGNING_KEY_PEM` is today, persisted to `.env.local`). The DB-string loop (`for app in "${INTERNAL_APPS[@]}"`) needs to skip `haworks-meilisearch` since it doesn't have a Postgres dependency — handled by an `if [[ "$app" != "haworks-meilisearch" ]]` guard.
 
 **deploy.yml changes:** add `"search"` and `"meilisearch"` to the matrix-builder in the `plan` job. Both deploy on every push to main; no opt-in switch (search is core scope).
 
-Cost: ~$3–5/mo (one extra shared-cpu-1x machine + 1 GB volume). The single-machine compromise is documented; upgrade path is `flyctl scale count 2 --ha=true` on `ritualworks-search` whenever HA becomes a priority. Meilisearch HA upgrade is non-trivial (master/replicas via dump+restore) and is a separate v3 effort.
+Cost: ~$3–5/mo (one extra shared-cpu-1x machine + 1 GB volume). The single-machine compromise is documented; upgrade path is `flyctl scale count 2 --ha=true` on `haworks-search` whenever HA becomes a priority. Meilisearch HA upgrade is non-trivial (master/replicas via dump+restore) and is a separate v3 effort.
 
 ---
 

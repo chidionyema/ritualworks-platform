@@ -42,13 +42,13 @@ public sealed class StockReservedConsumerTests
     }
 
     [Fact]
-    public async Task StockReservedEvent_carries_order_saga_user_money_items_and_line_items()
+    public Task StockReservedEvent_carries_order_saga_user_money_items_and_line_items()
     {
         var orderId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var sagaId = Guid.Parse("22222222-2222-2222-2222-222222222222");
         var productId = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
-        await _messagePact
+        return _messagePact
             .ExpectsToReceive("a StockReservedEvent for a 1-line order")
             .Given("an in-flight saga for orderId 11111111-... reserved 3 units of productId 33333333-...")
             .WithJsonContent(new

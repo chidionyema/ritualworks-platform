@@ -44,7 +44,7 @@ per-environment values, so we use it.
 Once per Fly organization / environment. Pre-requisites:
 
 - `flyctl auth login` already done as someone with deploy rights to the
-  `ritualworks-*` apps.
+  `haworks-*` apps.
 - The OTLP backend already exists and you have its ingestion URL (see
   *Choosing an OTLP backend* below).
 
@@ -82,7 +82,7 @@ If you only need to rotate one app (rare, but possible during backend
 migration testing):
 
 ```bash
-flyctl secrets set OTEL_EXPORTER_OTLP_ENDPOINT="https://new-url:443" -a ritualworks-bffweb
+flyctl secrets set OTEL_EXPORTER_OTLP_ENDPOINT="https://new-url:443" -a haworks-bffweb
 ```
 
 ## Verifying
@@ -91,21 +91,21 @@ After the script completes, pick any app and confirm both the static
 identity attrs and the secret-injected URL are visible inside the container:
 
 ```bash
-fly ssh console -a ritualworks-bffweb -C "env | grep OTEL"
+fly ssh console -a haworks-bffweb -C "env | grep OTEL"
 ```
 
 Expected output:
 
 ```
 OTEL_SERVICE_NAME=bff-web
-OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production,service.namespace=ritualworks
+OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production,service.namespace=haworks
 OTEL_EXPORTER_OTLP_ENDPOINT=https://tempo-prod-04-prod-us-east-0.grafana.net:443
 ```
 
 Then hit the app and watch a trace land in your backend's UI:
 
 ```bash
-curl -fsS https://ritualworks-bffweb.fly.dev/health
+curl -fsS https://haworks-bffweb.fly.dev/health
 ```
 
 The `GET /health` request should appear as a span in Tempo / Honeycomb /
@@ -132,7 +132,7 @@ Symptoms of "forgot to set the secret":
 
 - All apps boot fine, `/health` returns 200.
 - No traces appear in your backend after a deploy.
-- `fly logs -a ritualworks-bffweb` shows zero lines containing `OTLP`,
+- `fly logs -a haworks-bffweb` shows zero lines containing `OTLP`,
   `Exporter`, or `BatchExportProcessor`. The OTel SDK is loaded but the
   exporter is silently no-op'ing because it has no endpoint configured.
 - App logs themselves are unaffected (Serilog still writes to stdout).
@@ -146,7 +146,7 @@ also means a misconfiguration is invisible.
 
 To detect:
 
-1. `fly ssh console -a ritualworks-bffweb -C "env | grep OTEL_EXPORTER"` —
+1. `fly ssh console -a haworks-bffweb -C "env | grep OTEL_EXPORTER"` —
    if `OTEL_EXPORTER_OTLP_ENDPOINT` is missing or empty, this is the bug.
 2. Run `./scripts/fly-set-otel-endpoint.sh <url>` to fix.
 3. Wait for the rolling redeploy (~30s) and re-test with `curl /health`.

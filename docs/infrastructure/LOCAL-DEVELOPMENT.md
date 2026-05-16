@@ -109,12 +109,12 @@ Persistent container volumes:
 
 | Volume | Content |
 |--------|---------|
-| `ritualworks-platform-postgres-data` | All service databases |
-| `ritualworks-platform-redis-data` | Redis persistence |
-| `ritualworks-platform-kafka-data` | Kafka log segments |
-| `ritualworks-platform-elasticsearch-data` | Elasticsearch indices |
-| `ritualworks-platform-localstack-data` | LocalStack S3 buckets |
-| `ritualworks-platform-pact-db-data` | Pact Broker database |
+| `haworks-platform-postgres-data` | All service databases |
+| `haworks-platform-redis-data` | Redis persistence |
+| `haworks-platform-kafka-data` | Kafka log segments |
+| `haworks-platform-elasticsearch-data` | Elasticsearch indices |
+| `haworks-platform-localstack-data` | LocalStack S3 buckets |
+| `haworks-platform-pact-db-data` | Pact Broker database |
 
 ### Catalog replicas
 
@@ -179,7 +179,7 @@ vault secrets list
 No infrastructure required. Run from the repo root:
 
 ```bash
-dotnet test RitualworksPlatform.sln \
+dotnet test HaworksPlatform.sln \
   --filter "FullyQualifiedName~.Unit" \
   --configuration Release
 ```
@@ -260,7 +260,7 @@ dotnet test tests/Smoke/Smoke.csproj --configuration Release
 `pg_isready` health check fails if the data volume was created by a different Postgres image version. Delete the volume and restart:
 
 ```bash
-docker volume rm ritualworks-platform-postgres-data   # Aspire
+docker volume rm haworks-platform-postgres-data   # Aspire
 # or
 docker compose down -v                                # Compose
 ```

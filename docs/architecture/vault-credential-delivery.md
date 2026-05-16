@@ -184,7 +184,7 @@ service:
 1. Deploy Vault to the cluster via the official Helm chart with Kubernetes
    Auth enabled.
 2. Bind each service's ServiceAccount to its Vault role
-   (`vault write auth/kubernetes/role/identity-svc bound_service_account_names=identity-svc bound_service_account_namespaces=ritualworks policies=svc-identity ttl=24h`).
+   (`vault write auth/kubernetes/role/identity-svc bound_service_account_names=identity-svc bound_service_account_namespaces=haworks policies=svc-identity ttl=24h`).
 3. Configure the Vault Agent Injector helm chart with the Pod-mutation
    webhook.
 4. Drop the `Vault__Enabled` env var from the deployment — the existence of

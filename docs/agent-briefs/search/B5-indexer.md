@@ -113,7 +113,7 @@ Each integration test uses `harness.Bus.Publish(...)` then polls Meilisearch for
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/Search.Unit -c Release
 dotnet test tests/Search.Integration -c Release
 ```

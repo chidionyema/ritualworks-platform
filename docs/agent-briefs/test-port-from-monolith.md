@@ -1,4 +1,4 @@
-# Agent Brief — Port Tests from `ritualworks` (Monolith) to `ritualworks-platform` (Microservices)
+# Agent Brief — Port Tests from `haworks` (Monolith) to `haworks-platform` (Microservices)
 
 **Audience:** an autonomous coding agent (Gemini, Claude, etc.) that has shell + read/write access to both repos and can run `dotnet`/`docker`.
 **Goal:** close the test-coverage gap between the monolith and the new microservices platform, in priority order.
@@ -12,7 +12,7 @@ This brief is **self-contained** — you do not need access to any prior chat to
 
 ### Source (read-only reference)
 
-- Path: `/Users/chidionyema/Documents/code/ritualworks/`
+- Path: `/Users/chidionyema/Documents/code/haworks/`
 - This is the .NET 9 modular monolith. Tests live under `tests/`:
   - `haworks.Tests.Unit/`
   - `haworks.Tests.integration/` (note lowercase `integration`)
@@ -25,7 +25,7 @@ This brief is **self-contained** — you do not need access to any prior chat to
 
 ### Target (where ported tests land)
 
-- Path: `/Users/chidionyema/Documents/code/ritualworks-platform/`
+- Path: `/Users/chidionyema/Documents/code/haworks-platform/`
 - This is the .NET 9 microservices platform — 7 bounded contexts, per-service Postgres, MassTransit + RabbitMQ, EF outbox per service.
 - Test projects live under `tests/`:
   - `Catalog.{Unit,Architecture,Contract,Integration}/`
@@ -177,7 +177,7 @@ When transforming a monolith test into a platform test:
 
 ### Worked example — port `JwtTokenServiceTests` slice
 
-**Monolith source:** `/Users/chidionyema/Documents/code/ritualworks/tests/haworks.Tests.Unit/Services/JwtTokenServiceTests.cs`
+**Monolith source:** `/Users/chidionyema/Documents/code/haworks/tests/haworks.Tests.Unit/Services/JwtTokenServiceTests.cs`
 
 The monolith file has 24 tests. The platform already has `tests/Identity.Unit/JwtTokenServiceTests.cs` with 4 tests covering core signing. Your job is to fill the gap.
 
@@ -344,13 +344,13 @@ The full gap report is at `docs/agent-briefs/test-port-gap-report.md` (sibling f
 
 ```bash
 # Find platform code under test by name
-grep -rn "class TokenRevocation" /Users/chidionyema/Documents/code/ritualworks-platform/src/
+grep -rn "class TokenRevocation" /Users/chidionyema/Documents/code/haworks-platform/src/
 
 # Find existing platform tests covering a topic before duplicating
-grep -rln "JwtTokenService" /Users/chidionyema/Documents/code/ritualworks-platform/tests/
+grep -rln "JwtTokenService" /Users/chidionyema/Documents/code/haworks-platform/tests/
 
 # Find the canonical platform error name
-grep -rn "Error.Identity\." /Users/chidionyema/Documents/code/ritualworks-platform/src/
+grep -rn "Error.Identity\." /Users/chidionyema/Documents/code/haworks-platform/src/
 
 # List tests in a project (count delta check)
 dotnet test tests/Identity.Unit/Identity.Unit.csproj --list-tests --no-build | wc -l
@@ -366,8 +366,8 @@ git diff --name-only main | xargs grep -l "haworks\.\(Tests\|Domain\|Application
 Before opening your first PR, run this to confirm your environment is healthy:
 
 ```bash
-cd /Users/chidionyema/Documents/code/ritualworks-platform
-dotnet build RitualworksPlatform.sln
+cd /Users/chidionyema/Documents/code/haworks-platform
+dotnet build HaworksPlatform.sln
 docker info >/dev/null && echo "docker ok" || echo "START DOCKER"
 dotnet test tests/Identity.Unit/Identity.Unit.csproj --no-build
 ```
@@ -379,7 +379,7 @@ All three must succeed. If `dotnet test` fails on `main`, that's a pre-existing 
 ## 12. What "done with the whole project" looks like
 
 When all of §5 + §9 are merged:
-- Unit test count in `ritualworks-platform/tests/` reaches ≥80% of the monolith's count after deduplication and feature-removal exclusions.
+- Unit test count in `haworks-platform/tests/` reaches ≥80% of the monolith's count after deduplication and feature-removal exclusions.
 - A `Smoke` and `E2E` project exist and are wired into CI (see `.github/workflows/ci.yml`).
 - README's `## Test Inventory` table reflects the new totals.
 - The case study (`docs/CASE-STUDY.md`) section "Test pyramid" is updated.

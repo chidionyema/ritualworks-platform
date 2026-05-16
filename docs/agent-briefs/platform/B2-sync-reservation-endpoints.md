@@ -36,7 +36,7 @@ BFF passthrough — `src/BffWeb/BffWeb.Api/Controllers/ReservationsController.cs
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/Catalog.Unit -c Release
 dotnet test tests/Catalog.Integration -c Release --filter "FullyQualifiedName~ReservationEndpointTests"
 dotnet test tests/Catalog.Integration -c Release   # full suite — no regressions

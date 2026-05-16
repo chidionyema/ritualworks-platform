@@ -2034,7 +2034,7 @@ public sealed class PlatformGuardTests
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // LEGACY RITUALWORKS RULES — ported from old monolith CLAUDE.md
+    // LEGACY MONOLITH RULES — ported from old monolith CLAUDE.md
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
@@ -2579,7 +2579,7 @@ public sealed class PlatformGuardTests
     private static string FindSrcRoot()
     {
         var dir = Directory.GetCurrentDirectory();
-        while (dir != null && !File.Exists(Path.Combine(dir, "RitualworksPlatform.sln")))
+        while (dir != null && !File.Exists(Path.Combine(dir, "HaworksPlatform.sln")))
             dir = Directory.GetParent(dir)?.FullName;
         return Path.Combine(dir ?? ".", "src");
     }

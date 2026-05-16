@@ -31,9 +31,9 @@ public sealed class OrderEventsConsumerTests
     }
 
     [Fact]
-    public async Task OrderCreatedEvent_carries_orderId_customerId_total_email()
+    public Task OrderCreatedEvent_carries_orderId_customerId_total_email()
     {
-        await _pact
+        return _pact
             .ExpectsToReceive("an OrderCreatedEvent for a brand-new order")
             .Given("CreateOrderCommand just inserted order 11111111-...")
             .WithJsonContent(new
@@ -56,9 +56,9 @@ public sealed class OrderEventsConsumerTests
     }
 
     [Fact]
-    public async Task OrderCompletedEvent_carries_orderId_customerId_total_email_completedAt_paymentId()
+    public Task OrderCompletedEvent_carries_orderId_customerId_total_email_completedAt_paymentId()
     {
-        await _pact
+        return _pact
             .ExpectsToReceive("an OrderCompletedEvent after PaymentCompletedConsumer transitioned the Order to Paid")
             .Given("payment 33333333-... completed for order 11111111-...")
             .WithJsonContent(new
@@ -84,9 +84,9 @@ public sealed class OrderEventsConsumerTests
     }
 
     [Fact]
-    public async Task OrderAbandonedEvent_carries_order_saga_items_age_previousStatus_email()
+    public Task OrderAbandonedEvent_carries_order_saga_items_age_previousStatus_email()
     {
-        await _pact
+        return _pact
             .ExpectsToReceive("an OrderAbandonedEvent after StockReservationFailedConsumer transitioned the Order")
             .Given("stock reservation failed for order 11111111-...")
             .WithJsonContent(new

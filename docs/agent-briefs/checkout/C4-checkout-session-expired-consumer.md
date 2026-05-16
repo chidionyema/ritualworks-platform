@@ -61,7 +61,7 @@ Cases:
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/Orders.Unit -c Release
 dotnet test tests/Orders.Integration -c Release --filter "FullyQualifiedName~CheckoutSessionExpiredConsumerTests"
 dotnet test tests/Orders.Integration -c Release   # full suite — no regressions

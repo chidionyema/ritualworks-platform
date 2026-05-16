@@ -120,12 +120,12 @@ Add to `src/BuildingBlocks/Haworks.BuildingBlocks.csproj`:
 
 Use `DefaultHttpContextAccessor` + a stubbed `ClaimsPrincipal` for the tests.
 
-If `tests/BuildingBlocks.Tests/` doesn't exist as a project, create it (csproj mirroring `tests/Search.Unit/Search.Unit.csproj` style — xUnit + FluentAssertions + Moq) and reference it from `RitualworksPlatform.sln`.
+If `tests/BuildingBlocks.Tests/` doesn't exist as a project, create it (csproj mirroring `tests/Search.Unit/Search.Unit.csproj` style — xUnit + FluentAssertions + Moq) and reference it from `HaworksPlatform.sln`.
 
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/BuildingBlocks.Tests -c Release   # if you created it; else equivalent
 ```
 

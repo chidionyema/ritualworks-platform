@@ -46,9 +46,9 @@ public sealed class UserProfileChangedConsumerTests
     }
 
     [Fact]
-    public async Task UserProfileChangedEvent_must_carry_userId_email_username_roles_and_reason()
+    public Task UserProfileChangedEvent_must_carry_userId_email_username_roles_and_reason()
     {
-        await _messagePact
+        return _messagePact
             .ExpectsToReceive("a UserProfileChangedEvent for a newly registered user")
             .Given("a new user has just registered with username 'alice', email 'alice@example.com', role 'ContentUploader'")
             .WithJsonContent(new

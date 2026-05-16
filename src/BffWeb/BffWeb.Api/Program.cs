@@ -178,8 +178,8 @@ if (builder.Environment.IsDevelopment())
 // + method allowlists match what the demos actually send.
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? (builder.Environment.IsDevelopment()
-        ? new[] { "http://localhost:4321", "https://ritualworks.pages.dev", "https://portfolio-showcase.pages.dev" }
-        : new[] { "https://ritualworks.pages.dev", "https://portfolio-showcase.pages.dev" });
+        ? new[] { "http://localhost:4321", "https://haworks.pages.dev", "https://portfolio-showcase.pages.dev" }
+        : new[] { "https://haworks.pages.dev", "https://portfolio-showcase.pages.dev" });
 
 builder.Services.AddCors(o => o.AddPolicy("portfolio-site", p => p
     .WithOrigins(corsOrigins)

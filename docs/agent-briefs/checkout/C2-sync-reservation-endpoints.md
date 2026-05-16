@@ -71,7 +71,7 @@ Forwards request body, query, and `Authorization` + `X-Idempotency-Key` headers 
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/Catalog.Unit -c Release
 dotnet test tests/Catalog.Integration -c Release --filter "FullyQualifiedName~ReservationEndpointTests"
 dotnet test tests/Catalog.Integration -c Release   # full suite — no regressions

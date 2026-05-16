@@ -3,7 +3,7 @@
 # Build context = repo root, so the Dockerfile can pull in Directory.Build.props
 # and the shared BuildingBlocks/Contracts projects.
 
-app            = "ritualworks-bffweb"
+app            = "haworks-bffweb"
 primary_region = "iad"
 
 [build]
@@ -23,18 +23,18 @@ primary_region = "iad"
   # endpoint, but its proxy was returning "Connection reset by peer" for
   # this cluster's HTTP/8080 traffic. .internal hits the machine's 6PN
   # IP directly, no LB in the path.
-  "Services__identity-svc__http__0"  = "http://ritualworks-identity.internal:8080"
-  "Services__catalog-svc__http__0"   = "http://ritualworks-catalog.internal:8080"
-  "Services__orders-svc__http__0"    = "http://ritualworks-orders.internal:8080"
-  "Services__payments-svc__http__0"  = "http://ritualworks-payments.internal:8080"
-  "Services__checkout-svc__http__0"  = "http://ritualworks-checkout.internal:8080"
-  "Services__search-svc__http__0"    = "http://ritualworks-search.internal:8080"
+  "Services__identity-svc__http__0"  = "http://haworks-identity.internal:8080"
+  "Services__catalog-svc__http__0"   = "http://haworks-catalog.internal:8080"
+  "Services__orders-svc__http__0"    = "http://haworks-orders.internal:8080"
+  "Services__payments-svc__http__0"  = "http://haworks-payments.internal:8080"
+  "Services__checkout-svc__http__0"  = "http://haworks-checkout.internal:8080"
+  "Services__search-svc__http__0"    = "http://haworks-search.internal:8080"
 
   # OpenTelemetry resource identity. Fly's [env] is static (no ${VAR}
   # interpolation), so the OTLP endpoint must be set out-of-band via:
-  #   fly secrets set OTEL_EXPORTER_OTLP_ENDPOINT=... -a ritualworks-bffweb
+  #   fly secrets set OTEL_EXPORTER_OTLP_ENDPOINT=... -a haworks-bffweb
   OTEL_SERVICE_NAME         = "bff-web"
-  OTEL_RESOURCE_ATTRIBUTES  = "deployment.environment=production,service.namespace=ritualworks"
+  OTEL_RESOURCE_ATTRIBUTES  = "deployment.environment=production,service.namespace=haworks"
 
 [http_service]
   internal_port       = 8080

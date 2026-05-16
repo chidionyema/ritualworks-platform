@@ -128,14 +128,14 @@ Per file group (domain change → migration → saga changes → tests) commit +
 ## Wave configuration
 
 ```
-REPO=/Users/chidionyema/Documents/code/ritualworks-platform
-GH_REPO=chidionyema/ritualworks-platform
+REPO=/Users/chidionyema/Documents/code/haworks-platform
+GH_REPO=chidionyema/haworks-platform
 WAVE_MODE=modify
 BASE_BRANCH=feat/checkout-saga-cheap-wins
 BRIEF_FILE=docs/agent-briefs/checkout-saga-cheap-wins-spec.md
 TRACK_PREFIX=feat/checkout-saga-
 TRACKS=(T1 T2 T3)
-WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/ritualworks-platform
+WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/haworks-platform
 ```
 
 ## Done check (whole feature)

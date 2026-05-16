@@ -52,7 +52,7 @@ The test fixture's `TestAuthenticationHandler` setup already provides authentica
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/Payments.Integration -c Release
 dotnet test tests/Catalog.Integration -c Release
 dotnet test tests/Orders.Integration -c Release

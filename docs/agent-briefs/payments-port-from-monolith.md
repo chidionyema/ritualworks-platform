@@ -1,6 +1,6 @@
 # Brief: Port Stripe payment provider from monolith to microservices platform
 
-You are working on `/Users/chidionyema/Documents/code/ritualworks-platform/` (the new microservices platform). The previous monolith lives at `/Users/chidionyema/Documents/code/ritualworks/` and is read-only context.
+You are working on `/Users/chidionyema/Documents/code/haworks-platform/` (the new microservices platform). The previous monolith lives at `/Users/chidionyema/Documents/code/haworks/` and is read-only context.
 
 ## Background — read this first
 
@@ -14,7 +14,7 @@ The monolith's `.claude/rules/event-integration-rationale.md` was a proposal to 
 
 - .NET 9, `<TargetFramework>net9.0</TargetFramework>`, `Nullable` enabled, `TreatWarningsAsErrors=true`.
 - Repo-level `Directory.Build.props` defines `<NoWarn>` for accepted analyzer rules (CA1848, CA1873 etc.). Do not add new suppressions; if a new rule fires, fix the call site.
-- Stripe SDK: use the `Stripe.net` NuGet package; pin to the same version the monolith uses (`grep -h "Stripe.net" /Users/chidionyema/Documents/code/ritualworks/src/**/*.csproj` to find it).
+- Stripe SDK: use the `Stripe.net` NuGet package; pin to the same version the monolith uses (`grep -h "Stripe.net" /Users/chidionyema/Documents/code/haworks/src/**/*.csproj` to find it).
 - The new platform follows clean architecture: `Payments.Domain` → `Payments.Application` → `Payments.Infrastructure` → `Payments.Api`. Domain has no external deps. Application defines interfaces, Infrastructure implements.
 - Each service owns its own DB on Neon (Postgres). Payments uses `ConnectionStrings:payments`.
 - Inter-service communication is via MassTransit + RabbitMQ outbox. Cross-context DB calls are forbidden.
@@ -27,12 +27,12 @@ The monolith's `.claude/rules/event-integration-rationale.md` was a proposal to 
 
 Read these BEFORE writing code (they apply to the new platform too):
 
-- `/Users/chidionyema/Documents/code/ritualworks/.claude/rules/dotnet-clean-arch.md` — clean architecture, Result pattern, internal sealed handlers, IDomainEventPublisher (not IPublishEndpoint), event publishing BEFORE SaveChangesAsync, file-scoped namespaces.
-- `/Users/chidionyema/Documents/code/ritualworks/.claude/rules/code-quality.md` — naming, primary constructors, structured logging with LoggerMessage source generators, no magic strings, constants files.
-- `/Users/chidionyema/Documents/code/ritualworks/.claude/rules/options-configuration.md` — `Options` suffix, `SectionName` constant, `[Required]`/`[Range]` data annotations, `.AddOptions<T>().Bind(...).ValidateDataAnnotations().ValidateOnStart()`.
-- `/Users/chidionyema/Documents/code/ritualworks/.claude/rules/security.md` — secrets via Vault (or via Fly secrets in prod-no-Vault mode), never in appsettings.json, JTI revocation, audit logging.
-- `/Users/chidionyema/Documents/code/ritualworks/.claude/rules/resilience.md` — retry/circuit breaker/bulkhead/fallback patterns. The new platform has `Haworks.BuildingBlocks.Resilience.IResiliencePolicyFactory` already wired. Use it for the Stripe HTTP client.
-- `/Users/chidionyema/Documents/code/ritualworks/.claude/rules/testing.md` — Fluent Assertions, Testcontainers, no `Task.Delay`, MassTransit test harness, Pact contracts for cross-context events.
+- `/Users/chidionyema/Documents/code/haworks/.claude/rules/dotnet-clean-arch.md` — clean architecture, Result pattern, internal sealed handlers, IDomainEventPublisher (not IPublishEndpoint), event publishing BEFORE SaveChangesAsync, file-scoped namespaces.
+- `/Users/chidionyema/Documents/code/haworks/.claude/rules/code-quality.md` — naming, primary constructors, structured logging with LoggerMessage source generators, no magic strings, constants files.
+- `/Users/chidionyema/Documents/code/haworks/.claude/rules/options-configuration.md` — `Options` suffix, `SectionName` constant, `[Required]`/`[Range]` data annotations, `.AddOptions<T>().Bind(...).ValidateDataAnnotations().ValidateOnStart()`.
+- `/Users/chidionyema/Documents/code/haworks/.claude/rules/security.md` — secrets via Vault (or via Fly secrets in prod-no-Vault mode), never in appsettings.json, JTI revocation, audit logging.
+- `/Users/chidionyema/Documents/code/haworks/.claude/rules/resilience.md` — retry/circuit breaker/bulkhead/fallback patterns. The new platform has `Haworks.BuildingBlocks.Resilience.IResiliencePolicyFactory` already wired. Use it for the Stripe HTTP client.
+- `/Users/chidionyema/Documents/code/haworks/.claude/rules/testing.md` — Fluent Assertions, Testcontainers, no `Task.Delay`, MassTransit test harness, Pact contracts for cross-context events.
 
 ## Files to port (Stripe — phase 1)
 
@@ -133,7 +133,7 @@ Test corrections during port:
 
 You're done when:
 
-1. `dotnet build RitualworksPlatform.sln -c Release` succeeds with 0 warnings, 0 errors.
+1. `dotnet build HaworksPlatform.sln -c Release` succeeds with 0 warnings, 0 errors.
 2. `dotnet test tests/Payments.Unit/Payments.Unit.csproj` passes.
 3. `dotnet test tests/Payments.Integration/Payments.Integration.csproj` passes (Testcontainers required — Docker must be running).
 4. `dotnet test tests/CheckoutOrchestrator.Integration/CheckoutOrchestrator.Integration.csproj` passes, including the ported saga E2E and chaos tests.
@@ -159,7 +159,7 @@ Don't ship one giant PR. Split as:
 2. **Outbox atomicity.** Publish events BEFORE `SaveChangesAsync`. The MassTransit-EF outbox stores events in the same DB transaction as the Payment aggregate update.
 3. **Stripe webhook signature validation.** Production failure-mode: if the raw body is buffered after model binding, `Stripe.EventUtility.ConstructEvent` rejects the signature. The new platform's `WebhooksController` must read the raw body via `Request.Body` BEFORE any model binding (the monolith handles this in its `WebhooksController.PostAsync` — replicate exactly).
 4. **No `Task.Delay` in tests** (monolith convention, applies here too). Use polling loops with timeouts via `BuildingBlocks.Testing` helpers.
-5. **Stripe API key on Fly.** No Vault in prod — the bootstrap script should add a `STRIPE_SECRET_KEY` field to `deploy/fly/.env.example` and set it as `Stripe__SecretKey` on `ritualworks-payments`. The webhook secret is already templated as `STRIPE_WEBHOOK_SECRET`.
+5. **Stripe API key on Fly.** No Vault in prod — the bootstrap script should add a `STRIPE_SECRET_KEY` field to `deploy/fly/.env.example` and set it as `Stripe__SecretKey` on `haworks-payments`. The webhook secret is already templated as `STRIPE_WEBHOOK_SECRET`.
 6. **Idempotency key must include UserId** (per `code-quality.md`): `hash($userId:$clientKey)`. Don't drop this from the ported `IdempotencyKeyGenerator`.
 7. **Stripe SDK version pinning.** Match the monolith's pinned version. A major SDK bump risks breaking changes in `EventUtility` or `SessionService`.
 
@@ -176,7 +176,7 @@ Don't ship one giant PR. Split as:
 
 ```bash
 # Build everything
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 
 # Run unit tests for Payments + CheckoutOrchestrator
 dotnet test tests/Payments.Unit

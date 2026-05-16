@@ -36,7 +36,7 @@ A controller or minimal API endpoint in BffWeb.Api:
 In `fly.bffweb.toml`'s `[env]` block (Fly secrets API rejects hyphens — keep this in env, not secrets, like the other services):
 
 ```toml
-"Services__search-svc__http__0" = "http://ritualworks-search.flycast:8080"
+"Services__search-svc__http__0" = "http://haworks-search.flycast:8080"
 ```
 
 In BFF DI:
@@ -81,7 +81,7 @@ Add a paragraph to `docs/agent-briefs/search/B7-bff-and-smoke.md`'s done-report 
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/BffWeb.Integration -c Release       # BFF unit/integration suite
 dotnet test tests/Smoke -c Release                    # smoke test compiles
 ```
@@ -103,7 +103,7 @@ In your done-report, include:
   ```
   # After merging feat/search/B7 into main:
   gh run watch $(gh run list --workflow Deploy --limit 1 --json databaseId -q '.[0].databaseId')
-  BFF_BASE_URL=https://ritualworks-bffweb.fly.dev dotnet test tests/Smoke -c Release \
+  BFF_BASE_URL=https://haworks-bffweb.fly.dev dotnet test tests/Smoke -c Release \
       --filter "FullyQualifiedName~SearchSmokeTests"
   ```
 

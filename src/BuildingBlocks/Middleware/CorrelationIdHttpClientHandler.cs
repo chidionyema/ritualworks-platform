@@ -19,7 +19,7 @@ public sealed class CorrelationIdHttpClientHandler(IHttpContextAccessor accessor
     /// <summary>The OTel span tag key. Dotted form, per OTel semantic conventions.</summary>
     public const string ActivityTagName = "correlation.id";
 
-    protected override async Task<HttpResponseMessage> SendAsync(
+    protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken ct)
     {
         var ctx = accessor.HttpContext;
@@ -42,6 +42,6 @@ public sealed class CorrelationIdHttpClientHandler(IHttpContextAccessor accessor
             Activity.Current?.SetTag(ActivityTagName, id);
         }
 
-        return await base.SendAsync(request, ct).ConfigureAwait(false);
+        return base.SendAsync(request, ct);
     }
 }

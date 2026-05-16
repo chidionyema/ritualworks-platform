@@ -19,8 +19,8 @@ internal sealed class CreateSubscriptionCheckoutCommandHandler(ISubscriptionServ
         // The Amount is passed in the command but the underlying service uses the PlanId/PriceId
         // which typically determines the price in Stripe. We include it for consistency with the brief.
         
-        var successUrl = $"{request.RedirectPath ?? "https://ritualworks.com"}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}";
-        var cancelUrl = $"{request.RedirectPath ?? "https://ritualworks.com"}/checkout/cancel";
+        var successUrl = $"{request.RedirectPath ?? "https://haworks.com"}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}";
+        var cancelUrl = $"{request.RedirectPath ?? "https://haworks.com"}/checkout/cancel";
 
         var sessionRequest = new CreateSubscriptionSessionRequest(
             request.UserId,

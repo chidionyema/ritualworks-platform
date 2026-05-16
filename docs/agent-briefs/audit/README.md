@@ -25,7 +25,7 @@ Every brief has these sections, in this order:
 - **Trust but verify the spec.** If the spec says X but the code says Y, the spec is the source of truth — but pause and call it out. Don't silently rewrite the spec; don't silently break from it.
 - **Don't fabricate paths.** If a file the Inputs list claims exists doesn't, file a blocker. Don't invent.
 - **Commit per phase.** Each phase ends with a commit. The next phase rebases nothing — it starts from the previous commit.
-- **No solution-wide builds.** `dotnet build RitualworksPlatform.sln` is forbidden — too risky on origin/main where unrelated WIP can break it. Build only the projects in the brief's Deliverable list, plus `deploy/aspire/RitualworksPlatform.AppHost.csproj` to verify wiring.
+- **No solution-wide builds.** `dotnet build HaworksPlatform.sln` is forbidden — too risky on origin/main where unrelated WIP can break it. Build only the projects in the brief's Deliverable list, plus `deploy/aspire/HaworksPlatform.AppHost.csproj` to verify wiring.
 
 ## Done-report format
 

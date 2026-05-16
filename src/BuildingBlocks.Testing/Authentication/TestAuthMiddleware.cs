@@ -20,9 +20,9 @@ public class TestAuthMiddleware
         _logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public Task InvokeAsync(HttpContext context)
     {
-        if (context.Request.Path.StartsWithSegments("/api"))
+        if (context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
         {
             var claims = new[]
             {
@@ -39,7 +39,7 @@ public class TestAuthMiddleware
             _logger.LogDebug("TestAuthMiddleware: Added test claims to request");
         }
 
-        await _next(context);
+        return _next(context);
     }
 }
 

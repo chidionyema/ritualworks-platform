@@ -1,4 +1,4 @@
-# RitualWorks Platform — High-Level Design
+# Haworks Platform — High-Level Design
 
 **Version:** 1.0
 **Date:** 2026-05-14
@@ -23,17 +23,17 @@
 
 ## 1. System Context
 
-RitualWorks is a multi-sided e-commerce and content marketplace. It connects **buyers** who discover and purchase spiritual / ritual goods and services with **sellers** (merchants) who list products, manage inventory, and receive payouts. **Platform administrators** manage compliance, GDPR erasure requests, audit trails, and operational concerns.
+Haworks is a multi-sided e-commerce and content marketplace. It connects **buyers** who discover and purchase spiritual / ritual goods and services with **sellers** (merchants) who list products, manage inventory, and receive payouts. **Platform administrators** manage compliance, GDPR erasure requests, audit trails, and operational concerns.
 
 ```mermaid
 C4Context
-    title RitualWorks — System Context
+    title Haworks — System Context
 
     Person(buyer, "Buyer", "Discovers products, places orders, manages subscriptions")
     Person(seller, "Seller / Merchant", "Lists products, manages stock, receives payouts")
     Person(admin, "Platform Admin", "Manages compliance, auditing, GDPR requests")
 
-    System(platform, "RitualWorks Platform", "Multi-sided marketplace with checkout, payments, subscriptions, content delivery, search, and GDPR erasure")
+    System(platform, "Haworks Platform", "Multi-sided marketplace with checkout, payments, subscriptions, content delivery, search, and GDPR erasure")
 
     System_Ext(stripe, "Stripe", "Payment processing & refunds")
     System_Ext(paypal, "PayPal", "Alternative payment provider")
@@ -590,7 +590,7 @@ graph TB
         client["Browser / Mobile Client"]
     end
 
-    subgraph Platform["RitualWorks Platform"]
+    subgraph Platform["Haworks Platform"]
         subgraph BFF["BFF Tier"]
             bff["bff-web\n:5050 (HTTP)\n:5051 (HTTPS)"]
         end

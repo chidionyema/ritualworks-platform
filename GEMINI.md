@@ -1,6 +1,6 @@
-# RitualWorks Platform — Engineering Standards & Context
+# Haworks Platform — Engineering Standards & Context
 
-This document defines the foundation rules for the RitualWorks microservices platform.
+This document defines the foundation rules for the Haworks microservices platform.
 
 ## 🚀 Quality & Validation Mandates
 

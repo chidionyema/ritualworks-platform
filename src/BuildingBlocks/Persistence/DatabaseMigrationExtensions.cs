@@ -27,13 +27,13 @@ public static class DatabaseMigrationExtensions
     /// without it being silent. Total budget: 8 attempts, ~30s wall-clock
     /// (2^attempt seconds, capped at 5s, with jitter).
     /// </summary>
-    public static async Task MigrateWithRetryAsync(
+    public static Task MigrateWithRetryAsync(
         this DatabaseFacade database,
         ILogger logger,
         CancellationToken ct = default)
     {
         var policy = BuildPolicy(logger);
-        await policy.ExecuteAsync(async (innerCt) =>
+        return policy.ExecuteAsync(async (innerCt) =>
         {
             await database.MigrateAsync(innerCt);
         }, ct);
@@ -74,7 +74,7 @@ public static class DatabaseMigrationExtensions
     {
         for (var current = ex; current is not null; current = current.InnerException)
         {
-            if (current.GetType().Name == "PostgresException")
+            if (string.Equals(current.GetType().Name, "PostgresException", StringComparison.Ordinal))
             {
                 var sqlState = current.GetType().GetProperty("SqlState")?.GetValue(current) as string;
                 if (sqlState is "57P03" or "57P02" or "08006" or "08001")

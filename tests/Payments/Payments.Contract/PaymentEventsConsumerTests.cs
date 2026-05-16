@@ -35,9 +35,9 @@ public sealed class PaymentEventsConsumerTests
     }
 
     [Fact]
-    public async Task PaymentCompletedEvent_carries_payment_order_saga_amount_currency_provider_and_optional_txref()
+    public Task PaymentCompletedEvent_carries_payment_order_saga_amount_currency_provider_and_optional_txref()
     {
-        await _pact
+        return _pact
             .ExpectsToReceive("a PaymentCompletedEvent for a Stripe-completed payment")
             .Given("payment 11111111-... for orderId 22222222-... was just marked Completed by the webhook consumer")
             .WithJsonContent(new
@@ -67,9 +67,9 @@ public sealed class PaymentEventsConsumerTests
     }
 
     [Fact]
-    public async Task PaymentSessionFailedEvent_carries_order_saga_provider_errorCode_message_attempt_finalflag()
+    public Task PaymentSessionFailedEvent_carries_order_saga_provider_errorCode_message_attempt_finalflag()
     {
-        await _pact
+        return _pact
             .ExpectsToReceive("a PaymentSessionFailedEvent after Stripe rejected the session")
             .Given("payment session for orderId 44444444-... failed terminally on Stripe")
             .WithJsonContent(new
@@ -97,9 +97,9 @@ public sealed class PaymentEventsConsumerTests
     }
 
     [Fact]
-    public async Task PaymentAmountMismatchEvent_carries_payment_order_provider_actualpaid_expectedtotal_difference_reason()
+    public Task PaymentAmountMismatchEvent_carries_payment_order_provider_actualpaid_expectedtotal_difference_reason()
     {
-        await _pact
+        return _pact
             .ExpectsToReceive("a PaymentAmountMismatchEvent when Stripe captured a different amount than authorized")
             .Given("payment 66666666-... was authorized for 50.00 USD but Stripe captured 75.00 USD")
             .WithJsonContent(new

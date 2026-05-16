@@ -35,7 +35,7 @@ Phase L1.B. Blocks-on: L0 + L1.A committed.
 ### Modified files
 - `src/Audit/Audit.Api/Program.cs` — call `services.AddAuditExtractors()`, `services.AddSingleton<IAuditWriter, AuditWriter>()`, and `ConsumerRegistry.Register(busConfigurator)`.
 - `src/Audit/Audit.Application/DependencyInjection.cs` — add capture-pipeline registrations alongside L1.A's.
-- `RitualworksPlatform.sln` — add `tests/Audit.Integration/Audit.Integration.csproj`.
+- `HaworksPlatform.sln` — add `tests/Audit.Integration/Audit.Integration.csproj`.
 
 ## Acceptance
 

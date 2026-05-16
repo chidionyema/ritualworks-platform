@@ -68,7 +68,7 @@ Compensation paths exist for every failure: `StockReservationFailedEvent`, `Paym
 Saga state is a Postgres table. Per service is one DB (`checkout`); the saga lives in one table within it:
 
 ```
-ritualworks-vault-pg.internal:5432
+haworks-vault-pg.internal:5432
   └── checkout                                        logical DB (per database-topology.md)
         └── checkout.CheckoutSagas                    THE saga state table
               ├── CorrelationId  uuid  PK             SagaId — the cross-service correlation key

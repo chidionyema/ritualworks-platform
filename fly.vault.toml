@@ -3,18 +3,18 @@
 # time the container bounces.
 #
 # Reach from other Fly machines at:
-#   http://ritualworks-vault.internal:8200
+#   http://haworks-vault.internal:8200
 #
 # Deploy:
-#   flyctl apps create ritualworks-vault                     # one-time
-#   flyctl volumes create vault_data --size 1 -a ritualworks-vault --yes
+#   flyctl apps create haworks-vault                     # one-time
+#   flyctl volumes create vault_data --size 1 -a haworks-vault --yes
 #   flyctl deploy -c fly.vault.toml
 #   ./deploy/fly/bootstrap.sh                                # captures unseal key + root token
 #
 # After the first run bootstrap.sh stages VAULT_UNSEAL_KEY and
 # VAULT_ROOT_TOKEN_PROD as Fly secrets so future restarts auto-unseal.
 
-app            = "ritualworks-vault"
+app            = "haworks-vault"
 primary_region = "iad"
 
 [build]

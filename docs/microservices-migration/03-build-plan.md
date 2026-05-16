@@ -52,7 +52,7 @@ Build the repo skeleton + the cross-cutting infrastructure that every service wi
 
 1. **Create the new monorepo:**
    ```
-   ritualworks-platform/
+   haworks-platform/
    ├── src/
    │   ├── Identity/                    (empty .sln + boundary tests)
    │   ├── Catalog/                     (empty)

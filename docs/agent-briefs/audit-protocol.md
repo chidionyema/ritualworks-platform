@@ -1,6 +1,6 @@
 # Service Audit Protocol — 12-Lens Deep Review
 
-> Standard operating procedure for auditing any service in the ritualworks-platform.
+> Standard operating procedure for auditing any service in the haworks-platform.
 > Used by Claude Code, Gemini CLI agents, and human reviewers.
 
 ## When to Use

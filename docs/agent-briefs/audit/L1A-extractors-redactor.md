@@ -35,7 +35,7 @@ Phase L1.A. Blocks-on: L0 committed.
 
 ### Modified files
 - `src/Audit/Audit.Application/DependencyInjection.cs` — extension `AddAuditExtractors(this IServiceCollection)` calls `ExtractorRegistry.Register(services)` and registers `ISecretRedactor` as a singleton. (Create this DI file if L0 didn't add one.)
-- `RitualworksPlatform.sln` — add `tests/Audit.Unit/Audit.Unit.csproj`.
+- `HaworksPlatform.sln` — add `tests/Audit.Unit/Audit.Unit.csproj`.
 
 ## Acceptance
 

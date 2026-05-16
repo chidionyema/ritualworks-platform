@@ -1,18 +1,18 @@
-# Dedicated Postgres for the live vault server (`ritualworks-vault`) to
+# Dedicated Postgres for the live vault server (`haworks-vault`) to
 # manage as its database secrets engine — vault needs admin rights on
 # this DB to create/revoke ephemeral roles for the rotation demo, so we
 # cannot reuse the production Neon DB shared by the real services.
 #
 # Internal-only. Reach from other Fly machines (notably the vault app)
 # at:
-#   postgres://postgres:$VAULT_PG_PASSWORD@ritualworks-vault-pg.internal:5432/postgres
+#   postgres://postgres:$VAULT_PG_PASSWORD@haworks-vault-pg.internal:5432/postgres
 #
 # The OPERATOR_PASSWORD / POSTGRES_PASSWORD secrets are staged by
 # deploy/fly/bootstrap.sh on first run; the same value is also staged on
 # the vault app as VAULT_PG_CONNECTION_URL so deploy/vault/seed.sh can
 # wire up the database secrets engine.
 
-app            = "ritualworks-vault-pg"
+app            = "haworks-vault-pg"
 primary_region = "iad"
 
 [build]

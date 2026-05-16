@@ -55,7 +55,7 @@ Add one test per migrated controller: `Endpoint_returns_401_when_X_User_Id_heade
 ## Acceptance
 
 ```bash
-dotnet build RitualworksPlatform.sln -c Release
+dotnet build HaworksPlatform.sln -c Release
 dotnet test tests/Payments.Integration -c Release
 dotnet test tests/Orders.Integration -c Release
 dotnet test tests/Catalog.Integration -c Release

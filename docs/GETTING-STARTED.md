@@ -20,8 +20,8 @@ docker --version    # 24+
 ## 1. Clone
 
 ```bash
-git clone https://github.com/chidionyema/ritualworks-platform.git
-cd ritualworks-platform
+git clone https://github.com/chidionyema/haworks-platform.git
+cd haworks-platform
 ```
 
 ## 2. Start the platform (Aspire)
@@ -79,7 +79,7 @@ Available filters: Audit, BffWeb, Catalog, CheckoutOrchestrator, Content, Identi
 
 ```bash
 # Unit tests only (no Docker needed)
-dotnet test RitualworksPlatform.sln --filter "Category=Unit"
+dotnet test HaworksPlatform.sln --filter "Category=Unit"
 
 # Single service integration tests (Docker required)
 dotnet test tests/Catalog/Catalog.Integration/

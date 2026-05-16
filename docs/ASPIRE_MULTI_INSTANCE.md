@@ -1,7 +1,7 @@
 # Multi-instance services in Aspire — guide and gotchas
 
 This doc is the operator guide for replicating .NET services in the
-`ritualworks-platform` Aspire AppHost. It exists because most of the
+`haworks-platform` Aspire AppHost. It exists because most of the
 "this is a distributed system" claim hinges on services actually
 running in N>1 instances, and the difference between "I added
 `WithReplicas(3)`" and "the demo proves distributed behaviour" is
