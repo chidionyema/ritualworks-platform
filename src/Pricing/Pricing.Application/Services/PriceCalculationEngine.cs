@@ -124,6 +124,7 @@ public sealed class PriceCalculationEngine
         var subtotal = Math.Round(effectiveUnitPrice * quantity, 4, MidpointRounding.AwayFromZero);
 
         // 5. Apply promotion code to subtotal (not per-unit)
+        var promoApplied = false;
         if (promotionCode is not null && promotionCode.CanRedeem(now))
         {
             switch (promotionCode.DiscountType)
@@ -138,6 +139,7 @@ public sealed class PriceCalculationEngine
                         AmountOff = Math.Round(promoOff, 4, MidpointRounding.AwayFromZero),
                         Pct = promotionCode.DiscountValue,
                     });
+                    promoApplied = true;
                     break;
 
                 case DiscountType.FixedAmount:
@@ -149,6 +151,7 @@ public sealed class PriceCalculationEngine
                         Label = promotionCode.Code,
                         AmountOff = Math.Round(promoFixedOff, 4, MidpointRounding.AwayFromZero),
                     });
+                    promoApplied = true;
                     break;
             }
 
@@ -170,7 +173,7 @@ public sealed class PriceCalculationEngine
             TaxAmount = 0m, // Filled in by caller after tax calculation
             TaxRate = 0m,   // Filled in by caller
             Total = subtotal, // Updated after tax
-            PromoCodeApplied = promotionCode?.Code,
+            PromoCodeApplied = promoApplied ? promotionCode!.Code : null,
             SnapshotAt = now,
         };
     }

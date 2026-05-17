@@ -82,7 +82,9 @@ public static class DependencyInjection
                 mt.SetKebabCaseEndpointNameFormatter();
                 mt.AddDelayedMessageScheduler();
 
-                mt.AddConsumers(typeof(DependencyInjection).Assembly);
+                mt.AddConsumers(
+                    typeof(DependencyInjection).Assembly,
+                    typeof(Haworks.Pricing.Application.Services.PriceCalculationEngine).Assembly);
 
                 mt.UsingRabbitMq((context, cfg) =>
                 {

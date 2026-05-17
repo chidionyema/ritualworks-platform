@@ -7,6 +7,7 @@
     <IsTestProject>true</IsTestProject>
     <AnalysisLevel>none</AnalysisLevel>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);AsyncFixer01</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
