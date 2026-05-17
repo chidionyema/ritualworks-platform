@@ -52,6 +52,15 @@ groups:
           summary: "Refund P99 duration exceeds 5m SLO"
           description: "P99 refund saga duration is {{ $value }}s (SLO: 300s)"
 
+      - alert: FraudCheckFailureSpike
+        expr: increase(fraud_checks_failed_total[1h]) > 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fraud detection spike — {{ $value }} blocked checkouts in 1h"
+          description: "More than 10 checkouts blocked by fraud rules in the last hour. Possible attack or misconfigured rules."
+
       - alert: DunningExhausted
         expr: increase(payments_subscription_dunning_exhausted_total[24h]) > 5
         for: 10m

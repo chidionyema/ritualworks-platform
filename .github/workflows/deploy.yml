@@ -327,10 +327,23 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy -c fly.${{ matrix.svc }}.toml --remote-only
+      - name: Deploy with canary health gate
+        run: |
+          flyctl deploy -c fly.${{ matrix.svc }}.toml --remote-only --ha=false
+          # Post-deploy health gate: verify the new release is healthy
+          for i in $(seq 1 30); do
+            if flyctl ssh console -a haworks-${{ matrix.svc }} -C "curl -sf http://localhost:8080/health/ready" 2>/dev/null; then
+              echo "Health check passed after deploy (attempt $i)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Health check failed after deploy — consider rollback"
+          echo "Run: flyctl releases rollback -a haworks-${{ matrix.svc }}"
+          exit 1
 
   deploy-bff:
-    name: Deploy bffweb
+    name: Deploy bffweb (canary)
     needs: [plan, deploy-backends]
     if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.deploy_bff == 'true' && (needs.deploy-backends.result == 'success' || needs.deploy-backends.result == 'skipped') }}
     runs-on: ubuntu-latest
@@ -340,4 +353,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy -c fly.bffweb.toml --remote-only
+      - name: Deploy BFF with smoke test
+        run: |
+          flyctl deploy -c fly.bffweb.toml --remote-only --ha=false
+          sleep 10
+          # Smoke test the public endpoint
+          for i in $(seq 1 15); do
+            status=$(curl -sf -o /dev/null -w "%{http_code}" "https://haworks-bffweb.fly.dev/health" 2>/dev/null || echo "000")
+            if [[ "$status" == "200" ]]; then
+              echo "BFF smoke test passed (attempt $i)"
+              exit 0
+            fi
+            sleep 4
+          done
+          echo "::error::BFF smoke test failed — rolling back"
+          flyctl releases rollback -a haworks-bffweb
+          exit 1
