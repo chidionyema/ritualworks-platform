@@ -53,23 +53,30 @@ public class HWK001Tests
     }
 
     [Fact]
-    public async Task ContextPublish_InsideConsumer_IsCorrectPattern()
+    public async Task BeginTransactionAsync_InsideConsumer_Reports()
     {
         const string source = """
             using System.Threading.Tasks;
             using MassTransit;
+            using Microsoft.EntityFrameworkCore;
             public record OrderCreatedEvent;
-            public record NotifyEvent;
-            public class GoodConsumer : IConsumer<OrderCreatedEvent>
+            public class MyDb : DbContext { }
+            public class BadConsumer : IConsumer<OrderCreatedEvent>
             {
+                private readonly MyDb _db = new();
                 public async Task Consume(ConsumeContext<OrderCreatedEvent> context)
                 {
-                    await context.Publish(new NotifyEvent());
+                    await {|#0:_db.Database.BeginTransactionAsync(context.CancellationToken)|};
                 }
             }
             """;
 
+        var expected = CSharpAnalyzerVerifier<HWK001_NoManualSaveChangesInConsumerAnalyzer>
+            .Diagnostic(Diagnostics.NoBeginTransactionInConsumer)
+            .WithLocation(0)
+            .WithArguments("BeginTransactionAsync");
+
         await CSharpAnalyzerVerifier<HWK001_NoManualSaveChangesInConsumerAnalyzer>
-            .VerifyNoDiagnosticsAsync(source);
+            .VerifyAnalyzerAsync(source, expected);
     }
 }

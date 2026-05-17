@@ -1,6 +1,5 @@
 using Haworks.Architecture.Analyzers.Rules;
 using Haworks.Architecture.Analyzers.Tests.Verifiers;
-using Microsoft.CodeAnalysis.Testing;
 using Xunit;
 
 namespace Haworks.Architecture.Analyzers.Tests.Rules;
@@ -24,14 +23,14 @@ public class HWK007Tests
                 private readonly IPublishEndpoint _pub = null!;
                 public async Task Consume(ConsumeContext<OrderCreatedEvent> context)
                 {
-                    await _pub.Publish(new NotifyEvent());
+                    await {|#0:_pub.Publish(new NotifyEvent())|};
                 }
             }
             """;
 
         var expected = CSharpAnalyzerVerifier<HWK007_MustUseContextPublishInConsumerAnalyzer>
             .Diagnostic(Diagnostics.MustUseContextPublishInConsumer)
-            .WithLocation(14, 15)
+            .WithLocation(0)
             .WithArguments("IPublishEndpoint.Publish");
 
         await CSharpAnalyzerVerifier<HWK007_MustUseContextPublishInConsumerAnalyzer>
@@ -39,7 +38,7 @@ public class HWK007Tests
     }
 
     [Fact]
-    public async Task ContextPublish_InsideConsumer_NoDiagnostic()
+    public async Task ContextPublish_InsideConsumer_IsCorrectPattern()
     {
         const string source = """
             using System.Threading.Tasks;

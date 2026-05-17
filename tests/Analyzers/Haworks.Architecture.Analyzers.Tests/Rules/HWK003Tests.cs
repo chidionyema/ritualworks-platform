@@ -1,6 +1,5 @@
 using Haworks.Architecture.Analyzers.Rules;
 using Haworks.Architecture.Analyzers.Tests.Verifiers;
-using Microsoft.CodeAnalysis.Testing;
 using Xunit;
 
 namespace Haworks.Architecture.Analyzers.Tests.Rules;
@@ -19,14 +18,14 @@ public class HWK003Tests
             {
                 public void Configure(EntityTypeBuilder<Payment> builder)
                 {
-                    builder.Property(x => x.Amount).IsRequired();
+                    {|#0:builder.Property(x => x.Amount)|}.IsRequired();
                 }
             }
             """;
 
         var expected = CSharpAnalyzerVerifier<HWK003_FinancialDecimalRequiresNumericColumnTypeAnalyzer>
             .Diagnostic(Diagnostics.FinancialDecimalRequiresColumnType)
-            .WithLocation(9, 9)
+            .WithLocation(0)
             .WithArguments("Amount");
 
         await CSharpAnalyzerVerifier<HWK003_FinancialDecimalRequiresNumericColumnTypeAnalyzer>

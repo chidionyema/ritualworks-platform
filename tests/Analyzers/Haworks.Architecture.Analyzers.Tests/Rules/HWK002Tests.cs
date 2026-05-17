@@ -1,6 +1,5 @@
 using Haworks.Architecture.Analyzers.Rules;
 using Haworks.Architecture.Analyzers.Tests.Verifiers;
-using Microsoft.CodeAnalysis.Testing;
 using Xunit;
 
 namespace Haworks.Architecture.Analyzers.Tests.Rules;
@@ -21,7 +20,7 @@ public class HWK002Tests
                 {
                     return await _policy.ExecuteAsync(async () =>
                     {
-                        var key = Guid.NewGuid().ToString();
+                        var key = {|#0:Guid.NewGuid()|}.ToString();
                         return key;
                     });
                 }
@@ -30,7 +29,7 @@ public class HWK002Tests
 
         var expected = CSharpAnalyzerVerifier<HWK002_NoGuidNewGuidInPollyRetryAnalyzer>
             .Diagnostic(Diagnostics.NoGuidNewGuidInPollyRetry)
-            .WithLocation(11, 23)
+            .WithLocation(0)
             .WithArguments("Guid.NewGuid()");
 
         await CSharpAnalyzerVerifier<HWK002_NoGuidNewGuidInPollyRetryAnalyzer>
@@ -50,10 +49,7 @@ public class HWK002Tests
                 public async Task<string> CreatePayment()
                 {
                     var key = Guid.NewGuid().ToString();
-                    return await _policy.ExecuteAsync(async () =>
-                    {
-                        return key;
-                    });
+                    return await _policy.ExecuteAsync(async () => { return key; });
                 }
             }
             """;
