@@ -17,10 +17,13 @@ public sealed class PromotionCodeRepository : IPromotionCodeRepository
         _context = context;
     }
 
+    // L4 Fix: Use default query filters for redemption/validation flows.
+    // IgnoreQueryFilters loaded soft-deleted codes unnecessarily.
+    // The handler's CanRedeem check would reject them anyway but this avoids
+    // tracking deleted entities in memory.
     public Task<PromotionCode?> GetByCodeAsync(string code, CancellationToken ct = default)
     {
         return _context.PromotionCodes
-            .IgnoreQueryFilters()
             .Include(c => c.Redemptions)
             .FirstOrDefaultAsync(c => c.Code == code, ct);
     }

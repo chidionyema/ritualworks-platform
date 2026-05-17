@@ -120,6 +120,8 @@ public sealed class PricingDbContext : DbContext
             e.Property(x => x.PromotionCodeApplied).HasMaxLength(32);
             e.HasIndex(x => x.CalculatedAt);
             e.HasIndex(x => x.ProductId);
+            // M6 Fix: Index for user-scoped audit queries (support, compliance)
+            e.HasIndex(x => x.UserId);
         });
     }
 }

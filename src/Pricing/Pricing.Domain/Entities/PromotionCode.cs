@@ -112,7 +112,7 @@ public sealed class PromotionCode : AuditableEntity
     {
         IsActive = false;
         IsDeleted = true;
-        LastModifiedDate = DateTime.UtcNow;
+        LastModifiedDate = DateTimeOffset.UtcNow;
     }
 
     /// <summary>
@@ -121,6 +121,6 @@ public sealed class PromotionCode : AuditableEntity
     public void IncrementUsesCount()
     {
         UsesCount++;
-        LastModifiedDate = DateTime.UtcNow;
+        LastModifiedDate = DateTimeOffset.UtcNow;
     }
 }

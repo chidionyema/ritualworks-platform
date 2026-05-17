@@ -150,7 +150,7 @@ public sealed class PriceRule : AuditableEntity
         IsActive = false;
         IsDeleted = true;
         Status = PriceRuleStatus.Archived;
-        LastModifiedDate = DateTime.UtcNow;
+        LastModifiedDate = DateTimeOffset.UtcNow;
     }
 
     /// <summary>
@@ -163,6 +163,6 @@ public sealed class PriceRule : AuditableEntity
 
         IsActive = true;
         Status = PriceRuleStatus.Active;
-        LastModifiedDate = DateTime.UtcNow;
+        LastModifiedDate = DateTimeOffset.UtcNow;
     }
 }
