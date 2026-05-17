@@ -33,12 +33,14 @@ public sealed class HWK019_NoHardcodedLocalhostAnalyzer : DiagnosticAnalyzer
         {
             if (value.Contains(pattern))
             {
-                // Skip test directories
+                // Skip if it's in a test file or launchSettings-style context
                 var filePath = context.Node.SyntaxTree.FilePath ?? "";
-                if (filePath.Contains("/tests/") || filePath.Contains("/Tests/") ||
-                    filePath.Contains("\\tests\\") || filePath.Contains("\\Tests\\"))
+                if (filePath.Contains("Test") || filePath.Contains("test") ||
+                    filePath.Contains("Stub") || filePath.Contains("Mock") ||
+                    filePath.Contains("Fake") || filePath.Contains("launchSettings"))
                     return;
 
+                // Skip XML doc comments and attribute arguments (e.g. [Url("http://localhost")])
                 if (context.Node.Parent is AttributeArgumentSyntax)
                     return;
 

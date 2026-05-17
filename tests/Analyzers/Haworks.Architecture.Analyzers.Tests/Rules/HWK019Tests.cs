@@ -7,22 +7,35 @@ namespace Haworks.Architecture.Analyzers.Tests.Rules;
 public class HWK019Tests
 {
     [Fact]
-    public async Task Localhost_InString_Reports()
+    public async Task HardcodedLocalhost_InUrl_Reports()
     {
         const string source = """
-            public class Cfg { public string Url = {|#0:"http://localhost:5000"|}; }
+            public class Config
+            {
+                public string Url = {|#0:"http://localhost:5000/api"|};
+            }
             """;
+
         var expected = CSharpAnalyzerVerifier<HWK019_NoHardcodedLocalhostAnalyzer>
-            .Diagnostic(Diagnostics.NoHardcodedLocalhost).WithLocation(0).WithArguments("localhost");
-        await CSharpAnalyzerVerifier<HWK019_NoHardcodedLocalhostAnalyzer>.VerifyAnalyzerAsync(source, expected);
+            .Diagnostic(Diagnostics.NoHardcodedLocalhost)
+            .WithLocation(0)
+            .WithArguments("localhost");
+
+        await CSharpAnalyzerVerifier<HWK019_NoHardcodedLocalhostAnalyzer>
+            .VerifyAnalyzerAsync(source, expected);
     }
 
     [Fact]
-    public async Task RealUrl_NoDiagnostic()
+    public async Task ConfigurationBased_Url_NoDiagnostic()
     {
         const string source = """
-            public class Cfg { public string Url = "https://api.haworks.com"; }
+            public class Config
+            {
+                public string Url = "https://api.haworks.com/v1";
+            }
             """;
-        await CSharpAnalyzerVerifier<HWK019_NoHardcodedLocalhostAnalyzer>.VerifyNoDiagnosticsAsync(source);
+
+        await CSharpAnalyzerVerifier<HWK019_NoHardcodedLocalhostAnalyzer>
+            .VerifyNoDiagnosticsAsync(source);
     }
 }

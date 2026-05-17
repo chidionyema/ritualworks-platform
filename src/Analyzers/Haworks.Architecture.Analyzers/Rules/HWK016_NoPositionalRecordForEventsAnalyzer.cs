@@ -7,6 +7,12 @@ using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Haworks.Architecture.Analyzers.Rules;
 
+/// <summary>
+/// HWK016: MassTransit uses System.Text.Json for deserialization.
+/// Positional records (record Foo(string Bar)) generate a constructor with parameters,
+/// and STJ cannot deserialize into them without a parameterless constructor.
+/// Events must use { get; init; } properties.
+/// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class HWK016_NoPositionalRecordForEventsAnalyzer : DiagnosticAnalyzer
 {
@@ -25,14 +31,26 @@ public sealed class HWK016_NoPositionalRecordForEventsAnalyzer : DiagnosticAnaly
     private static void AnalyzeRecord(SyntaxNodeAnalysisContext context)
     {
         var record = (RecordDeclarationSyntax)context.Node;
+
+        // Only flag records with positional parameters
         if (record.ParameterList is null || record.ParameterList.Parameters.Count == 0)
             return;
 
         var name = record.Identifier.Text;
+
+        // Check if this looks like a MassTransit event/command/message
         if (!EventSuffixes.Any(s => name.EndsWith(s, System.StringComparison.Ordinal)))
             return;
 
-        context.ReportDiagnostic(
-            Diagnostic.Create(Diagnostics.NoPositionalRecordForEvents, record.Identifier.GetLocation(), name));
+        // Also check if it's in a Contracts namespace
+        var ns = record.FirstAncestorOrSelf<BaseNamespaceDeclarationSyntax>();
+        var nsName = ns?.Name.ToString() ?? "";
+        var isContracts = nsName.Contains("Contracts") || nsName.Contains("Events") || nsName.Contains("Messages");
+
+        if (isContracts || EventSuffixes.Any(s => name.EndsWith(s, System.StringComparison.Ordinal)))
+        {
+            context.ReportDiagnostic(
+                Diagnostic.Create(Diagnostics.NoPositionalRecordForEvents, record.Identifier.GetLocation(), name));
+        }
     }
 }

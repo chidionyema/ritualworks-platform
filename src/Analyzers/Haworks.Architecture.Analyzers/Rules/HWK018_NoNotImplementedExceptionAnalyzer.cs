@@ -21,14 +21,14 @@ public sealed class HWK018_NoNotImplementedExceptionAnalyzer : DiagnosticAnalyze
 
     private static void AnalyzeThrow(SyntaxNodeAnalysisContext context)
     {
-        ExpressionSyntax? expr = context.Node switch
+        ExpressionSyntax? expression = context.Node switch
         {
             ThrowStatementSyntax ts => ts.Expression,
             ThrowExpressionSyntax te => te.Expression,
             _ => null
         };
 
-        if (expr is not ObjectCreationExpressionSyntax creation)
+        if (expression is not ObjectCreationExpressionSyntax creation)
             return;
 
         var typeName = creation.Type.ToString();

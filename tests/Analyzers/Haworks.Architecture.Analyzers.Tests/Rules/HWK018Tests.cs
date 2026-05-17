@@ -11,14 +11,19 @@ public class HWK018Tests
     {
         const string source = """
             using System;
-            public class Svc
+            public class Service
             {
-                public void Do() { {|#0:throw new NotImplementedException();|} }
+                public void DoWork() { {|#0:throw new NotImplementedException();|}  }
             }
             """;
+
         var expected = CSharpAnalyzerVerifier<HWK018_NoNotImplementedExceptionAnalyzer>
-            .Diagnostic(Diagnostics.NoNotImplementedException).WithLocation(0).WithArguments("NotImplementedException");
-        await CSharpAnalyzerVerifier<HWK018_NoNotImplementedExceptionAnalyzer>.VerifyAnalyzerAsync(source, expected);
+            .Diagnostic(Diagnostics.NoNotImplementedException)
+            .WithLocation(0)
+            .WithArguments("NotImplementedException");
+
+        await CSharpAnalyzerVerifier<HWK018_NoNotImplementedExceptionAnalyzer>
+            .VerifyAnalyzerAsync(source, expected);
     }
 
     [Fact]
@@ -26,8 +31,13 @@ public class HWK018Tests
     {
         const string source = """
             using System;
-            public class Svc { public void Do(string x) { throw new ArgumentException("bad", nameof(x)); } }
+            public class Service
+            {
+                public void DoWork(string x) { throw new ArgumentException("bad", nameof(x)); }
+            }
             """;
-        await CSharpAnalyzerVerifier<HWK018_NoNotImplementedExceptionAnalyzer>.VerifyNoDiagnosticsAsync(source);
+
+        await CSharpAnalyzerVerifier<HWK018_NoNotImplementedExceptionAnalyzer>
+            .VerifyNoDiagnosticsAsync(source);
     }
 }

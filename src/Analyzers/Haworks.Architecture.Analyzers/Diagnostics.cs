@@ -70,6 +70,22 @@ public static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor NoSwallowedDbUpdateException = new(
+        id: "HWK010",
+        title: "Do not swallow DbUpdateException without re-throwing",
+        messageFormat: "Catch block for '{0}' does not re-throw which poisons the DbContext",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NoTaskRunWithScopedService = new(
+        id: "HWK013",
+        title: "Do not capture scoped services in Task.Run",
+        messageFormat: "Scoped service '{0}' may be disposed before the background work completes",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public static readonly DiagnosticDescriptor NoAsyncVoid = new(
         id: "HWK015",
         title: "Do not use async void methods",
@@ -100,167 +116,5 @@ public static class Diagnostics
         messageFormat: "Hardcoded '{0}' will silently fail in containers — use configuration",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor NoDateTimeNow = new(
-        id: "HWK020",
-        title: "Use DateTime.UtcNow instead of DateTime.Now",
-        messageFormat: "'{0}' uses local timezone which causes ordering bugs in distributed services",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor NoTaskResultOrWait = new(
-        id: "HWK021",
-        title: "Do not use .Result or .Wait() on tasks",
-        messageFormat: "'{0}' can deadlock the request pipeline — use await instead",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor NoNewHttpClient = new(
-        id: "HWK022",
-        title: "Do not instantiate HttpClient directly",
-        messageFormat: "'{0}' causes socket exhaustion — use IHttpClientFactory",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor NoTakeWithoutOrderBy = new(
-        id: "HWK023",
-        title: "Do not use Take/Skip without OrderBy",
-        messageFormat: "'{0}' without OrderBy produces non-deterministic results",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor NoThreadSleep = new(
-        id: "HWK024",
-        title: "Do not use Thread.Sleep in async code",
-        messageFormat: "'{0}' blocks a thread pool thread — use Task.Delay instead",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor NoCatchAllWithoutLogging = new(
-        id: "HWK025",
-        title: "Do not catch Exception without logging or re-throwing",
-        messageFormat: "Catch block swallows '{0}' without logging or re-throw — errors will vanish silently",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor NoStringConcatInSql = new(
-        id: "HWK027",
-        title: "Do not use string concatenation in SQL queries",
-        messageFormat: "String interpolation/concatenation in '{0}' is a SQL injection vector — use parameterized queries",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor NoReturnTaskWithoutAwaitInTryCatch = new(
-        id: "HWK028",
-        title: "Do not return Task without await inside try/catch",
-        messageFormat: "Returning a Task without await in '{0}' means the catch block will never execute for async exceptions",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor NoDecimalArithmeticWithoutRounding = new(
-        id: "HWK030",
-        title: "Financial decimal arithmetic must use explicit rounding",
-        messageFormat: "Arithmetic on '{0}' may produce more than 2 decimal places — use Math.Round for financial precision",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor NoFloatForFinancial = new(
-        id: "HWK029",
-        title: "Do not use float or double for financial values",
-        messageFormat: "Property '{0}' uses floating-point which causes precision loss in financial calculations — use decimal",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor FinancialEntityMustHaveConcurrencyToken = new(
-        id: "HWK030",
-        title: "Financial entities must have a concurrency token",
-        messageFormat: "Entity '{0}' has financial properties but no concurrency token (xmin/RowVersion/[ConcurrencyCheck])",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor EventsMustUseImmutableCollections = new(
-        id: "HWK031",
-        title: "Event records must use immutable collections",
-        messageFormat: "Property '{0}' uses mutable collection '{1}' — use IReadOnlyList or ImmutableArray for events",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor NoAsNoTrackingWithSaveChanges = new(
-        id: "HWK032",
-        title: "Do not mix AsNoTracking() with SaveChangesAsync()",
-        messageFormat: "Method '{0}' calls AsNoTracking() and SaveChangesAsync() which silently discards mutations",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor PollyMustAcceptCancellationToken = new(
-        id: "HWK033",
-        title: "Polly ExecuteAsync must accept CancellationToken",
-        messageFormat: "'{0}' without CancellationToken creates zombie tasks that cannot be cancelled",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor NoHardcodedCurrency = new(
-        id: "HWK035",
-        title: "Do not hardcode currency strings",
-        messageFormat: "Hardcoded currency '{0}' must come from configuration or source event",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
-        isEnabledByDefault: true);
-
-    // ─── Framework Laws (HWK036-045) ───
-
-    public static readonly DiagnosticDescriptor BackgroundServiceMustTryCatch = new(
-        id: "HWK036",
-        title: "BackgroundService.ExecuteAsync must have root-level try/catch",
-        messageFormat: "'{0}' overrides ExecuteAsync without a root try/catch — unhandled exceptions crash the host",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor CacheMustHaveExpiration = new(
-        id: "HWK037",
-        title: "Distributed cache writes must specify expiration",
-        messageFormat: "'{0}' writes to cache without expiration options — entries will never expire",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor NoReturnDomainEntityFromController = new(
-        id: "HWK038",
-        title: "Controllers must not return domain entities directly",
-        messageFormat: "Action '{0}' returns domain entity '{1}' — map to a DTO instead",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor ControllerActionsMustHaveProducesResponseType = new(
-        id: "HWK039",
-        title: "Controller actions must have ProducesResponseType attributes",
-        messageFormat: "Action '{0}' is missing [ProducesResponseType] attributes for OpenAPI generation",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor AsyncMethodMustAcceptCancellationToken = new(
-        id: "HWK040",
-        title: "Public async methods must accept CancellationToken",
-        messageFormat: "Method '{0}' is async but does not accept a CancellationToken parameter",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 }

@@ -25,9 +25,20 @@ public sealed class HWK015_NoAsyncVoidAnalyzer : DiagnosticAnalyzer
         if (!method.Modifiers.Any(SyntaxKind.AsyncKeyword))
             return;
 
-        if (method.ReturnType is PredefinedTypeSyntax predefined &&
-            predefined.Keyword.IsKind(SyntaxKind.VoidKeyword))
+        if (method.ReturnType is not PredefinedTypeSyntax predefined)
+            return;
+
+        if (predefined.Keyword.IsKind(SyntaxKind.VoidKeyword))
         {
+            // Allow event handlers (common pattern: object sender, EventArgs e)
+            if (method.ParameterList.Parameters.Count == 2)
+            {
+                var secondParam = method.ParameterList.Parameters[1];
+                var typeName = secondParam.Type?.ToString() ?? "";
+                if (typeName.Contains("EventArgs"))
+                    return;
+            }
+
             context.ReportDiagnostic(
                 Diagnostic.Create(Diagnostics.NoAsyncVoid, method.Identifier.GetLocation(), method.Identifier.Text));
         }
