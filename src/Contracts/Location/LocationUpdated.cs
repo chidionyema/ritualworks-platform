@@ -11,5 +11,5 @@ public record LocationUpdated : DomainEvent
     public required double Latitude { get; init; }
     public required double Longitude { get; init; }
     public required string Geohash { get; init; }
-    public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
+    public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
 }
