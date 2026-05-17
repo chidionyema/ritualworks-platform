@@ -37,6 +37,12 @@ graph LR
 | POST | /admin/pricing/rules | Admin | Create a new price rule |
 | GET | /admin/pricing/rules | Admin | List all price rules |
 | DELETE | /admin/pricing/rules/{id} | Admin | Archive a price rule |
+| GET | /admin/pricing/tax | Admin | List tax rates |
+| POST | /admin/pricing/tax | Admin | Create tax rate |
+| PUT | /admin/pricing/tax/{id} | Admin | Update tax rate |
+| GET | /admin/pricing/promotions | Admin | List promotion codes |
+| POST | /admin/pricing/promotions | Admin | Create promotion code |
+| PUT | /admin/pricing/promotions/{id} | Admin | Update promotion code |
 
 ## Events (Published / Consumed)
 

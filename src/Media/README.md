@@ -52,6 +52,9 @@ graph LR
 
 | Event | Trigger | Consumers |
 |-------|---------|-----------|
+| MediaUploadInitiatedEvent | Upload initiation request | Audit log, monitoring |
+| MediaAvailableEvent | Media passes scan and processing completes | Catalog, frontend cache, linked entity services |
+| MediaQuarantinedEvent | ClamAV detects malware or scan flags content | Notification service, security alerting |
 | MediaScanPassedEvent | ClamAV scan returns clean | Processing pipeline, linked entity services |
 | MediaScanFailedEvent | ClamAV detects malware | Quarantine handler, notification service |
 | MediaProcessingCompletedEvent | Transcode/thumbnail generation finishes | Catalog, frontend cache |
@@ -100,12 +103,11 @@ classDiagram
     class MediaStatus {
         <<enumeration>>
         Pending
-        Uploading
-        ScanningInProgress
-        Clean
-        Infected
-        Processing
-        Ready
+        Quarantined
+        Active
+        Rejected
+        Stitching
+        Validating
         Failed
         Deleted
     }
@@ -123,6 +125,8 @@ classDiagram
 - **ClamAV dual-mode scanning**: Files under 25 MB use INSTREAM (streamed to daemon); larger files use filesystem mode to avoid OOM in the ClamAV process.
 - **FileSignatureValidator**: Validates magic bytes regardless of declared content-type; blocks MZ headers (PE executables) and other dangerous signatures.
 - **QuarantineAsync**: Infected files are moved to a `quarantine/` S3 prefix rather than deleted, preserving evidence for forensic review.
+- **Concurrent scan detection**: `MediaUploadCompletedConsumer` catches `DbUpdateConcurrencyException` gracefully, preventing duplicate scan pipeline triggers when the same S3 event is delivered more than once.
+- **Hash verification on S3 event path**: Server recomputes SHA-256 on the S3 event notification path and rejects mismatches, preventing content substitution attacks even when uploads bypass the `/complete` endpoint.
 - **Optimistic concurrency**: Uses PostgreSQL `xmin` system column for conflict-free concurrent metadata updates without explicit version columns.
 
 ## Non-Functional Requirements

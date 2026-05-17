@@ -13,7 +13,7 @@ graph LR
     Payments -->|PaymentSessionCreatedEvent| CO
     Payments -->|PaymentCompletedEvent| CO
     CO -->|StockReleaseRequestedEvent| Inventory
-    CO -->|CheckoutSessionExpiredEvent| Orders[Orders Service]
+    Payments -->|CheckoutSessionExpiredEvent| Orders[Orders Service]
     CO --> DB[(PostgreSQL)]
     CO -->|Outbox| Bus[(Message Bus)]
 ```
@@ -44,8 +44,9 @@ graph LR
 | StockReservationRequestedEvent | Checkout initiated | Inventory |
 | PaymentSessionRequestedEvent | Stock successfully reserved | Payments |
 | StockReleaseRequestedEvent | Any failure or expiration | Inventory |
-| CheckoutSessionExpiredEvent | Payment window elapsed | Orders |
 | PaymentExpiredEvent (scheduled) | 15-min timer fires | Self (saga) |
+
+> **Note:** CheckoutSessionExpiredEvent is NOT published by this service. It originates from the Payments webhook processor when Stripe fires `checkout.session.expired`. The PaymentExpiredEvent listed above is a scheduled MassTransit message published by the saga itself as a timeout mechanism, distinct from the Stripe-originated expiry.
 
 ### Consumed
 

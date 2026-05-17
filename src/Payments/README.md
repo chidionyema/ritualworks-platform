@@ -59,6 +59,7 @@ graph LR
 | PaymentAmountMismatchEvent | Webhook amount differs from expected | CheckoutOrchestrator (ops review) |
 | RefundCompletedEvent | Provider confirms refund processed | Orders |
 | RefundFailedEvent | Provider rejects refund or timeout | Ops alerting |
+| CheckoutSessionExpiredEvent | Stripe fires checkout.session.expired webhook | Orders |
 | SubscriptionRenewalRequestedEvent | Subscription period ends | Internal processing |
 | SubscriptionGracePeriodStartedEvent | Payment fails, grace period begins | Notification service |
 
@@ -70,16 +71,17 @@ graph LR
 | PaymentSessionRequestedEvent | CheckoutOrchestrator | Create payment session with provider |
 | ProviderRefundInitiationRequestedEvent | RefundSaga | Execute refund against provider API |
 | PrivacyErasureRequestedEvent | Identity/GDPR | Scrub PII from payment records |
+| SubscriptionRenewalRequestedEvent | Internal timer/saga | Attempt subscription renewal charge |
 
 ## Sagas
 
 ### RefundSaga
 
 ```
-Initiated -> Requested -> AwaitingConfirmation -> Completed | RequiresReview
+Requested -> AwaitingProviderConfirmation -> Refunded | RequiresReview
 ```
 
-- 24-hour timeout from AwaitingConfirmation to RequiresReview (terminal)
+- 24-hour timeout from AwaitingProviderConfirmation to RequiresReview (terminal)
 - Ops must manually resolve RequiresReview states
 
 ### SubscriptionSaga

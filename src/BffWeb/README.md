@@ -56,6 +56,10 @@ graph LR
 | GET | /api/demo/inventory/{id} | No | OCC demo — read |
 | PUT | /api/demo/inventory/{id} | No | OCC demo — update |
 | DELETE | /api/demo/inventory/{id} | No | OCC demo — delete |
+| GET | /api/system/identity | No | Service instance fingerprint |
+| GET | /api/metrics/snapshot | No | Activity counters snapshot |
+| POST | /api/demo/chaos/{target}/pause | Admin | Pause chaos target |
+| POST | /api/demo/chaos/{target}/resume | Admin | Resume chaos target |
 
 ## Events
 
@@ -66,7 +70,7 @@ graph LR
 | PaymentSessionCreatedEvent | Payments | Bridge to SignalR checkout hub |
 | DemoOutboxEvent | Outbox | Bridge to SignalR demo hub |
 | StockReservedEvent | Inventory | Saga bridge to SignalR |
-| StockFailedEvent | Inventory | Saga bridge to SignalR |
+| StockReservationFailedEvent | Inventory | Saga bridge to SignalR |
 | PaymentSessionCompletedEvent | Payments | Saga bridge to SignalR |
 | PaymentAmountMismatchEvent | Payments | Saga bridge to SignalR |
 | VaultRotationStageEvent | Scheduler | Bridge to SignalR live console |

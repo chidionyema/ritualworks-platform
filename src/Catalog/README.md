@@ -42,8 +42,8 @@ graph LR
 | POST | /api/products/{id}/reserve | Admin/Service | Reserve stock (internal/saga use) |
 | GET | /api/categories | Anon | List all categories |
 | POST | /api/categories | Admin | Create a category |
-| POST | /api/checkout/reservations | Anon, X-Idempotency-Key | Create a stock reservation |
-| POST | /api/checkout/reservations/{id}/confirm | Auth, X-Idempotency-Key | Confirm reservation (deduct stock) |
+| POST | /api/checkout/reservations | Anon, X-Idempotency-Key | Create a 15-min reservation hold |
+| POST | /api/checkout/reservations/{id}/confirm | Auth, X-Idempotency-Key | Confirm reservation (410 Gone if expired) |
 | GET | /api/products/{productId}/reviews | Anon, paginated | List reviews for a product |
 | POST | /api/products/{productId}/reviews | Auth | Submit a review |
 | PUT | /api/products/{productId}/reviews/{id} | Auth | Edit own review |
@@ -118,9 +118,11 @@ classDiagram
 ## Edge Cases & Hard Problems Solved
 
 - **xmin concurrency on stock decrement**: `UPDATE ... SET stock = stock - @qty WHERE id = @id AND xmin = @expected_xmin AND stock >= @qty` prevents overselling under concurrent requests without pessimistic locks.
-- **Reservation 15-min TTL with sweeper**: Background sweeper polls every 60 seconds, processes batches of 200, transitions Held reservations past TTL to Expired, and publishes StockReleasedEvent for each.
+- **ReservationSweeperService (1-min poll, batch 200, inline stock release)**: Background `ReservationSweeperService` polls every 1 minute, processes batches of 200, transitions Held reservations past 15-min TTL to Expired, releases stock inline per reservation, and publishes StockReleasedEvent for each.
 - **Idempotency key scoped to user**: Same key from the same user returns the existing reservation (200) rather than creating a duplicate. Different users may reuse keys safely.
 - **410 Gone on expired reservations**: Confirming an expired reservation returns 410 with a clear error, distinguishing from 404 (never existed) for client retry logic.
+- **Guest checkout with UserId="guest"**: Anonymous reservation creation assigns `UserId="guest"` allowing checkout without authentication. Confirmation requires an authenticated user with a valid email claim to finalize the order.
+- **Email claim required for confirm**: The `/confirm` endpoint extracts the email claim from the JWT; requests without it are rejected with 403, ensuring contact information is available for order fulfillment.
 - **Inline stock release during sweep**: Each reservation release is individually committed; partial batch failure does not roll back already-released items (guards against sweeper crash mid-batch).
 
 ## Non-Functional Requirements

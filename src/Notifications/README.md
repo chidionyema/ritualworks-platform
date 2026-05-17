@@ -15,7 +15,7 @@ graph LR
     Router -->|Push| Push[FCM]
     Email -->|Webhook| Webhooks[Webhook Endpoint]
     SMS -->|Webhook| Webhooks
-    Push -->|Webhook| Webhooks
+    Push -->|Fire-and-forget| Push
     Webhooks -->|Status update| SM
     Vault[(HashiCorp Vault)] -->|Credentials| Router
 ```
@@ -27,7 +27,7 @@ graph LR
 - Polly circuit breakers per provider (5 failures triggers 30-second break)
 - Template rendering via Scriban with hot-reload support
 - Full delivery attempt tracking with state machine lifecycle
-- Webhook callbacks for all providers (SES, SendGrid, Twilio, FCM)
+- Webhook callbacks for delivery-status providers (SES, SendGrid, Twilio)
 - Preference suppression and quiet hours enforcement
 - Rate limiting (100 notifications per minute per recipient)
 - Vault-based credential rotation with degraded-start fallback
@@ -39,10 +39,9 @@ graph LR
 |--------|------|------|-------------|
 | POST | /api/notifications | Yes | Send a notification (email/SMS/push) |
 | GET | /api/notifications/{id} | Yes | Retrieve notification status and delivery history |
-| POST | /webhooks/ses | No | SES delivery/bounce/complaint callbacks |
-| POST | /webhooks/sendgrid | No | SendGrid event callbacks |
-| POST | /webhooks/twilio | No | Twilio delivery status callbacks |
-| POST | /webhooks/fcm | No | FCM delivery receipt callbacks |
+| POST | /api/notifications/webhooks/ses | No | SES delivery/bounce/complaint callbacks |
+| POST | /api/notifications/webhooks/sendgrid | No | SendGrid event callbacks |
+| POST | /api/notifications/webhooks/twilio | No | Twilio delivery status callbacks |
 
 ## Events
 
@@ -52,6 +51,8 @@ graph LR
 |-------|---------|-----------|
 | NotificationDeliveredEvent | Provider confirms delivery via webhook | Audit log, analytics |
 | NotificationFailedEvent | All providers exhausted or terminal failure | Alerting, dead-letter review |
+| NotificationBouncedEvent | Provider reports hard/soft bounce via webhook | Recipient suppression list, analytics |
+| NotificationWebhookValidatedEvent | Webhook signature verified and payload parsed | State machine (delivery status update) |
 
 ### Consumed
 
@@ -77,6 +78,7 @@ stateDiagram-v2
     Sent --> Complained
     Queued --> Failed
     Created --> Suppressed
+    Rendering --> Suppressed
     Rendering --> Failed
 ```
 
@@ -87,7 +89,7 @@ classDiagram
     class Notification {
         +Guid Id
         +string IdempotencyKey
-        +string RecipientId
+        +string Recipient
         +Channel Channel
         +NotificationStatus Status
         +string TemplateName
@@ -107,7 +109,7 @@ classDiagram
     }
 
     class RecipientPreference {
-        +string RecipientId
+        +string Recipient
         +Channel Channel
         +bool Suppressed
         +TimeOnly QuietStart
@@ -145,6 +147,7 @@ classDiagram
 - **SHA-256 IdempotencyKey deduplication**: Prevents duplicate sends when the same event is consumed more than once (at-least-once semantics).
 - **Terminal-state guard**: Once a notification reaches Sent, Delivered, or Failed, the state machine rejects any re-dispatch commands, preventing duplicate sends on replayed events.
 - **Vault credential rotation with degraded-start fallback**: If Vault is unreachable at startup, the service starts with last-known credentials and retries rotation on a schedule.
+- **Created/Rendering to Suppressed transition**: Notifications can transition from Created or Rendering directly to Suppressed when preference or rate-limit suppression is detected before queuing, avoiding unnecessary rendering work.
 - **Preference suppression**: Recipient preferences are checked before dispatch; suppressed channels skip silently and record a Suppressed state.
 - **Quiet hours enforcement**: Notifications are held until the recipient's quiet window ends (timezone-aware), then released for dispatch.
 - **Provider webhook signature verification**: Each webhook endpoint validates provider-specific signatures before processing, preventing spoofed status updates.

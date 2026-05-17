@@ -28,7 +28,7 @@ graph LR
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | /audit/events | audit-reader | Query audit events with cursor pagination |
+| GET | /audit/events | audit-reader | Query audit events with cursor pagination. Query params: `entityType`, `entityId`, `eventType`, `from`, `to`, `cursor`, `limit` (default 50) |
 | GET | /audit/events/{id} | audit-reader | Retrieve a single audit event by ID |
 | POST | /audit/export | audit-admin | Initiate async CSV export job |
 | GET | /audit/export/{jobId} | audit-reader | Check export job status and retrieve download URL |
@@ -95,6 +95,8 @@ classDiagram
 - **Deterministic message ID**: If MassTransit `MessageId` is missing or untrusted, a SHA-256 hash of `(event_type + serialized_payload + timestamp)` is computed. Duplicate delivery results in a conflict on the unique index (idempotent).
 - **Stalled export job recovery**: A background check runs every 5 minutes; any job in `Processing` state for over 10 minutes is reset to `Queued` for retry, preventing permanent stuck exports.
 - **Time-partitioned tables**: Events are partitioned by month. Retention policy drops partitions older than the configured window in a single DDL operation (no row-by-row delete).
+- **Role-based access control**: `audit-reader` role grants query access to events; `audit-admin` role is required for export operations. Separation prevents accidental bulk data extraction by read-only consumers.
+- **Metadata enrichment**: RabbitMQ routing key and `PublishedBy` service name are automatically extracted from message headers and appended to the audit event metadata before storage. No producer cooperation required.
 
 ## Non-Functional Requirements
 

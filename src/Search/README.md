@@ -80,6 +80,16 @@ classDiagram
         +object Query
     }
 
+    class LocationSearchDocument {
+        +string Id
+        +string Name
+        +GeoPoint Location
+        +string Address
+        +string EntityType
+        +string EntityId
+        +DateTime IndexedAt
+    }
+
     SavedSearch --> PercolatorQuery : registered as
     ProductSearchDocument ..> PercolatorQuery : matched against
 ```
@@ -90,6 +100,8 @@ classDiagram
 - **Category rename batch re-denormalization**: When a category name changes, a scroll query pages through all affected documents (1000 per page) and bulk-updates the denormalized category name.
 - **Percolator reverse matching**: New or updated products are percolated against all saved searches; matches publish `ProductMatchedSavedSearchEvent` so users are notified of relevant new inventory.
 - **Graceful 404 handling**: If the Catalog API returns 404 during enrichment (product deleted between event emission and consumption), the consumer deletes the search document rather than failing.
+- **Kafka CDC snapshot handling**: Debezium "r" (snapshot read) operations are mapped as "created" events, ensuring initial full-load documents are indexed correctly without requiring special-case logic downstream.
+- **Category rename denormalization pagination**: Batch re-denormalization paginates 1000 documents at a time to avoid OOM when categories contain large numbers of products.
 - **Dual CDC path**: Kafka/Debezium is the primary real-time path; MassTransit event consumers serve as a fallback ensuring indexing even if Kafka is degraded.
 
 ## Non-Functional Requirements

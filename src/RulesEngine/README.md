@@ -70,8 +70,8 @@ classDiagram
 
 ## Edge Cases & Hard Problems Solved
 
-- ForbiddenTokens blocks dangerous SQL keywords: EXEC, DROP, SELECT, INSERT, UPDATE, DELETE
-- SafeTypeProvider restricts evaluation to: int, long, double, decimal, bool, string, DateTime, Guid
+- ForbiddenTokens blocks dangerous SQL keywords: --, ;, DROP, DELETE, INSERT, UPDATE, EXEC, EXECUTE, SELECT, UNION, xp_, sp_, CAST(, CONVERT(, CHAR(, NCHAR(, VARCHAR(, DECLARE
+- SafeTypeProvider restricts evaluation to: int, long, float, double, decimal, bool, string, DateTime, DateTimeOffset, Guid, object
 - Whole-word boundary checking prevents false positives (e.g., "andalso" does not trigger AND block)
 - 4000 character expression limit prevents resource exhaustion from oversized expressions
 - Expression transformation handles natural-language operators (AND/OR/NOT) converting to C# equivalents

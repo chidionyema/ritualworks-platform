@@ -42,7 +42,7 @@ graph LR
 | POST | /api/authentication/logout | Auth | Revoke refresh token, invalidate session |
 | GET | /api/authentication/verify-token | Auth | Validate current access token |
 | POST | /api/authentication/refresh-token | Rate-limited | Exchange refresh token for new token pair |
-| POST | /api/authentication/service-token | X-Service-Secret | Issue a service-to-service JWT |
+| POST | /api/authentication/service-token | Service, X-Service-Secret | Issue a service-to-service JWT |
 | GET | /api/authentication/csrf-token | Anon | Obtain CSRF token for state-changing requests |
 | GET | /api/external-authentication/challenge/{provider} | Rate-limited | Initiate OAuth challenge redirect |
 | GET | /api/external-authentication/callback | Rate-limited | OAuth callback handler |
@@ -68,7 +68,7 @@ graph LR
 | Event | Source | Action |
 |-------|--------|--------|
 | PrivacyErasureRequested | Compliance / User request | Anonymize user PII, revoke all tokens |
-| JwtKeyRotatedEvent | Vault rotation pipeline | Refresh in-memory key ring |
+| JwtKeyRotatedEvent | Scheduler | Refreshes Vault credentials + dual-key overlap |
 
 ## Domain Model
 
@@ -115,9 +115,10 @@ classDiagram
 ## Edge Cases & Hard Problems Solved
 
 - **Dual-key overlap window**: During rotation, both old and new keys are valid for 15 minutes. JWKS exposes both; token validation tries current key first, falls back to previous. Prevents in-flight token rejection.
-- **JTI revocation post-signature**: Signature validation alone is insufficient; revoked JTIs are checked in-memory (bloom filter) with DB fallback, preventing use of structurally valid but logically revoked tokens.
+- **JTI revocation checked post-signature in OnTokenValidated**: Signature validation alone is insufficient; revoked JTIs are checked in-memory (bloom filter) with DB fallback in the `OnTokenValidated` event handler, preventing use of structurally valid but logically revoked tokens.
 - **Rate limiting on auth endpoints**: 5/min/IP sliding window prevents credential stuffing without impacting legitimate users. Uses a distributed counter when scaled horizontally.
 - **External auth link/unlink race conditions**: Optimistic concurrency on the ExternalLogin row prevents two concurrent link requests from creating duplicates or unlinking the last provider when a password is not set.
+- **Service-to-service auth via X-Service-Secret header**: Internal services authenticate using a shared secret passed in the `X-Service-Secret` header. The `/api/authentication/service-token` endpoint validates this secret and issues a short-lived JWT scoped to the calling service.
 - **Vault unavailability**: Graceful degradation to static keys with health check alerts. Service remains operational with last-known-good key material cached in memory.
 
 ## Non-Functional Requirements

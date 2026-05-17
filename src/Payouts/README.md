@@ -29,6 +29,9 @@ graph LR
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/api/payouts/seller/{sellerId}` | Authenticated (seller-scoped) | Get payout history and balance for a seller |
+| POST | `/api/sellers` | Authenticated | Register seller profile |
+| POST | `/api/sellers/{sellerId}/onboarding-link` | Authenticated | Get Stripe Connect onboarding link |
+| GET | `/api/ledger/balance/{ownerId}` | Authenticated | Get account balance |
 
 ## Events
 

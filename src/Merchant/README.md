@@ -44,8 +44,7 @@ graph LR
 | Event | Trigger |
 |-------|---------|
 | MerchantCreatedEvent | New merchant registered |
-| MerchantApprovedEvent | Admin approves merchant |
-| MerchantRejectedEvent | Admin rejects merchant |
+| MerchantActivatedEvent | Admin approves merchant |
 | MerchantSuspendedEvent | Admin suspends merchant |
 | MerchantDeactivatedEvent | Merchant deactivated |
 
@@ -92,6 +91,7 @@ classDiagram
 - Slug uniqueness enforced at DB level with friendly error propagation
 - Owner vs admin operation separation prevents privilege escalation
 - All transitions produce audit entries with actor identity and timestamp
+- UpdateMerchant and SetOperatingHours publish no events (intentional — purely local mutations)
 
 ## Non-Functional Requirements
 

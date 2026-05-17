@@ -27,6 +27,12 @@ graph LR
 | GET | /api/translations/{key}?locale= | Yes | Retrieve translation for a key and locale |
 | PUT | /api/translations/{key} | Yes | Create or update a translation |
 
+## Events (Published)
+
+| Event | Trigger |
+|-------|---------|
+| TranslationMissingEvent | Key not found for locale — enables monitoring of missing translations |
+
 ## Domain Model
 
 ```mermaid
@@ -44,6 +50,7 @@ classDiagram
 - One Translation record stores all locales in a dictionary column, eliminating N+1 queries when fetching multiple locales
 - CDN invalidation triggered on every PUT ensures edge caches never serve stale translations
 - User attribution on every write provides full audit lineage
+- Concurrent upsert handling (retry-on-constraint-violation for simultaneous creates)
 
 ## Non-Functional Requirements
 

@@ -44,6 +44,8 @@ graph LR
 | Event | Trigger | Consumers |
 |-------|---------|-----------|
 | OrderCompletedEvent | Order transitions to Paid | CheckoutOrchestrator, Payouts |
+| OrderAbandonedEvent | Payment/stock failure | Notifications, Analytics |
+| PrivacyErasureCompleted | GDPR erasure done | Privacy saga |
 
 ### Consumed
 
@@ -52,7 +54,7 @@ graph LR
 | PaymentCompletedEvent | Payments | Transition order to Paid |
 | PaymentSessionFailedEvent | Payments | Transition order to Abandoned |
 | StockReservationFailedEvent | Inventory | Transition order to Abandoned |
-| CheckoutSessionExpiredEvent | CheckoutOrchestrator | Transition order to Expired |
+| CheckoutSessionExpiredEvent | Payments (Stripe webhook) | Transition order to Expired |
 | RefundCompletedEvent | Payments | Transition order to Refunded |
 | RefundCancelledEvent | Payments | Revert order from Refunded to Paid |
 | PrivacyErasureRequestedEvent | Identity/GDPR | Anonymize all PII on the order |
@@ -107,6 +109,7 @@ classDiagram
 - **EF retry-on-failure** — 5 retries configured for Docker/Npgsql EOF errors (transient connection resets during container orchestration).
 - **OrderStatusHistory captures every transition** — full audit trail for compliance and debugging, including the reason string.
 - **AnonymiseForPrivacy is idempotent** — repeated erasure requests produce the same result without error; safe for at-least-once delivery.
+- **CheckoutSessionExpiredConsumer publishes StockReleaseRequestedEvent** — defensive compensation ensuring stock is released even if the orchestrator's own release message was lost.
 
 ## Non-Functional Requirements
 
