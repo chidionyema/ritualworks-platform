@@ -43,8 +43,12 @@ public class ProcessVirusScanTests
         var sendEndpointMock = new Mock<ISendEndpointProvider>();
         sendEndpointMock.Setup(x => x.GetSendEndpoint(It.IsAny<Uri>()))
             .ReturnsAsync(Mock.Of<ISendEndpoint>());
+        var signatureValidatorMock = new Mock<IFileSignatureValidator>();
+        signatureValidatorMock.Setup(x => x.ValidateAsync(It.IsAny<Stream>()))
+            .ReturnsAsync(new FileSignatureValidationResult(true, "image/png"));
         _handler = new ProcessVirusScanHandler(
-            _context, _scannerMock.Object, _currentUserMock.Object, _s3Mock.Object,
+            _context, _scannerMock.Object, signatureValidatorMock.Object,
+            _currentUserMock.Object, _s3Mock.Object,
             publisherMock.Object, sendEndpointMock.Object);
     }
 

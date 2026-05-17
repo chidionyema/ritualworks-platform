@@ -10,7 +10,7 @@
 SELECT 'CREATE DATABASE catalog'       WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'catalog')\gexec
 SELECT 'CREATE DATABASE orders'        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'orders')\gexec
 SELECT 'CREATE DATABASE payments'      WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'payments')\gexec
-SELECT 'CREATE DATABASE content'       WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'content')\gexec
+SELECT 'CREATE DATABASE media'       WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'media')\gexec
 SELECT 'CREATE DATABASE identity'      WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'identity')\gexec
 SELECT 'CREATE DATABASE checkout'      WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'checkout')\gexec
 SELECT 'CREATE DATABASE notifications' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'notifications')\gexec
@@ -27,7 +27,7 @@ SELECT 'CREATE DATABASE merchant'      WHERE NOT EXISTS (SELECT FROM pg_database
 SELECT 'CREATE ROLE catalog_owner  LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'catalog_owner')\gexec
 SELECT 'CREATE ROLE orders_owner   LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'orders_owner')\gexec
 SELECT 'CREATE ROLE payments_owner LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'payments_owner')\gexec
-SELECT 'CREATE ROLE content_owner  LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'content_owner')\gexec
+SELECT 'CREATE ROLE media_owner  LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'media_owner')\gexec
 SELECT 'CREATE ROLE identity_owner LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'identity_owner')\gexec
 SELECT 'CREATE ROLE checkout_owner LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'checkout_owner')\gexec
 SELECT 'CREATE ROLE notifications_owner LOGIN PASSWORD ''vault-init-temp''' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'notifications_owner')\gexec
@@ -43,7 +43,7 @@ SELECT 'CREATE ROLE merchant_owner  LOGIN PASSWORD ''vault-init-temp''' WHERE NO
 ALTER DATABASE catalog       OWNER TO catalog_owner;
 ALTER DATABASE orders        OWNER TO orders_owner;
 ALTER DATABASE payments      OWNER TO payments_owner;
-ALTER DATABASE content       OWNER TO content_owner;
+ALTER DATABASE media       OWNER TO media_owner;
 ALTER DATABASE identity      OWNER TO identity_owner;
 ALTER DATABASE checkout      OWNER TO checkout_owner;
 ALTER DATABASE notifications OWNER TO notifications_owner;
@@ -58,7 +58,7 @@ ALTER DATABASE merchant      OWNER TO merchant_owner;
 GRANT ALL PRIVILEGES ON DATABASE catalog       TO catalog_owner;
 GRANT ALL PRIVILEGES ON DATABASE orders        TO orders_owner;
 GRANT ALL PRIVILEGES ON DATABASE payments      TO payments_owner;
-GRANT ALL PRIVILEGES ON DATABASE content       TO content_owner;
+GRANT ALL PRIVILEGES ON DATABASE media       TO media_owner;
 GRANT ALL PRIVILEGES ON DATABASE identity      TO identity_owner;
 GRANT ALL PRIVILEGES ON DATABASE checkout      TO checkout_owner;
 GRANT ALL PRIVILEGES ON DATABASE notifications TO notifications_owner;
@@ -89,11 +89,11 @@ ALTER DEFAULT PRIVILEGES FOR ROLE payments_owner GRANT ALL ON TABLES    TO payme
 ALTER DEFAULT PRIVILEGES FOR ROLE payments_owner GRANT ALL ON SEQUENCES TO payments_owner;
 ALTER DEFAULT PRIVILEGES FOR ROLE payments_owner GRANT ALL ON FUNCTIONS TO payments_owner;
 
-\c content
-GRANT ALL ON SCHEMA public TO content_owner;
-ALTER DEFAULT PRIVILEGES FOR ROLE content_owner GRANT ALL ON TABLES    TO content_owner;
-ALTER DEFAULT PRIVILEGES FOR ROLE content_owner GRANT ALL ON SEQUENCES TO content_owner;
-ALTER DEFAULT PRIVILEGES FOR ROLE content_owner GRANT ALL ON FUNCTIONS TO content_owner;
+\c media
+GRANT ALL ON SCHEMA public TO media_owner;
+ALTER DEFAULT PRIVILEGES FOR ROLE media_owner GRANT ALL ON TABLES    TO media_owner;
+ALTER DEFAULT PRIVILEGES FOR ROLE media_owner GRANT ALL ON SEQUENCES TO media_owner;
+ALTER DEFAULT PRIVILEGES FOR ROLE media_owner GRANT ALL ON FUNCTIONS TO media_owner;
 
 \c identity
 GRANT ALL ON SCHEMA public TO identity_owner;

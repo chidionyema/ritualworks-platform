@@ -20,6 +20,7 @@ public class ProcessVirusScanHandler : IRequestHandler<ProcessVirusScanCommand, 
 {
     private readonly MediaDbContext _context;
     private readonly IVirusScanner _virusScanner;
+    private readonly IFileSignatureValidator _signatureValidator;
     private readonly ICurrentUserService _currentUser;
     private readonly IS3Service _s3;
     private readonly IPublishEndpoint _publisher;
@@ -28,6 +29,7 @@ public class ProcessVirusScanHandler : IRequestHandler<ProcessVirusScanCommand, 
     public ProcessVirusScanHandler(
         MediaDbContext context,
         IVirusScanner virusScanner,
+        IFileSignatureValidator signatureValidator,
         ICurrentUserService currentUser,
         IS3Service s3,
         IPublishEndpoint publisher,
@@ -35,6 +37,7 @@ public class ProcessVirusScanHandler : IRequestHandler<ProcessVirusScanCommand, 
     {
         _context = context;
         _virusScanner = virusScanner;
+        _signatureValidator = signatureValidator;
         _currentUser = currentUser;
         _s3 = s3;
         _publisher = publisher;
@@ -83,6 +86,31 @@ public class ProcessVirusScanHandler : IRequestHandler<ProcessVirusScanCommand, 
                     await tx.CommitAsync(cancellationToken);
                     return Result.Failure<MediatR.Unit>(new Error("Media.HashMismatch",
                         "Server-side hash does not match declared hash."));
+                }
+            }
+
+            // Magic-byte signature validation — blocks executables and mismatched MIME types
+            await using (var sigStream = File.OpenRead(tempPath))
+            {
+                var sigResult = await _signatureValidator.ValidateAsync(sigStream);
+                if (!sigResult.IsValid)
+                {
+                    await _s3.QuarantineAsync(mediaFile.Id.ToString(), cancellationToken);
+                    await using var sigTx = await _context.Database.BeginTransactionAsync(cancellationToken);
+                    mediaFile.MarkAsQuarantined();
+                    await _context.SaveChangesAsync(cancellationToken);
+                    mediaFile.MarkAsRejected();
+                    await _context.SaveChangesAsync(cancellationToken);
+                    await _publisher.Publish(new MediaScanFailedEvent
+                    {
+                        MediaId = mediaFile.Id,
+                        OwnerId = mediaFile.OwnerId,
+                        FileName = mediaFile.FileName,
+                        Reason = $"File signature mismatch (detected: {sigResult.FileType}).",
+                    }, cancellationToken);
+                    await sigTx.CommitAsync(cancellationToken);
+                    return Result.Failure<MediatR.Unit>(new Error("Media.SignatureMismatch",
+                        $"File signature mismatch (detected: {sigResult.FileType})."));
                 }
             }
 

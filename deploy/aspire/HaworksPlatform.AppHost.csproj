@@ -32,7 +32,7 @@
     <ProjectReference Include="../../src/Payments/Payments.Api/Payments.Api.csproj" />
     <ProjectReference Include="../../src/Orders/Orders.Api/Orders.Api.csproj" />
     <ProjectReference Include="../../src/CheckoutOrchestrator/CheckoutOrchestrator.Api/CheckoutOrchestrator.Api.csproj" />
-    <ProjectReference Include="../../src/Content/Content.Api/Content.Api.csproj" />
+    <ProjectReference Include="../../src/Media/Media.Api/Media.Api.csproj" />
     <ProjectReference Include="../../src/Search/Search.Api/Search.Api.csproj" />
     <ProjectReference Include="../../src/Notifications/Notifications.Api/Notifications.Api.csproj" />
     <ProjectReference Include="../../src/Audit/Audit.Api/Audit.Api.csproj" />

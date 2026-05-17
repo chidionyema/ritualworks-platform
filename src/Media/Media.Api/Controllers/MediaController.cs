@@ -107,6 +107,7 @@ public class MediaController(IMediator mediator) : ControllerBase
 
     /// <summary>
     /// Returns a presigned GET URL for downloading the original or a processed variant.
+    /// Client downloads directly from S3 — no bandwidth through the API server.
     /// </summary>
     [HttpGet("{id}/url")]
     public async Task<IActionResult> GetMediaUrl(Guid id, [FromQuery] string? variant = null)
@@ -114,6 +115,38 @@ public class MediaController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(new GetMediaUrlQuery(id, variant));
         return result.ToActionResult();
     }
+
+    /// <summary>
+    /// Batch-initiate multiple uploads in a single request.
+    /// Returns presigned URLs for each file (single-part or multipart).
+    /// </summary>
+    [HttpPost("batch-initiate")]
+    public async Task<IActionResult> BatchInitiateUpload([FromBody] BatchInitiateUploadCommand command)
+    {
+        var result = await mediator.Send(command);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// Links a media file to a domain entity (e.g. product, post).
+    /// </summary>
+    [HttpPost("{id}/link")]
+    public async Task<IActionResult> LinkEntity(Guid id, [FromBody] LinkEntityRequest body)
+    {
+        var result = await mediator.Send(new LinkEntityCommand(id, body.EntityId, body.EntityType));
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// Soft-deletes a media file. Bytes remain in S3 pending GC.
+    /// </summary>
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteMedia(Guid id)
+    {
+        var result = await mediator.Send(new DeleteMediaCommand(id));
+        return result.ToActionResult();
+    }
 }
 
 public sealed record CompleteMultipartRequest(IReadOnlyList<PartETagDto> Parts);
+public sealed record LinkEntityRequest([property: System.Text.Json.Serialization.JsonRequired] Guid EntityId, string EntityType);
