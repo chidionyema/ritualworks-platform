@@ -36,9 +36,12 @@ internal sealed class StripeRefundService(
             ["Provider"] = PaymentProvider.Stripe.ToString()
         });
 
-        // Only the Stripe API call belongs inside the retry block.
-        // DB reads and event publishing are non-idempotent side-effects
-        // that must happen AFTER Polly exhausts retries.
+        // Compute idempotency key OUTSIDE the retry block so the same key
+        // is reused across Polly retries — prevents duplicate Stripe refunds.
+        var stripeIdempotencyKey = !string.IsNullOrWhiteSpace(request.IdempotencyKey)
+            ? request.IdempotencyKey
+            : Guid.NewGuid().ToString();
+
         global::Stripe.Refund refund;
         try
         {
@@ -61,9 +64,7 @@ internal sealed class StripeRefundService(
 
                 var requestOptions = new RequestOptions
                 {
-                    IdempotencyKey = !string.IsNullOrWhiteSpace(request.IdempotencyKey)
-                        ? request.IdempotencyKey
-                        : Guid.NewGuid().ToString()
+                    IdempotencyKey = stripeIdempotencyKey
                 };
 
                 logger.LogInformation(
@@ -100,7 +101,7 @@ internal sealed class StripeRefundService(
 
         if (payment != null && string.Equals(refund.Status, "succeeded", StringComparison.Ordinal))
         {
-            // outbox handles this — event persisted atomically via MassTransit outbox
+            // Publish then save — outbox message and entity state commit atomically
             await eventPublisher.PublishAsync(new RefundIssuedEvent
             {
                 PaymentId = payment.Id,
@@ -111,6 +112,7 @@ internal sealed class StripeRefundService(
                 Provider = PaymentProvider.Stripe,
                 Reason = request.Reason
             }, ct);
+            await paymentRepository.SaveChangesAsync(ct);
         }
 
         TrackRefundEvent("RefundCreated", refund.Id, request.TransactionId, MapRefundStatus(refund.Status));

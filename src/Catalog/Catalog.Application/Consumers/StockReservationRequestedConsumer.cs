@@ -142,7 +142,7 @@ public sealed class StockReservationRequestedConsumer(
             OrderLineItems = evt.Items,
         }, context.CancellationToken);
 
-        await products.SaveChangesAsync(context.CancellationToken);
+        // MassTransit EF Outbox commits automatically
         logger.LogInformation(
             "Reserved stock for orderId={OrderId}; published StockReservedEvent ({Total} units)",
             evt.OrderId, reserved.Sum(i => i.Quantity));

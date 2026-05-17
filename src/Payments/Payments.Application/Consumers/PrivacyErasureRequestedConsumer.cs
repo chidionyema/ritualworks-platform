@@ -39,7 +39,7 @@ public sealed class PrivacyErasureRequestedConsumer(
         var subscription = await payments.GetSubscriptionByUserIdAsync(userId, context.CancellationToken);
         subscription?.AnonymiseForPrivacy();
 
-        await payments.SaveChangesAsync(context.CancellationToken);
+        // MassTransit EF Outbox commits automatically
 
         logger.LogInformation("Anonymised {Count} payments for UserId={UserId}", totalAnonymised, msg.UserId);
 

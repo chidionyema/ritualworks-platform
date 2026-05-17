@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Vault;
+using MassTransit;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,7 +42,7 @@ public sealed class AdminController(
     // this path returns a clean "Disabled" response instead.
     IServiceProvider services,
     IConfiguration configuration,
-    Haworks.BuildingBlocks.Messaging.IDomainEventPublisher publisher,
+    IPublishEndpoint publishEndpoint,
     ILogger<AdminController> logger) : ControllerBase
 {
     private bool VaultEnabled => configuration.GetValue("Vault:Enabled", false);
@@ -204,9 +205,8 @@ public sealed class AdminController(
         return Accepted(new { roleName, status = "Rotating", sessionId = resolvedSession });
     }
 
-    // outbox handles this — event published via MassTransit outbox
     private Task PublishStageAsync(Guid sessionId, string stage, int newVersion, string previousVersion) =>
-        publisher.PublishAsync(new Haworks.Contracts.Identity.VaultRotationStageEvent
+        publishEndpoint.Publish(new Haworks.Contracts.Identity.VaultRotationStageEvent
         {
             SessionId = sessionId,
             Stage = stage,

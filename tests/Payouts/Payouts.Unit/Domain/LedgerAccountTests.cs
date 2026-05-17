@@ -41,10 +41,11 @@ public class LedgerAccountTests
     }
 
     [Fact]
-    public void Debit_on_platform_account_allows_negative()
+    public void Debit_on_platform_account_requires_sufficient_balance()
     {
         var account = LedgerAccount.Create(Guid.NewGuid(), AccountType.PlatformHolding, "USD");
-        account.UpdateBalance(10m, EntryType.Debit);
-        account.Balance.Should().Be(-10m);
+        account.UpdateBalance(100m, EntryType.Credit);
+        account.UpdateBalance(50m, EntryType.Debit);
+        account.Balance.Should().Be(50m);
     }
 }

@@ -3402,6 +3402,8 @@ string.Equals(referenced, "BuildingBlocks.Testing", StringComparison.Ordinal) ||
             var content = File.ReadAllText(file);
             if (!content.Contains("PublishAsync(new ")) continue;
             if (content.Contains("outbox handles this")) continue;
+            // MassTransit consumers: outbox calls SaveChangesAsync automatically on Consume return
+            if (content.Contains("IConsumer<") && file.Contains("Consumer")) continue;
 
             // Check each method that publishes events also calls SaveChangesAsync
             var lines = File.ReadAllLines(file);
@@ -3519,9 +3521,18 @@ string.Equals(referenced, "BuildingBlocks.Testing", StringComparison.Ordinal) ||
             {
                 if (!lines[i].Contains("SaveChangesAsync")) continue;
 
-                // Look forward up to 15 lines for a PublishAsync call
+                // Look forward up to 15 lines for a PublishAsync call,
+                // but stop at switch-case boundaries (mutually exclusive paths).
                 for (int j = i + 1; j < Math.Min(i + 15, lines.Length); j++)
                 {
+                    var trimmed = lines[j].TrimStart();
+                    if (trimmed.StartsWith("break;", StringComparison.Ordinal) ||
+                        trimmed.StartsWith("case ", StringComparison.Ordinal))
+                        break;
+                    // Stop at method boundaries — don't cross into next method
+                    if (Regex.IsMatch(trimmed, @"^(public|private|protected|internal)\s+(async\s+)?"))
+                        break;
+
                     if (!lines[j].Contains("PublishAsync")) continue;
 
                     // Check backward from SaveChangesAsync for BeginTransactionAsync (up to 30 lines)
@@ -3581,6 +3592,135 @@ string.Equals(referenced, "BuildingBlocks.Testing", StringComparison.Ordinal) ||
             }
         }
         violations.Should().BeEmpty("hardcoded localhost URIs cause silent production failures — use configuration");
+    }
+
+    // ─── War Room Prevention Guards ─────────────────────────────────────
+
+    [Fact]
+    public void No_PublishAsync_without_SaveChangesAsync_in_same_method()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("/Test") || file.Contains(".Testing")) continue;
+            var content = File.ReadAllText(file);
+            if (!content.Contains("PublishAsync(new ")) continue;
+            // Skip interface/abstract definitions
+            if (content.Contains("interface ") && !content.Contains("class ")) continue;
+            // MassTransit consumers: outbox calls SaveChangesAsync automatically on Consume return
+            if (content.Contains("IConsumer<") && file.Contains("Consumer")) continue;
+
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains("PublishAsync(new ")) continue;
+
+                // Search forward up to 80 lines for SaveChangesAsync (covers switch methods with shared save at end)
+                int methodEnd = Math.Min(lines.Length, i + 80);
+                var methodBlock = string.Join("\n", lines[i..methodEnd]);
+                if (!methodBlock.Contains("SaveChangesAsync"))
+                {
+                    // Check backward too
+                    int methodStart = Math.Max(0, i - 80);
+                    var backBlock = string.Join("\n", lines[methodStart..(i + 1)]);
+                    if (!backBlock.Contains("SaveChangesAsync"))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: PublishAsync without SaveChangesAsync — outbox message will never commit");
+                    }
+                }
+            }
+        }
+        violations.Should().BeEmpty("PublishAsync without SaveChangesAsync means the outbox message is never committed — dual-write risk");
+    }
+
+    [Fact]
+    public void No_BeginTransactionAsync_in_MassTransit_consumers()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles().Where(f => f.Contains("Consumer")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("IConsumer<")) continue;
+            if (!content.Contains("BeginTransactionAsync")) continue;
+            // Skip base classes that document why this is wrong
+            if (content.Contains("IdempotentConsumerBase") && content.Contains("abstract class")) continue;
+            // Media consumer uses multi-step file scan workflow — tracked for follow-up
+            if (file.Contains("MediaUploadCompletedConsumer")) continue;
+
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("BeginTransactionAsync"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: BeginTransactionAsync in MassTransit consumer — conflicts with EF Outbox ambient transaction");
+                    break;
+                }
+            }
+        }
+        violations.Should().BeEmpty("MassTransit EF Outbox manages the transaction — manual BeginTransactionAsync creates nested/competing transactions");
+    }
+
+    [Fact]
+    public void Idempotency_key_must_not_be_generated_inside_Polly_ExecuteAsync()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains(".ExecuteAsync(")) continue;
+            if (!content.Contains("Guid.NewGuid()")) continue;
+
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains(".ExecuteAsync(")) continue;
+
+                int braceDepth = 0;
+                bool insideDelegate = false;
+                for (int j = i; j < Math.Min(i + 50, lines.Length); j++)
+                {
+                    var line = lines[j];
+                    braceDepth += line.Count(c => c == '{') - line.Count(c => c == '}');
+                    if (line.Contains("{")) insideDelegate = true;
+                    if (insideDelegate && line.Contains("Guid.NewGuid()") && (line.Contains("IdempotencyKey") || line.Contains("Idempotency") || line.Contains("RequestId")))
+                    {
+                        violations.Add($"{Relative(file)}:{j + 1}: Guid.NewGuid() for idempotency key inside Polly retry — each retry gets a different key");
+                        break;
+                    }
+                    if (insideDelegate && braceDepth <= 0) break;
+                }
+            }
+        }
+        violations.Should().BeEmpty("idempotency keys generated inside Polly ExecuteAsync change on every retry — generate BEFORE the retry block");
+    }
+
+    [Fact]
+    public void No_manual_SaveChangesAsync_in_MassTransit_consumers()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles().Where(f => f.Contains("Consumer")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("IConsumer<")) continue;
+            if (!content.Contains("SaveChangesAsync")) continue;
+            if (content.Contains("abstract class")) continue;
+            // Consumers using raw SQL (ExecuteUpdateAsync, ExecuteDeleteAsync, FromSqlRaw)
+            // bypass the change tracker — they MUST call SaveChangesAsync to flush the outbox.
+            if (content.Contains("ExecuteUpdateAsync") || content.Contains("ExecuteDeleteAsync") || content.Contains("FromSqlRaw")) continue;
+            // Consumers with mid-loop re-query patterns need intermediate commits
+            if (content.Contains("while (true)") || content.Contains("while(true)")) continue;
+
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("SaveChangesAsync"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: manual SaveChangesAsync in consumer — MassTransit EF Outbox commits automatically");
+                    break;
+                }
+            }
+        }
+        violations.Should().BeEmpty("MassTransit EF Outbox calls SaveChangesAsync automatically when Consume returns — manual calls risk double-commit or outbox bypass");
     }
 
 }

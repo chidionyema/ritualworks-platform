@@ -77,7 +77,7 @@ public sealed class PaymentCompletedConsumer(
             PaymentId = evt.PaymentId,
         }, context.CancellationToken);
 
-        await orders.SaveChangesAsync(context.CancellationToken);
+        // MassTransit EF Outbox commits automatically
         logger.LogInformation("Order {OrderId} marked Paid; published OrderCompletedEvent", order.Id);
     }
 

@@ -60,19 +60,21 @@ public class LedgerService : ILedgerService
             var platformHoldingAccount = await GetOrCreateAccountInTx(SystemPlatformId, AccountType.PlatformHolding, currency, ct);
             var platformRevenueAccount = await GetOrCreateAccountInTx(SystemPlatformId, AccountType.PlatformRevenue, currency, ct);
 
-            // Correct double-entry bookkeeping (cash-flow semantics):
-            // 1. Platform receives money → Credit PlatformHolding (balance increases)
-            // 2. Platform takes commission → Credit PlatformRevenue
-            // 3. Seller's share → Credit SellerPending
-            // Net: PlatformHolding += amount, SellerPending += sellerAmount, PlatformRevenue += commission
-            // The holding account retains the full amount; seller+commission entries are the breakdown.
+            // Double-entry bookkeeping:
+            // All three balances increase when a payment arrives.
+            // UpdateBalance uses Credit=add, Debit=subtract for running balances.
+            // LedgerEntry.Type records the accounting classification:
+            //   Debit PlatformHolding (asset increase) = $amount
+            //   Credit SellerPending (liability increase) = $sellerAmount
+            //   Credit PlatformRevenue (revenue increase) = $commission
+            // Invariant: Total Debits == Total Credits ($amount == $sellerAmount + $commission)
             platformHoldingAccount.UpdateBalance(amount, EntryType.Credit);
             sellerAccount.UpdateBalance(sellerAmount, EntryType.Credit);
             platformRevenueAccount.UpdateBalance(commission, EntryType.Credit);
 
             var refId = referenceId.ToString();
             _context.LedgerEntries.AddRange(
-                LedgerEntry.Create(platformHoldingAccount.Id, transactionId, amount, EntryType.Credit, description, refId),
+                LedgerEntry.Create(platformHoldingAccount.Id, transactionId, amount, EntryType.Debit, description, refId),
                 LedgerEntry.Create(sellerAccount.Id, transactionId, sellerAmount, EntryType.Credit, description, refId),
                 LedgerEntry.Create(platformRevenueAccount.Id, transactionId, commission, EntryType.Credit, $"Commission: {description}", refId));
 
@@ -143,7 +145,14 @@ public class LedgerService : ILedgerService
                 return;
             }
 
-            // Reverse the credit: debit seller, debit platform revenue, debit holding
+            // Reverse the credit (balanced double-entry):
+            // All three balances decrease on refund.
+            // UpdateBalance uses Debit=subtract for running balances.
+            // LedgerEntry.Type records the accounting classification:
+            //   Debit SellerPending/Payable (liability decreases) = $sellerAmount
+            //   Debit PlatformRevenue (revenue decreases) = $commission
+            //   Credit PlatformHolding (asset decreases) = $amount
+            // Invariant: Total Debits == Total Credits ($sellerAmount + $commission == $amount)
             sellerAccount.UpdateBalance(sellerAmount, EntryType.Debit);
             platformRevenueAccount.UpdateBalance(commission, EntryType.Debit);
             platformHoldingAccount.UpdateBalance(amount, EntryType.Debit);
@@ -151,7 +160,7 @@ public class LedgerService : ILedgerService
             _context.LedgerEntries.AddRange(
                 LedgerEntry.Create(sellerAccount.Id, transactionId, sellerAmount, EntryType.Debit, description, refId),
                 LedgerEntry.Create(platformRevenueAccount.Id, transactionId, commission, EntryType.Debit, $"Commission reversal: {description}", refId),
-                LedgerEntry.Create(platformHoldingAccount.Id, transactionId, amount, EntryType.Debit, description, refId));
+                LedgerEntry.Create(platformHoldingAccount.Id, transactionId, amount, EntryType.Credit, description, refId));
 
             await _context.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);

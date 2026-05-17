@@ -1,5 +1,6 @@
 using Haworks.Contracts.Pricing;
 using Haworks.Pricing.Application.Queries;
+using Haworks.Pricing.Domain.Exceptions;
 using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -10,27 +11,21 @@ namespace Haworks.Pricing.Application.Consumers;
 /// Handles PricingRequestedEvent from the CheckoutSaga.
 /// Calculates price and publishes PriceCalculatedEvent or PricingFailedEvent.
 /// </summary>
-public sealed class PricingRequestedConsumer : IConsumer<PricingRequestedEvent>
+public sealed class PricingRequestedConsumer(
+    IMediator mediator,
+    ILogger<PricingRequestedConsumer> logger) : IConsumer<PricingRequestedEvent>
 {
-    private readonly IMediator _mediator;
-    private readonly ILogger<PricingRequestedConsumer> _logger;
-
-    public PricingRequestedConsumer(IMediator mediator, ILogger<PricingRequestedConsumer> logger)
-    {
-        _mediator = mediator;
-        _logger = logger;
-    }
-
     public async Task Consume(ConsumeContext<PricingRequestedEvent> context)
     {
         var msg = context.Message;
-        _logger.LogInformation(
+
+        logger.LogInformation(
             "Processing PricingRequestedEvent for order {OrderId}, product {ProductId}",
             msg.OrderId, msg.ProductId);
 
         try
         {
-            var result = await _mediator.Send(new CalculateEffectivePriceQuery
+            var result = await mediator.Send(new CalculateEffectivePriceQuery
             {
                 ProductId = msg.ProductId,
                 Quantity = msg.Quantity,
@@ -38,7 +33,7 @@ public sealed class PricingRequestedConsumer : IConsumer<PricingRequestedEvent>
                 UserId = msg.UserId,
                 CountryCode = msg.CountryCode,
                 StateCode = msg.StateCode,
-            }, context.CancellationToken).ConfigureAwait(false);
+            }, context.CancellationToken);
 
             await context.Publish(new PriceCalculatedEvent
             {
@@ -49,22 +44,25 @@ public sealed class PricingRequestedConsumer : IConsumer<PricingRequestedEvent>
                 TaxAmount = result.TaxAmount,
                 Total = result.Total,
                 Currency = result.Currency,
-            }, context.CancellationToken).ConfigureAwait(false);
+            }, context.CancellationToken);
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Price calculated for order {OrderId}: total={Total}", msg.OrderId, result.Total);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is PromotionExhaustedException or TaxCalculationException or Haworks.BuildingBlocks.Common.ValidationException)
         {
-            _logger.LogError(ex, "Pricing failed for order {OrderId}", msg.OrderId);
+            logger.LogWarning(ex, "Pricing business rule failed for order {OrderId}: {Reason}", msg.OrderId, ex.Message);
 
             await context.Publish(new PricingFailedEvent
             {
                 SagaId = msg.SagaId,
                 OrderId = msg.OrderId,
                 Reason = ex.Message,
-            }, context.CancellationToken).ConfigureAwait(false);
-
+            }, context.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unexpected infrastructure failure during pricing for order {OrderId}", msg.OrderId);
             throw;
         }
     }

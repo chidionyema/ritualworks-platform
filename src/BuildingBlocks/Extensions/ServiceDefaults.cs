@@ -97,8 +97,7 @@ public static class ServiceDefaults
                 serviceInstanceId: Environment.MachineName))
             .WithMetrics(metrics =>
             {
-                metrics.AddPrometheusExporter()
-                    .AddAspNetCoreInstrumentation()
+                metrics.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation()
                     // Core Platform Meters
@@ -260,8 +259,6 @@ public static class ServiceDefaults
         // routing) is enriched with CorrelationId in Serilog LogContext.
         app.UseCorrelationId();
 
-        // Expose /metrics endpoint for Prometheus scraping (Kestrel, CLR, ASP.NET metrics).
-        app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
         // All health checks must pass for detailed health info
         app.MapHealthChecks("/health");

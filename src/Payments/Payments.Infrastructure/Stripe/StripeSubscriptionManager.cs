@@ -143,93 +143,109 @@ public sealed class StripeSubscriptionManager(
         switch (subscriptionEvent.EventType)
         {
             case SubscriptionEventType.Created:
-                if (existing == null)
-                {
-                    var newSub = DomainSubscription.Create(
-                        subscriptionEvent.UserId!, 
-                        PaymentProvider.Stripe, 
-                        subscriptionEvent.SubscriptionId, 
-                        subscriptionEvent.PlanId!, 
-                        DateTime.UtcNow, 
-                        subscriptionEvent.CurrentPeriodEnd ?? DateTime.UtcNow.AddMonths(1));
-                    
-                    newSub.UpdateStatus(subscriptionEvent.NewStatus);
-                    await paymentRepository.AddSubscriptionAsync(newSub, ct);
-
-                    // outbox handles this — event persisted atomically with subscription
-                    await eventPublisher.PublishAsync(new SubscriptionStartedEvent 
-                    { 
-                        SubscriptionId = newSub.ProviderSubscriptionId, 
-                        UserId = newSub.UserId, 
-                        PlanId = newSub.PlanId, 
-                        Provider = PaymentProvider.Stripe, 
-                        CurrentPeriodEnd = newSub.ExpiresAt 
-                    }, ct);
-                }
+                await HandleCreatedAsync(subscriptionEvent, existing, ct);
                 break;
 
             case SubscriptionEventType.Updated:
             case SubscriptionEventType.Resumed:
-                if (existing != null)
-                {
-                    existing.UpdateStatus(subscriptionEvent.NewStatus);
-                    if (subscriptionEvent.CurrentPeriodEnd.HasValue)
-                    {
-                        existing.SetExpiresAt(subscriptionEvent.CurrentPeriodEnd.Value);
-                    }
-                    if (subscriptionEvent.EventType == SubscriptionEventType.Resumed)
-                    {
-                        existing.ClearCancellation();
-                    }
-                }
+                await HandleUpdatedOrResumedAsync(subscriptionEvent, existing, ct);
                 break;
 
             case SubscriptionEventType.Renewed:
-                if (existing != null)
-                {
-                    existing.UpdateStatus(subscriptionEvent.NewStatus);
-                    if (subscriptionEvent.CurrentPeriodEnd.HasValue)
-                    {
-                        existing.SetExpiresAt(subscriptionEvent.CurrentPeriodEnd.Value);
-                    }
-
-                    // Extract amount if available in metadata for renewal event
-                    _ = long.TryParse(subscriptionEvent.Metadata.GetValueOrDefault("amount_cents"), out var amount);
-                    var currency = subscriptionEvent.Metadata.GetValueOrDefault("currency", "USD");
-
-                    await eventPublisher.PublishAsync(new SubscriptionRenewedEvent
-                    {
-                        SubscriptionId = existing.ProviderSubscriptionId,
-                        UserId = existing.UserId,
-                        Provider = PaymentProvider.Stripe,
-                        AmountCents = amount,
-                        Currency = currency,
-                        NewPeriodEnd = existing.ExpiresAt
-                    }, ct);
-                }
+                await HandleRenewedAsync(subscriptionEvent, existing, ct);
                 break;
 
             case SubscriptionEventType.Canceled:
             case SubscriptionEventType.Expired:
-                if (existing != null)
-                {
-                    existing.Cancel();
-                    if (subscriptionEvent.CurrentPeriodEnd.HasValue)
-                    {
-                        existing.SetExpiresAt(subscriptionEvent.CurrentPeriodEnd.Value);
-                    }
-
-                    await eventPublisher.PublishAsync(new SubscriptionCancelledEvent
-                    {
-                        SubscriptionId = existing.ProviderSubscriptionId,
-                        UserId = existing.UserId,
-                        Provider = PaymentProvider.Stripe,
-                        Reason = subscriptionEvent.Metadata.GetValueOrDefault("reason")
-                    }, ct);
-                }
+                await HandleCanceledAsync(subscriptionEvent, existing, ct);
                 break;
         }
+    }
 
+    private async Task HandleCreatedAsync(SubscriptionEvent subscriptionEvent, DomainSubscription? existing, CancellationToken ct)
+    {
+        if (existing != null) return;
+
+        var newSub = DomainSubscription.Create(
+            subscriptionEvent.UserId!,
+            PaymentProvider.Stripe,
+            subscriptionEvent.SubscriptionId,
+            subscriptionEvent.PlanId!,
+            DateTime.UtcNow,
+            subscriptionEvent.CurrentPeriodEnd ?? DateTime.UtcNow.AddMonths(1));
+
+        newSub.UpdateStatus(subscriptionEvent.NewStatus);
+        await paymentRepository.AddSubscriptionAsync(newSub, ct);
+
+        await eventPublisher.PublishAsync(new SubscriptionStartedEvent
+        {
+            SubscriptionId = newSub.ProviderSubscriptionId,
+            UserId = newSub.UserId,
+            PlanId = newSub.PlanId,
+            Provider = PaymentProvider.Stripe,
+            CurrentPeriodEnd = newSub.ExpiresAt
+        }, ct);
+        await paymentRepository.SaveChangesAsync(ct);
+    }
+
+    private async Task HandleUpdatedOrResumedAsync(SubscriptionEvent subscriptionEvent, DomainSubscription? existing, CancellationToken ct)
+    {
+        if (existing == null) return;
+
+        existing.UpdateStatus(subscriptionEvent.NewStatus);
+        if (subscriptionEvent.CurrentPeriodEnd.HasValue)
+        {
+            existing.SetExpiresAt(subscriptionEvent.CurrentPeriodEnd.Value);
+        }
+        if (subscriptionEvent.EventType == SubscriptionEventType.Resumed)
+        {
+            existing.ClearCancellation();
+        }
+        await paymentRepository.SaveChangesAsync(ct);
+    }
+
+    private async Task HandleRenewedAsync(SubscriptionEvent subscriptionEvent, DomainSubscription? existing, CancellationToken ct)
+    {
+        if (existing == null) return;
+
+        existing.UpdateStatus(subscriptionEvent.NewStatus);
+        if (subscriptionEvent.CurrentPeriodEnd.HasValue)
+        {
+            existing.SetExpiresAt(subscriptionEvent.CurrentPeriodEnd.Value);
+        }
+
+        _ = long.TryParse(subscriptionEvent.Metadata.GetValueOrDefault("amount_cents"), out var amount);
+        var currency = subscriptionEvent.Metadata.GetValueOrDefault("currency", "USD");
+
+        await eventPublisher.PublishAsync(new SubscriptionRenewedEvent
+        {
+            SubscriptionId = existing.ProviderSubscriptionId,
+            UserId = existing.UserId,
+            Provider = PaymentProvider.Stripe,
+            AmountCents = amount,
+            Currency = currency,
+            NewPeriodEnd = existing.ExpiresAt
+        }, ct);
+        await paymentRepository.SaveChangesAsync(ct);
+    }
+
+    private async Task HandleCanceledAsync(SubscriptionEvent subscriptionEvent, DomainSubscription? existing, CancellationToken ct)
+    {
+        if (existing == null) return;
+
+        existing.Cancel();
+        if (subscriptionEvent.CurrentPeriodEnd.HasValue)
+        {
+            existing.SetExpiresAt(subscriptionEvent.CurrentPeriodEnd.Value);
+        }
+
+        await eventPublisher.PublishAsync(new SubscriptionCancelledEvent
+        {
+            SubscriptionId = existing.ProviderSubscriptionId,
+            UserId = existing.UserId,
+            Provider = PaymentProvider.Stripe,
+            Reason = subscriptionEvent.Metadata.GetValueOrDefault("reason")
+        }, ct);
         await paymentRepository.SaveChangesAsync(ct);
     }
 }

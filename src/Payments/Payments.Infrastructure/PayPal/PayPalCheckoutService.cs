@@ -40,6 +40,12 @@ internal sealed class PayPalCheckoutService(
         ValidateRedirectUrl(request.SuccessUrl, nameof(request.SuccessUrl));
         ValidateRedirectUrl(request.CancelUrl, nameof(request.CancelUrl));
 
+        // Compute idempotency key OUTSIDE the retry block so the same key
+        // is reused across Polly retries — prevents duplicate PayPal orders.
+        var paypalIdempotencyKey = !string.IsNullOrEmpty(request.IdempotencyKey)
+            ? request.IdempotencyKey
+            : Guid.NewGuid().ToString();
+
         return _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
         {
             var client = await clientFactory.GetAuthenticatedClientAsync(token);
@@ -55,7 +61,7 @@ internal sealed class PayPalCheckoutService(
                 {
                     new PayPalPurchaseUnit
                     {
-                        ReferenceId = request.IdempotencyKey ?? Guid.NewGuid().ToString(),
+                        ReferenceId = paypalIdempotencyKey,
                         Amount = new PayPalAmount
                         {
                             CurrencyCode = currency,
@@ -76,17 +82,14 @@ internal sealed class PayPalCheckoutService(
 
             logger.LogInformation(
                 "Creating PayPal order with idempotency key {Key}",
-                request.IdempotencyKey);
+                paypalIdempotencyKey);
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, PayPalEndpoints.CheckoutOrders)
             {
                 Content = JsonContent.Create(orderRequest, options: PayPalJsonOptions.Default)
             };
 
-            if (!string.IsNullOrEmpty(request.IdempotencyKey))
-            {
-                httpRequest.Headers.Add("PayPal-Request-Id", request.IdempotencyKey);
-            }
+            httpRequest.Headers.Add("PayPal-Request-Id", paypalIdempotencyKey);
 
             var response = await client.SendAsync(httpRequest, token);
             var responseBody = await response.Content.ReadAsStringAsync(token);
@@ -113,9 +116,13 @@ internal sealed class PayPalCheckoutService(
 
     /// <inheritdoc />
     public Task<CheckoutSessionResult> CreateSubscriptionSessionAsync(
-        CreateSubscriptionSessionRequest request, 
+        CreateSubscriptionSessionRequest request,
         CancellationToken ct = default)
     {
+        var idempotencyKey = !string.IsNullOrEmpty(request.IdempotencyKey)
+            ? request.IdempotencyKey
+            : Guid.NewGuid().ToString();
+
         return _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
         {
             var client = await clientFactory.GetAuthenticatedClientAsync(token);
@@ -142,10 +149,7 @@ internal sealed class PayPalCheckoutService(
                 Content = JsonContent.Create(subRequest, options: PayPalJsonOptions.Default)
             };
 
-            if (!string.IsNullOrEmpty(request.IdempotencyKey))
-            {
-                httpRequest.Headers.Add("PayPal-Request-Id", request.IdempotencyKey);
-            }
+            httpRequest.Headers.Add("PayPal-Request-Id", idempotencyKey);
 
             var response = await client.SendAsync(httpRequest, token);
             var responseBody = await response.Content.ReadAsStringAsync(token);

@@ -43,8 +43,12 @@ internal sealed class PayPalRefundService(
             ["Provider"] = PaymentProvider.PayPal.ToString()
         });
 
-        // Only the PayPal API call belongs inside the retry block.
-        // DB reads and event publishing happen after retries are exhausted.
+        // Compute idempotency key OUTSIDE the retry block so the same key
+        // is reused across Polly retries — prevents duplicate PayPal refunds.
+        var paypalRequestId = !string.IsNullOrEmpty(request.IdempotencyKey)
+            ? request.IdempotencyKey
+            : Guid.NewGuid().ToString();
+
         string responseBody;
         try
         {
@@ -77,10 +81,7 @@ internal sealed class PayPalRefundService(
                     Content = JsonContent.Create(refundReq, options: PayPalJsonOptions.Default)
                 };
 
-                if (!string.IsNullOrEmpty(request.IdempotencyKey))
-                {
-                    httpRequest.Headers.Add("PayPal-Request-Id", request.IdempotencyKey);
-                }
+                httpRequest.Headers.Add("PayPal-Request-Id", paypalRequestId);
 
                 logger.LogInformation("Creating PayPal refund for capture {TransactionId}", request.TransactionId);
 
@@ -123,7 +124,6 @@ internal sealed class PayPalRefundService(
 
         if (payment != null && status == RefundStatus.Succeeded)
         {
-            // outbox handles this — event persisted atomically with payment state
             await eventPublisher.PublishAsync(new RefundIssuedEvent
             {
                 PaymentId = payment.Id,
@@ -134,6 +134,8 @@ internal sealed class PayPalRefundService(
                 Provider = PaymentProvider.PayPal,
                 Reason = request.Reason
             }, ct);
+
+            await paymentRepository.SaveChangesAsync(ct);
         }
 
         TrackRefundEvent("RefundCreated", refund?.Id ?? string.Empty, request.TransactionId, status);

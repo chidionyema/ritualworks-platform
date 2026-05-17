@@ -218,7 +218,7 @@ internal sealed class StripeWebhookProcessor : IWebhookProcessor
         var payment = await _paymentRepository.GetByProviderSessionAsync(Provider, session.Id, ct);
         if (payment == null) return WebhookProcessingResult.Skipped("No payment record");
 
-        // outbox handles this — event persisted atomically via MassTransit outbox
+        // Publish then save — outbox message commits atomically with entity state
         await _eventPublisher.PublishAsync(new CheckoutSessionExpiredEvent
         {
             SessionId = session.Id,
@@ -226,6 +226,7 @@ internal sealed class StripeWebhookProcessor : IWebhookProcessor
             OrderId = payment.OrderId,
             Provider = Provider.ToString()
         }, ct);
+        await _paymentRepository.SaveChangesAsync(ct);
 
         return WebhookProcessingResult.Success(webhookEvent.EventType, "Expired handled");
     }
@@ -271,6 +272,7 @@ internal sealed class StripeWebhookProcessor : IWebhookProcessor
             }
         }
 
+        await _paymentRepository.SaveChangesAsync(ct);
         return WebhookProcessingResult.Success(webhookEvent.EventType, "Refund processed");
     }
 

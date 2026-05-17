@@ -52,21 +52,10 @@ public sealed class CreateRefundCommandHandler(
             return Result.Failure<Guid>(Error.Validation("Refund.InvalidAmount", ex.Message));
         }
 
-        // Persist state BEFORE publishing the event to prevent double-refund.
+        // Publish BEFORE SaveChanges so both the entity mutation and the outbox
+        // message commit atomically in the same transaction via MassTransit EF Outbox.
         // The Payment entity carries an xmin concurrency token — EF will throw
         // DbUpdateConcurrencyException if another refund raced us.
-        // outbox handles this — SaveChangesAsync + PublishAsync are atomic via the MassTransit outbox.
-        try
-        {
-            await paymentRepository.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            logger.LogWarning("Concurrent refund detected for Payment {PaymentId}; rejecting", payment.Id);
-            return Result.Failure<Guid>(Error.Conflict("Refund.ConcurrencyConflict",
-                "Another refund for this payment was processed concurrently. Please retry."));
-        }
-
         await eventPublisher.PublishAsync(new RefundRequestedEvent
         {
             RefundId = refundId,
@@ -77,6 +66,17 @@ public sealed class CreateRefundCommandHandler(
             Reason = request.Reason,
             RequestedBy = request.RequestedBy ?? "Operator"
         }, ct);
+
+        try
+        {
+            await paymentRepository.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            logger.LogWarning("Concurrent refund detected for Payment {PaymentId}; rejecting", payment.Id);
+            return Result.Failure<Guid>(Error.Conflict("Refund.ConcurrencyConflict",
+                "Another refund for this payment was processed concurrently. Please retry."));
+        }
 
         logger.LogInformation("Refund {RefundId} requested for Payment {PaymentId}", refundId, payment.Id);
 

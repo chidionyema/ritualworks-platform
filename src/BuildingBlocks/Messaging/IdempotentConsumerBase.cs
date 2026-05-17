@@ -12,6 +12,8 @@ public abstract class IdempotentConsumerBase<TEvent, TDbContext>(
     where TEvent : class
     where TDbContext : DbContext
 {
+    protected TDbContext DbContext { get; } = context;
+
     public async Task Consume(ConsumeContext<TEvent> consumeContext)
     {
         var message = consumeContext.Message;
@@ -23,26 +25,22 @@ public abstract class IdempotentConsumerBase<TEvent, TDbContext>(
             return;
         }
 
-        var strategy = context.Database.CreateExecutionStrategy();
-
+        // Do NOT call BeginTransactionAsync — MassTransit EF Outbox manages the
+        // ambient transaction. Manual transactions conflict with the outbox and
+        // can cause nested transactions or outbox messages to commit separately.
         try
         {
-            await strategy.ExecuteAsync(async () =>
+            if (await IsAlreadyProcessedAsync(idempotencyKey, consumeContext.CancellationToken))
             {
-                await using var tx = await context.Database.BeginTransactionAsync(consumeContext.CancellationToken);
+                logger.LogInformation("Idempotent skip for key {Key}", idempotencyKey);
+                return;
+            }
 
-                if (await IsAlreadyProcessedAsync(idempotencyKey, consumeContext.CancellationToken))
-                {
-                    logger.LogInformation("Idempotent skip for key {Key}", idempotencyKey);
-                    return;
-                }
+            await ExecuteBusinessLogicAsync(consumeContext, consumeContext.CancellationToken);
+            await RecordProcessedAsync(idempotencyKey, consumeContext.CancellationToken);
 
-                await ExecuteBusinessLogicAsync(consumeContext, consumeContext.CancellationToken);
-                await RecordProcessedAsync(idempotencyKey, consumeContext.CancellationToken);
-
-                await context.SaveChangesAsync(consumeContext.CancellationToken);
-                await tx.CommitAsync(consumeContext.CancellationToken);
-            });
+            // MassTransit EF Outbox calls SaveChangesAsync and commits the
+            // ambient transaction when Consume returns successfully.
         }
         catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
         {

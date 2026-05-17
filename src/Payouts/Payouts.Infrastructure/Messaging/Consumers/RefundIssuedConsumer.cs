@@ -34,12 +34,13 @@ public class RefundIssuedConsumer : IConsumer<RefundIssuedEvent>
         _logger.LogInformation("Processing refund for Payment {PaymentId}, Order {OrderId}, Amount: {Amount}",
             evt.PaymentId, evt.OrderId, refundAmount);
 
-        // Deterministic lookup: filter to seller accounts only (SellerPending or SellerPayable)
+        // Deterministic lookup: filter to seller accounts only, ordered for consistency
         var sellerEntry = await _context.LedgerEntries
             .AsNoTracking()
             .Where(e => e.ReferenceId == evt.PaymentId.ToString())
             .Join(_context.LedgerAccounts, e => e.AccountId, a => a.Id, (e, a) => new { Entry = e, Account = a })
             .Where(x => x.Account.Type == AccountType.SellerPending || x.Account.Type == AccountType.SellerPayable)
+            .OrderBy(x => x.Account.Type)
             .Select(x => new { x.Account.OwnerId, x.Account.Type })
             .FirstOrDefaultAsync(context.CancellationToken);
 
@@ -49,14 +50,22 @@ public class RefundIssuedConsumer : IConsumer<RefundIssuedEvent>
             return;
         }
 
-        // DebitSellerAsync internally prefixes refId with "REFUND:" so the reference key
-        // is distinct from the original credit entry's reference.
-        await _ledgerService.DebitSellerAsync(
-            sellerEntry.OwnerId,
-            refundAmount,
-            evt.Currency,
-            evt.PaymentId,
-            $"Refund for Order {evt.OrderId}",
-            context.CancellationToken);
+        try
+        {
+            // DebitSellerAsync internally prefixes refId with "REFUND:" so the reference key
+            // is distinct from the original credit entry's reference.
+            // The unique index on (ReferenceId, AccountId) prevents double-debits at DB level.
+            await _ledgerService.DebitSellerAsync(
+                sellerEntry.OwnerId,
+                refundAmount,
+                evt.Currency,
+                evt.PaymentId,
+                $"Refund for Order {evt.OrderId}",
+                context.CancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        {
+            _logger.LogWarning("Duplicate refund for Payment {PaymentId} — idempotent skip", evt.PaymentId);
+        }
     }
 }

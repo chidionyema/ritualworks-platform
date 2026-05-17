@@ -88,7 +88,7 @@ public sealed class NotificationRequestConsumer(
         // Step 1: Created -> Rendering. Persist so dashboards + audits see the
         // transition even if rendering hangs/crashes.
         notification.MarkRendering();
-        await repository.SaveChangesAsync(ct);
+        // MassTransit EF Outbox commits automatically
 
         // Step 2: render via the selected template. Renderer/selector may not
         // yet be implemented (L1.B); fall back to the persisted Subject/Body
@@ -128,7 +128,7 @@ public sealed class NotificationRequestConsumer(
         }
 
         notification.SetRenderedContent(renderedSubject, renderedBody);
-        await repository.SaveChangesAsync(ct);
+        // MassTransit EF Outbox commits automatically
 
         notification.MarkQueued();
 
@@ -158,7 +158,7 @@ public sealed class NotificationRequestConsumer(
                 break;
         }
 
-        await repository.SaveChangesAsync(ct);
+        // MassTransit EF Outbox commits automatically
 
         logger.LogInformation(
             "Notification {NotificationId} dispatch complete: status={Status}, providerMessageId={ProviderMessageId}",

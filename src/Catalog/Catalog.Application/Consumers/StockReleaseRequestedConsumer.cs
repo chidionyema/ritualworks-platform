@@ -75,7 +75,7 @@ public sealed class StockReleaseRequestedConsumer(
             Reason = evt.Reason,
         }, context.CancellationToken);
 
-        await products.SaveChangesAsync(context.CancellationToken);
+        // MassTransit EF Outbox commits automatically
         logger.LogInformation("Released stock for orderId={OrderId}; published StockReleasedEvent", evt.OrderId);
     }
 }

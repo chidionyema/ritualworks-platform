@@ -52,7 +52,10 @@ public class RotateStripeKeyCommandHandlerTests
             .Returns(Task.FromResult(new VaultSharp.V1.Commons.Secret<VaultSharp.V1.Commons.CurrentSecretMetadata> { Data = new VaultSharp.V1.Commons.CurrentSecretMetadata() }));
 
         _httpClientFactory.Setup(x => x.CreateClient("StripeVerification"))
-            .Returns(new System.Net.Http.HttpClient(new OkHttpMessageHandler()));
+            .Returns(new System.Net.Http.HttpClient(new OkHttpMessageHandler())
+            {
+                BaseAddress = new Uri("https://api.stripe.com/")
+            });
     }
 
     [Fact]

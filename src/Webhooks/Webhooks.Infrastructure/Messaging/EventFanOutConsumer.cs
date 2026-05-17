@@ -57,7 +57,7 @@ public sealed class EventFanOutConsumer(
             deliveries.Add(delivery);
         }
 
-        await db.SaveChangesAsync(context.CancellationToken);
+        // MassTransit EF Outbox commits automatically
 
         foreach (var delivery in deliveries)
         {

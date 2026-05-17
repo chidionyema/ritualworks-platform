@@ -48,7 +48,7 @@ public class StripePayoutGateway : IPayoutGateway
         return accountLink.Url;
     }
 
-    public async Task<(string ExternalId, PayoutStatus Status)> InitiatePayoutAsync(string providerId, decimal amount, string currency, string? description = null)
+    public async Task<(string ExternalId, PayoutStatus Status)> InitiatePayoutAsync(string providerId, decimal amount, string currency, string? description = null, string? idempotencyKey = null)
     {
         var options = new TransferCreateOptions
         {
@@ -58,8 +58,13 @@ public class StripePayoutGateway : IPayoutGateway
             Description = description
         };
 
+        var requestOptions = new RequestOptions
+        {
+            IdempotencyKey = idempotencyKey ?? Guid.NewGuid().ToString()
+        };
+
         var service = new TransferService(_client);
-        var transfer = await service.CreateAsync(options);
+        var transfer = await service.CreateAsync(options, requestOptions);
 
         return (transfer.Id, PayoutStatus.Succeeded);
     }

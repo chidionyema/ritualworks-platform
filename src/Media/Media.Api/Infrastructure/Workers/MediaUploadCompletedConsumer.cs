@@ -48,9 +48,8 @@ public sealed class MediaUploadCompletedConsumer(
                 {
                     await using var tx = await context.Database.BeginTransactionAsync(ct);
                     file.MarkAsQuarantined();
-                    await context.SaveChangesAsync(ct);
                     file.MarkAsRejected();
-                    await context.SaveChangesAsync(ct);
+                    // MassTransit EF Outbox commits automatically
 
                     await publisher.Publish(new MediaScanFailedEvent
                     {
@@ -73,12 +72,11 @@ public sealed class MediaUploadCompletedConsumer(
             try
             {
                 file.MarkAsQuarantined();
-                await context.SaveChangesAsync(ct);
 
                 if (isClean)
                 {
                     file.MarkAsActive();
-                    await context.SaveChangesAsync(ct);
+                    // MassTransit EF Outbox commits automatically
 
                     await publisher.Publish(new MediaScanPassedEvent
                     {
@@ -101,7 +99,7 @@ public sealed class MediaUploadCompletedConsumer(
                 else
                 {
                     file.MarkAsRejected();
-                    await context.SaveChangesAsync(ct);
+                    // MassTransit EF Outbox commits automatically
 
                     await publisher.Publish(new MediaScanFailedEvent
                     {

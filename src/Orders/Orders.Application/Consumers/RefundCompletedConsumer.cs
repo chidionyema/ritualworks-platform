@@ -28,7 +28,7 @@ public sealed class RefundCompletedConsumer(
 
         if (order.MarkRefunded())
         {
-            await orderRepository.SaveChangesAsync(context.CancellationToken);
+            // MassTransit EF Outbox commits automatically
             logger.LogInformation("Order {OrderId} status updated to Refunded", msg.OrderId);
         }
     }

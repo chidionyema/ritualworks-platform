@@ -81,7 +81,7 @@ public sealed class PrivacyErasureRequestedConsumer(
             profile.UpdateAddress("", "", "", "", "");
             profile.UpdateProfileInfo(bio: "", website: "");
             profile.SetAvatarUrl("");
-            await profiles.SaveChangesAsync(context.CancellationToken);
+            // MassTransit EF Outbox commits automatically
         }
 
         logger.LogInformation("User {UserId} anonymised for GDPR erasure", msg.UserId);

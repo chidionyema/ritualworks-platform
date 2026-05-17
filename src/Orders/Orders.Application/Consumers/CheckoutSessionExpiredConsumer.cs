@@ -75,10 +75,8 @@ public sealed class CheckoutSessionExpiredConsumer(
             }).ToList()
         }, context.CancellationToken);
 
-        // ExecuteUpdateAsync bypasses EF change tracking, so the outbox rows
-        // written by PublishAsync have NOT been flushed yet. Explicit
-        // SaveChangesAsync ensures the outbox message is committed to the DB
-        // so the BusOutboxDeliveryService can pick it up.
+        // ExecuteUpdateAsync bypasses the change tracker, so the outbox message
+        // written by PublishAsync must be flushed explicitly.
         await orders.SaveChangesAsync(context.CancellationToken);
 
         logger.LogInformation("Order {OrderId} marked Expired; published StockReleaseRequestedEvent", order.Id);

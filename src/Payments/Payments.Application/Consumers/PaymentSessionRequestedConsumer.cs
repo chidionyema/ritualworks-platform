@@ -120,7 +120,7 @@ public sealed class PaymentSessionRequestedConsumer(
                 Currency = evt.Currency
             }, context.CancellationToken);
 
-            await paymentRepository.SaveChangesAsync(context.CancellationToken);
+            // MassTransit EF Outbox commits automatically
         }
         catch (Exception ex)
         {

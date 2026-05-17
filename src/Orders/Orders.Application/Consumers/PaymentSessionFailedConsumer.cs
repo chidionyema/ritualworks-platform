@@ -56,7 +56,7 @@ public sealed class PaymentSessionFailedConsumer(
             CustomerEmail = order.CustomerEmail,
         }, context.CancellationToken);
 
-        await orders.SaveChangesAsync(context.CancellationToken);
+        // MassTransit EF Outbox commits automatically
         logger.LogInformation("Order {OrderId} marked Abandoned (PaymentSessionFailed)", order.Id);
     }
 }
