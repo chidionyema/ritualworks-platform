@@ -56,10 +56,13 @@ public class EventFanOutConsumerTests
         // Act
         await consumer.Consume(mockContext.Object);
 
+        // Simulate MassTransit EF Outbox auto-commit (no outbox pipeline in unit tests)
+        await _db.SaveChangesAsync();
+
         // Assert
         _mockJobClient.Verify(x => x.Create(
             It.Is<Job>(j => j.Method.Name == "DispatchAsync"),
-            It.IsAny<IState>()), 
+            It.IsAny<IState>()),
             Times.Once);
 
         var delivery = await _db.Deliveries.FirstOrDefaultAsync();
