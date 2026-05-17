@@ -26,7 +26,7 @@ public class HWK003Tests
 
         var expected = CSharpAnalyzerVerifier<HWK003_FinancialDecimalRequiresNumericColumnTypeAnalyzer>
             .Diagnostic(Diagnostics.FinancialDecimalRequiresColumnType)
-            .WithLocation(9, 9)
+            .WithSpan("/0/Test3.cs", 9, 9, 9, 40)
             .WithArguments("Amount");
 
         await CSharpAnalyzerVerifier<HWK003_FinancialDecimalRequiresNumericColumnTypeAnalyzer>

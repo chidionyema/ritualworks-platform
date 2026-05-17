@@ -30,7 +30,7 @@ public class HWK002Tests
 
         var expected = CSharpAnalyzerVerifier<HWK002_NoGuidNewGuidInPollyRetryAnalyzer>
             .Diagnostic(Diagnostics.NoGuidNewGuidInPollyRetry)
-            .WithLocation(11, 23)
+            .WithSpan("/0/Test3.cs", 11, 23, 11, 37)
             .WithArguments("Guid.NewGuid()");
 
         await CSharpAnalyzerVerifier<HWK002_NoGuidNewGuidInPollyRetryAnalyzer>
