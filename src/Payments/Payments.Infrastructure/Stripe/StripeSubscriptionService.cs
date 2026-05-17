@@ -44,17 +44,7 @@ internal sealed class StripeSubscriptionService(
             if (!options.Metadata.ContainsKey("user_id")) options.Metadata["user_id"] = request.UserId;
 
             var requestOptions = new RequestOptions { IdempotencyKey = request.IdempotencyKey };
-            Session session;
-            try
-            {
-                session = await service.CreateAsync(options, requestOptions, token);
-            }
-            catch (StripeException ex)
-            {
-                logger.LogError(ex, "Stripe subscription session creation failed for plan {PlanId}, user {UserId}",
-                    request.PlanId, request.UserId);
-                throw;
-            }
+            var session = await service.CreateAsync(options, requestOptions, token);
 
             logger.LogInformation("Subscription session {SessionId} created for plan {PlanId}",
                 session.Id, request.PlanId);
