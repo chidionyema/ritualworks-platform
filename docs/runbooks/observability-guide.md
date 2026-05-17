@@ -10,21 +10,21 @@
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  1. Alert fires → Check Grafana "SLO Overview" dashboard        │
-│     URL: http://grafana:3000/d/slo-overview                     │
+│     Local: http://localhost:3000/d/slo-overview                  │
 │                                                                 │
 │  2. Which service? → "Service Health" dashboard                 │
-│     URL: http://grafana:3000/d/service-health                   │
+│     Local: http://localhost:3000/d/service-health                │
 │                                                                 │
 │  3. What failed? → "Error Rates" dashboard (5xx by route)       │
-│     URL: http://grafana:3000/d/error-rates                      │
+│     Local: http://localhost:3000/d/error-rates                   │
 │                                                                 │
 │  4. Why? → Click trace_id in Loki → jumps to Tempo trace        │
 │                                                                 │
 │  5. Saga stuck? → "Saga State Machines" dashboard               │
-│     URL: http://grafana:3000/d/saga-state-machines              │
+│     Local: http://localhost:3000/d/saga-state-machines           │
 │                                                                 │
 │  6. Payment issue? → "Payment Flows" dashboard                  │
-│     URL: http://grafana:3000/d/payment-flows                    │
+│     Local: http://localhost:3000/d/payment-flows                 │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -35,12 +35,14 @@
 
 | Tool | URL | Purpose |
 |------|-----|---------|
-| **Grafana** | `http://grafana:3000` | Dashboards, alerts, log/trace exploration |
-| **Prometheus** | `http://prometheus:9090` | Raw metrics, PromQL queries |
-| **Tempo** | `http://tempo:3200` | Distributed traces |
+| **Grafana** | `http://localhost:3000` | Dashboards, alerts, log/trace exploration |
+| **Prometheus** | `http://localhost:9090` | Raw metrics, PromQL queries |
+| **Tempo** | `http://localhost:3200` | Distributed traces |
 | **Loki** | (via Grafana Explore) | Structured logs |
-| **Alertmanager** | `http://alertmanager:9093` | Silence/acknowledge alerts |
-| **RabbitMQ** | `http://rabbitmq:15672` | Queue inspection (backup UI) |
+| **Alertmanager** | `http://localhost:9093` | Silence/acknowledge alerts |
+| **RabbitMQ** | `http://localhost:15672` | Queue inspection (backup UI) |
+
+> **On Fly.io:** Use Grafana Cloud or self-hosted — see "Environment-Specific Setup" below.
 
 ---
 
@@ -312,6 +314,111 @@ When K8s sends SIGTERM:
           .WriteTo.Console());
    ```
 6. That's it. OTel, correlation IDs, trace_id in logs, health probes — all automatic.
+
+---
+
+## Environment-Specific Setup
+
+### Local Development (docker-compose)
+
+Everything works out of the box:
+
+```bash
+cd deploy/compose
+docker compose up -d
+```
+
+| Tool | URL | Credentials |
+|------|-----|-------------|
+| Grafana | http://localhost:3000 | admin / admin |
+| Prometheus | http://localhost:9090 | — |
+| Tempo | http://localhost:3200 | — |
+| Alertmanager | http://localhost:9093 | — |
+| RabbitMQ | http://localhost:15672 | guest / guest |
+
+Dashboards, datasources, and alerts are auto-provisioned via volume mounts.
+Services emit to `otel-collector:4317` (configured in compose env vars).
+
+### Local Development (Aspire)
+
+```bash
+dotnet run --project deploy/aspire
+```
+
+Aspire wires `OTEL_EXPORTER_OTLP_ENDPOINT` to Tempo automatically.
+Open the Aspire dashboard at `http://localhost:15888` for traces/logs.
+For full Grafana dashboards, run the compose observability stack alongside:
+
+```bash
+docker compose -f deploy/compose/docker-compose.yml up -d tempo otel-collector prometheus loki grafana alertmanager
+```
+
+### Fly.io (Production)
+
+Fly services emit OTel signals but need a backend. **Options:**
+
+#### Option A: Grafana Cloud (Recommended for production)
+
+Free tier includes 50GB logs, 10k metrics series, 50GB traces.
+
+1. Sign up at [grafana.com/cloud](https://grafana.com/cloud)
+2. Get your OTLP endpoint + API key from the Cloud portal
+3. Set on all Fly apps:
+
+```bash
+for app in haworks-bffweb haworks-identity haworks-catalog haworks-orders haworks-payments haworks-checkout; do
+  flyctl secrets set -a $app \
+    OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp-gateway-prod-us-east-0.grafana.net/otlp" \
+    OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic $(echo -n '<instance-id>:<api-key>' | base64)"
+done
+```
+
+4. Import dashboards from `infra/observability/grafana/dashboards/*.json` into Grafana Cloud
+
+#### Option B: Self-hosted on Fly (Budget)
+
+Deploy a single-machine observability stack on Fly:
+
+```bash
+# Single VM running Grafana + Prometheus + Tempo + Loki
+flyctl apps create haworks-observability
+flyctl volumes create obs_data -a haworks-observability --size 10
+# Deploy with the infra/observability configs
+```
+
+Then point services to it:
+```bash
+flyctl secrets set -a haworks-bffweb \
+  OTEL_EXPORTER_OTLP_ENDPOINT="http://haworks-observability.flycast:4317"
+```
+
+#### Option C: Fly Logs + Metrics (Minimal)
+
+Fly has built-in log aggregation and basic metrics:
+
+```bash
+flyctl logs -a haworks-payments          # tail logs
+flyctl metrics -a haworks-payments       # basic CPU/mem/request metrics
+flyctl dashboard -a haworks-payments     # web UI
+```
+
+This gives you logs and basic health but **no distributed tracing or custom metrics**.
+
+### Kubernetes (Future)
+
+The platform is K8s-ready:
+
+```yaml
+# All services expose standard probe endpoints:
+startupProbe:   /health/startup   # waits for migrations
+livenessProbe:  /health/live      # process alive
+readinessProbe: /health/ready     # DB + RabbitMQ connected
+
+# OTel: deploy the OTel Collector as a DaemonSet/Sidecar
+# Services auto-discover via OTEL_EXPORTER_OTLP_ENDPOINT env var
+# Prometheus: use kube-prometheus-stack Helm chart
+# Grafana: import dashboards from infra/observability/grafana/dashboards/
+```
 
 ---
 
