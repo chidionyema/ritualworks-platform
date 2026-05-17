@@ -101,4 +101,52 @@ public static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NoDateTimeNow = new(
+        id: "HWK020",
+        title: "Use DateTime.UtcNow instead of DateTime.Now",
+        messageFormat: "'{0}' uses local timezone which causes ordering bugs in distributed services",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NoTaskResultOrWait = new(
+        id: "HWK021",
+        title: "Do not use .Result or .Wait() on tasks",
+        messageFormat: "'{0}' can deadlock the request pipeline — use await instead",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NoNewHttpClient = new(
+        id: "HWK022",
+        title: "Do not instantiate HttpClient directly",
+        messageFormat: "'{0}' causes socket exhaustion — use IHttpClientFactory",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NoTakeWithoutOrderBy = new(
+        id: "HWK023",
+        title: "Do not use Take/Skip without OrderBy",
+        messageFormat: "'{0}' without OrderBy produces non-deterministic results",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NoThreadSleep = new(
+        id: "HWK024",
+        title: "Do not use Thread.Sleep in async code",
+        messageFormat: "'{0}' blocks a thread pool thread — use Task.Delay instead",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NoCatchAllWithoutLogging = new(
+        id: "HWK025",
+        title: "Do not catch Exception without logging or re-throwing",
+        messageFormat: "Catch block swallows '{0}' without logging or re-throw — errors will vanish silently",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
 }
