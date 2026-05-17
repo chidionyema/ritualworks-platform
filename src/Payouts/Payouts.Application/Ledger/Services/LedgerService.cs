@@ -38,10 +38,10 @@ public class LedgerService : ILedgerService
         if (amount <= 0) throw new ArgumentException("Amount must be positive", nameof(amount));
 
         var dbContext = (DbContext)_context;
-        await using var tx = await dbContext.Database.BeginTransactionAsync(ct);
+        // C2 Fix: Use RepeatableRead to prevent idempotency check TOCTOU at ReadCommitted
+        await using var tx = await dbContext.Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct);
         try
         {
-            // Idempotency check INSIDE the transaction to eliminate check-then-act race
             var alreadyProcessed = await _context.LedgerEntries
                 .AnyAsync(e => e.ReferenceId == referenceId.ToString(), ct);
             if (alreadyProcessed)
@@ -56,9 +56,10 @@ public class LedgerService : ILedgerService
             var sellerAmount = amount - commission;
 
             var transactionId = Guid.NewGuid();
-            var sellerAccount = await GetOrCreateAccountInTx(sellerId, AccountType.SellerPending, currency, ct);
-            var platformHoldingAccount = await GetOrCreateAccountInTx(SystemPlatformId, AccountType.PlatformHolding, currency, ct);
-            var platformRevenueAccount = await GetOrCreateAccountInTx(SystemPlatformId, AccountType.PlatformRevenue, currency, ct);
+            // C1 Fix: FOR UPDATE locks prevent concurrent balance corruption
+            var sellerAccount = await GetOrCreateAccountWithLock(sellerId, AccountType.SellerPending, currency, ct);
+            var platformHoldingAccount = await GetOrCreateAccountWithLock(SystemPlatformId, AccountType.PlatformHolding, currency, ct);
+            var platformRevenueAccount = await GetOrCreateAccountWithLock(SystemPlatformId, AccountType.PlatformRevenue, currency, ct);
 
             // Double-entry bookkeeping:
             // All three balances increase when a payment arrives.
@@ -101,10 +102,9 @@ public class LedgerService : ILedgerService
         var refId = $"REFUND:{referenceId}";
 
         var dbContext = (DbContext)_context;
-        await using var tx = await dbContext.Database.BeginTransactionAsync(ct);
+        await using var tx = await dbContext.Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct);
         try
         {
-            // Idempotency check INSIDE the transaction to eliminate check-then-act race
             var alreadyProcessed = await _context.LedgerEntries.AnyAsync(e => e.ReferenceId == refId, ct);
             if (alreadyProcessed)
             {
@@ -129,14 +129,13 @@ public class LedgerService : ILedgerService
                 .Select(x => x.Account.Id)
                 .FirstOrDefaultAsync(ct);
 
+            // H6 Fix: FOR UPDATE on all accounts to prevent concurrent balance corruption
             var sellerAccount = creditedAccountId != Guid.Empty
-                ? await _context.LedgerAccounts.FirstOrDefaultAsync(a => a.Id == creditedAccountId, ct)
+                ? await LockAccountById(creditedAccountId, ct)
                 : null;
 
-            var platformHoldingAccount = await _context.LedgerAccounts
-                .FirstOrDefaultAsync(a => a.OwnerId == SystemPlatformId && a.Type == AccountType.PlatformHolding && a.Currency == currency, ct);
-            var platformRevenueAccount = await _context.LedgerAccounts
-                .FirstOrDefaultAsync(a => a.OwnerId == SystemPlatformId && a.Type == AccountType.PlatformRevenue && a.Currency == currency, ct);
+            var platformHoldingAccount = await LockAccount(SystemPlatformId, AccountType.PlatformHolding, currency, ct);
+            var platformRevenueAccount = await LockAccount(SystemPlatformId, AccountType.PlatformRevenue, currency, ct);
 
             if (sellerAccount == null || platformHoldingAccount == null || platformRevenueAccount == null)
             {
@@ -187,18 +186,70 @@ public class LedgerService : ILedgerService
         return account?.Balance ?? 0;
     }
 
-    private async Task<LedgerAccount> GetOrCreateAccountInTx(Guid ownerId, AccountType type, string currency, CancellationToken ct)
+    /// <summary>
+    /// C1 Fix: Loads account with FOR UPDATE lock to prevent concurrent balance corruption.
+    /// Creates the account if it doesn't exist (first credit for this owner/type/currency).
+    /// </summary>
+    private async Task<LedgerAccount> GetOrCreateAccountWithLock(Guid ownerId, AccountType type, string currency, CancellationToken ct)
     {
+        var dbContext = (DbContext)_context;
+        var typeInt = (int)type;
+
         var account = await _context.LedgerAccounts
-            .FirstOrDefaultAsync(a => a.OwnerId == ownerId && a.Type == type && a.Currency == currency, ct);
+            .FromSqlRaw(
+                """
+                SELECT *, xmin FROM payouts."LedgerAccounts"
+                WHERE "OwnerId" = {0} AND "Type" = {1} AND "Currency" = {2}
+                FOR UPDATE
+                """,
+                ownerId, typeInt, currency)
+            .FirstOrDefaultAsync(ct);
 
         if (account == null)
         {
             account = LedgerAccount.Create(ownerId, type, currency);
             _context.LedgerAccounts.Add(account);
-            // No SaveChangesAsync here — caller's transaction commits all at once
+            await _context.SaveChangesAsync(ct);
+
+            // Re-lock the newly created row
+            account = await _context.LedgerAccounts
+                .FromSqlRaw(
+                    """
+                    SELECT *, xmin FROM payouts."LedgerAccounts"
+                    WHERE "OwnerId" = {0} AND "Type" = {1} AND "Currency" = {2}
+                    FOR UPDATE
+                    """,
+                    ownerId, typeInt, currency)
+                .FirstAsync(ct);
         }
 
         return account;
+    }
+
+    private async Task<LedgerAccount?> LockAccount(Guid ownerId, AccountType type, string currency, CancellationToken ct)
+    {
+        var typeInt = (int)type;
+        return await _context.LedgerAccounts
+            .FromSqlRaw(
+                """
+                SELECT *, xmin FROM payouts."LedgerAccounts"
+                WHERE "OwnerId" = {0} AND "Type" = {1} AND "Currency" = {2}
+                FOR UPDATE
+                """,
+                ownerId, typeInt, currency)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    private async Task<LedgerAccount?> LockAccountById(Guid accountId, CancellationToken ct)
+    {
+        return await _context.LedgerAccounts
+            .FromSqlRaw(
+                """
+                SELECT *, xmin FROM payouts."LedgerAccounts"
+                WHERE "Id" = {0}
+                FOR UPDATE
+                """,
+                accountId)
+            .FirstOrDefaultAsync(ct);
     }
 }
