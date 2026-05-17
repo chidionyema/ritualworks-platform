@@ -8,13 +8,10 @@ namespace Haworks.Realtime.Api.Infrastructure.SignalR;
 /// <summary>
 /// SignalR hub for real-time push notifications.
 ///
-/// <para><b>At-most-once delivery (inbox flush):</b> On connect, pending messages are fetched
-/// from Redis and deleted atomically via <see cref="IInboxService.GetAndClearMessagesAsync"/>.
-/// Each message is then forwarded to the caller over SignalR. If the SignalR send fails after
-/// the Redis delete has already committed, those messages are permanently lost — they will not
-/// be retried. This is an intentional trade-off: real-time notifications are best-effort and
-/// transient. Consumers requiring guaranteed delivery must use a durable channel (e.g. polling
-/// the notification REST API).</para>
+/// <para><b>At-least-once delivery (get-then-ack):</b> On connect, pending messages are fetched
+/// from Redis without deletion. Only after all messages are successfully sent via SignalR is the
+/// inbox acknowledged (deleted). If the SignalR send fails, messages remain in the inbox for the
+/// next connection attempt.</para>
 /// </summary>
 [Authorize]
 public class NotificationHub : Hub
@@ -39,11 +36,26 @@ public class NotificationHub : Hub
         }
 
         _logger.LogInformation("User {UserId} connected. Flushing inbox.", userId);
-        var messages = await _inboxService.GetAndClearMessagesAsync(userId);
+
+        var messages = await _inboxService.GetMessagesAsync(userId);
+        if (messages.Count == 0)
+        {
+            await base.OnConnectedAsync();
+            return;
+        }
+
+        // Send all messages; only ack after all succeed.
         foreach (var msg in messages)
         {
+            _logger.LogInformation(
+                "Pushing message to user. UserId={UserId}, MessageId={MessageId}, MessageType={MessageType}, Success={Success}",
+                userId, msg.MessageId, msg.MessageType, true);
+
             await Clients.Caller.SendAsync("ReceiveNotification", msg);
         }
+
+        // All sends succeeded — acknowledge (delete) from inbox.
+        await _inboxService.AcknowledgeMessagesAsync(userId);
         await base.OnConnectedAsync();
     }
 }

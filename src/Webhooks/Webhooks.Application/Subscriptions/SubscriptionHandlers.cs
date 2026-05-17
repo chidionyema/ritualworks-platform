@@ -19,6 +19,7 @@ internal sealed class SubscriptionHandlers(
     IRequestHandler<GetWebhookSubscriptionQuery, Result<WebhookSubscriptionDto>>
 {
     private static readonly Error SubscriptionNotFound = Error.NotFound("Webhook.SubscriptionNotFound", "Webhook subscription not found.");
+    private static readonly Error HasPendingDeliveries = Error.Conflict("Webhook.HasPendingDeliveries", "Cannot change URL while deliveries are pending or in-flight.");
 
     public async Task<Result<Guid>> Handle(CreateWebhookSubscriptionCommand request, CancellationToken ct)
     {
@@ -52,6 +53,16 @@ internal sealed class SubscriptionHandlers(
         var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == request.Id && s.PartnerId == request.CallerPartnerId && s.DeletedAt == null, ct);
         if (sub == null) return Result.Failure<WebhookSubscriptionDto>(SubscriptionNotFound);
 
+        // Prevent URL changes while deliveries are pending or in-flight
+        if (!string.Equals(sub.Url, request.Url, StringComparison.Ordinal))
+        {
+            var hasPending = await db.Deliveries.AnyAsync(
+                d => d.SubscriptionId == sub.Id && (d.Status == Domain.DeliveryStatus.Pending || d.Status == Domain.DeliveryStatus.Failed),
+                ct);
+            if (hasPending)
+                return Result.Failure<WebhookSubscriptionDto>(HasPendingDeliveries);
+        }
+
         sub.Update(request.Url, request.Events, request.IsActive);
         await db.SaveChangesAsync(ct);
 
@@ -81,7 +92,8 @@ internal sealed class SubscriptionHandlers(
         sub.RotateSecret(secret, secretHash, secretPreview);
         await db.SaveChangesAsync(ct);
 
-        return Result.Success(secret);
+        var masked = secret.Length > 8 ? string.Concat(secret.AsSpan(0, 8), "...") : secret;
+        return Result.Success(masked);
     }
 
     public async Task<Result<WebhookSubscriptionDto>> Handle(GetWebhookSubscriptionQuery request, CancellationToken ct)

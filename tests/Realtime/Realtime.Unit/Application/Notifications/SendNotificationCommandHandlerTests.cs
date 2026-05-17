@@ -29,8 +29,8 @@ public class SendNotificationCommandHandlerTests
         _hubContextMock.Setup(x => x.Clients).Returns(clientsMock.Object);
 
         _handler = new SendNotificationCommandHandler(
-            _hubContextMock.Object, 
-            _inboxServiceMock.Object, 
+            _hubContextMock.Object,
+            _inboxServiceMock.Object,
             _loggerMock.Object);
     }
 
@@ -38,11 +38,11 @@ public class SendNotificationCommandHandlerTests
     public async Task Handle_Should_StoreMessageInInbox()
     {
         // Arrange
-        var command = new SendNotificationCommand 
-        { 
-            UserId = Guid.NewGuid(), 
-            MessageType = "Test", 
-            Data = new { foo = "bar" } 
+        var command = new SendNotificationCommand
+        {
+            UserId = Guid.NewGuid(),
+            MessageType = "Test",
+            Data = new { foo = "bar" }
         };
 
         // Act
@@ -51,8 +51,28 @@ public class SendNotificationCommandHandlerTests
         // Assert
         result.IsSuccess.Should().BeTrue();
         _inboxServiceMock.Verify(x => x.StoreMessageAsync(
-            command.UserId, 
-            It.IsAny<object>(), 
+            command.UserId,
+            It.IsAny<object>(),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_Should_SendViaSignalR()
+    {
+        // Arrange
+        var command = new SendNotificationCommand
+        {
+            UserId = Guid.NewGuid(),
+            MessageType = "OrderUpdated",
+            Data = new { orderId = "123" }
+        };
+
+        // Act
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        var clientsMock = Mock.Get(_hubContextMock.Object.Clients);
+        clientsMock.Verify(x => x.User(command.UserId.ToString()), Times.Once);
     }
 }

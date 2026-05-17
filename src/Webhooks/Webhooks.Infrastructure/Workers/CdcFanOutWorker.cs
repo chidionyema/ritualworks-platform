@@ -86,6 +86,7 @@ public class CdcFanOutWorker(
         // 1. Resolve subscriptions
         var subscriptions = await db.Subscriptions
             .Where(s => s.IsActive && s.DeletedAt == null && s.Events.Contains(externalEventName))
+            .OrderBy(s => s.Id)
             .Take(1000)
             .ToListAsync(ct);
 

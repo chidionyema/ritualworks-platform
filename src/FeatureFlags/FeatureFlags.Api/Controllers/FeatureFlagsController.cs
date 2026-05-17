@@ -39,4 +39,12 @@ public class FeatureFlagsController : ControllerBase
         var result = await _mediator.Send(command);
         return result.IsSuccess ? Ok() : BadRequest(result.Error);
     }
+
+    [HttpDelete("{flagName}")]
+    [Authorize(Roles = "admin")]
+    public async Task<IActionResult> Delete(string flagName)
+    {
+        var result = await _mediator.Send(new DeleteFlagCommand(flagName));
+        return result.IsSuccess ? NoContent() : BadRequest(result.Error);
+    }
 }

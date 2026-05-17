@@ -24,15 +24,26 @@ public class SendNotificationCommandHandler : IRequestHandler<SendNotificationCo
 
     public async Task<Result<Unit>> Handle(SendNotificationCommand request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Sending notification to user {UserId} of type {MessageType}", request.UserId, request.MessageType);
+        var messageId = Guid.NewGuid();
+        var success = false;
 
-        // Store in inbox for offline/reconnect support
-        await _inboxService.StoreMessageAsync(request.UserId, new { request.MessageType, request.Data }, cancellationToken);
+        try
+        {
+            // Store in inbox for offline/reconnect support
+            await _inboxService.StoreMessageAsync(request.UserId, new { request.MessageType, request.Data }, cancellationToken);
 
-        // Send via SignalR
-        await _hubContext.Clients.User(request.UserId.ToString())
-            .SendAsync("ReceiveNotification", new { request.MessageType, request.Data }, cancellationToken);
+            // Send via SignalR
+            await _hubContext.Clients.User(request.UserId.ToString())
+                .SendAsync("ReceiveNotification", new { MessageId = messageId, request.MessageType, request.Data }, cancellationToken);
 
-        return Result<Unit>.Success(Unit.Value);
+            success = true;
+            return Result<Unit>.Success(Unit.Value);
+        }
+        finally
+        {
+            _logger.LogInformation(
+                "Notification pushed. UserId={UserId}, MessageType={MessageType}, MessageId={MessageId}, Success={Success}",
+                request.UserId, request.MessageType, messageId, success);
+        }
     }
 }

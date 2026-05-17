@@ -59,6 +59,7 @@ builder.Services.AddMassTransit(mt =>
     }
 });
 
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddHealthChecks().AddDbHealthCheck<FeatureFlagsDbContext>();
 builder.Services.AddApplication();
 builder.Services.AddControllers();

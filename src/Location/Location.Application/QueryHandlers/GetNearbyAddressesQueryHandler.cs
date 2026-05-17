@@ -20,11 +20,14 @@ internal sealed class GetNearbyAddressesQueryHandler(ILocationDbContext dbContex
         if (request.RadiusMeters > 50000)
             return Result.Failure<IReadOnlyList<NearbyAddressDto>>(Error.Validation("Address.InvalidRadius", "RadiusMeters must not exceed 50000."));
 
+        var limit = Math.Clamp(request.Limit, 1, 100);
+
         var point = new Point(request.Lon, request.Lat) { SRID = 4326 };
-        
+
         var results = await dbContext.Addresses
             .Where(a => a.Coordinates.Distance(point) <= request.RadiusMeters)
             .OrderBy(a => a.Coordinates.Distance(point))
+            .Take(limit)
             .Select(a => new NearbyAddressDto(
                 a.Id,
                 a.Street,

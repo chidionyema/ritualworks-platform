@@ -28,7 +28,7 @@ public class OrderQueryHandlerTests
         
         _repositoryMock.Setup(r => r.GetByIdAsync(orderId, It.IsAny<CancellationToken>())).ReturnsAsync(order);
 
-        var result = await _getByIdHandler.Handle(new GetOrderByIdQuery(orderId), CancellationToken.None);
+        var result = await _getByIdHandler.Handle(new GetOrderByIdQuery(orderId, "user-123"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.TotalAmount.Should().Be(100m);

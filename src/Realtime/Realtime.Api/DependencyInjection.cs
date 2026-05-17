@@ -1,6 +1,8 @@
+using FluentValidation;
 using Haworks.BuildingBlocks.Behaviors;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Realtime.Api.Application.Common;
+using Haworks.Realtime.Api.Infrastructure.Health;
 using Haworks.Realtime.Api.Infrastructure.Messaging;
 using Haworks.Realtime.Api.Infrastructure.Persistence;
 using Haworks.Realtime.Api.Infrastructure.SignalR;
@@ -70,20 +72,7 @@ public static class DependencyInjection
 
         // Health checks — Redis readiness probe using IConnectionMultiplexer.
         services.AddHealthChecks()
-                .AddCheck("redis", sp =>
-                {
-                    try
-                    {
-                        var mux = sp.GetRequiredService<IConnectionMultiplexer>();
-                        return mux.IsConnected
-                            ? Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy()
-                            : Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Unhealthy("Redis not connected");
-                    }
-                    catch (Exception ex)
-                    {
-                        return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Unhealthy(ex.Message);
-                    }
-                }, tags: ["ready"]);
+                .AddCheck<RedisHealthCheck>("redis", tags: ["ready"]);
 
         return services;
     }

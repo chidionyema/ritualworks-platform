@@ -134,10 +134,6 @@ public sealed class KafkaFlushingService : BackgroundService
                         MaxRetries, @event.EventName);
                     AnalyticsMetrics.EventsDropped.Add(1);
                 }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
             }
         }
     }

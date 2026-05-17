@@ -14,4 +14,9 @@ public interface ITokenRevocationService
     /// Checks if a token has been revoked.
     /// </summary>
     Task<bool> IsTokenRevokedAsync(string tokenValue, CancellationToken ct = default);
+
+    /// <summary>
+    /// Checks if a token has been revoked (synchronous).
+    /// </summary>
+    bool IsTokenRevoked(string tokenValue);
 }

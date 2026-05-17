@@ -15,12 +15,21 @@ public sealed class PrivacyRequest : AuditableEntity
     
     public void Complete(Guid? contentId = null)
     {
+        if (Status == PrivacyRequestStatus.Completed)
+            throw new InvalidOperationException("Cannot complete an already-completed privacy request.");
+
         Status = PrivacyRequestStatus.Completed;
         ContentId = contentId;
         CompletedAt = DateTimeOffset.UtcNow;
     }
 
-    public void Fail() => Status = PrivacyRequestStatus.Failed;
+    public void Fail()
+    {
+        if (Status is PrivacyRequestStatus.Failed or PrivacyRequestStatus.Completed)
+            throw new InvalidOperationException("Cannot fail a privacy request that is already in a terminal state.");
+
+        Status = PrivacyRequestStatus.Failed;
+    }
 
     public static PrivacyRequest Create(Guid userId, PrivacyRequestType type)
     {

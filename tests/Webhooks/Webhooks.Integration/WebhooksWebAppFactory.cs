@@ -6,77 +6,54 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using Xunit;
+using Haworks.BuildingBlocks.Testing;
 using Haworks.BuildingBlocks.Testing.Authentication;
 using Haworks.BuildingBlocks.Testing.Containers;
 using Haworks.Webhooks.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using Moq.Protected;
-using System.Net;
-using System.Security.Claims;
-using System.Text.Encodings.Web;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace Haworks.Webhooks.Integration;
 
-/// <summary>
-/// Auth handler that provides a valid GUID partner_id claim for webhook ownership tests.
-/// </summary>
-internal sealed class WebhooksTestAuthHandler(
-    IOptionsMonitor<AuthenticationSchemeOptions> options,
-    ILoggerFactory logger,
-    UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
-{
-    public static readonly Guid TestPartnerId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
-
-    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
-    {
-        var claims = new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, TestPartnerId.ToString()),
-            new Claim("partner_id", TestPartnerId.ToString()),
-            new Claim(ClaimTypes.Name, "test-partner"),
-            new Claim(ClaimTypes.Role, "User"),
-            new Claim(ClaimTypes.Role, "Admin"),
-        };
-        var identity = new ClaimsIdentity(claims, TestAuthenticationHandler.SchemeName);
-        var principal = new ClaimsPrincipal(identity);
-        var ticket = new AuthenticationTicket(principal, TestAuthenticationHandler.SchemeName);
-        return Task.FromResult(AuthenticateResult.Success(ticket));
-    }
-}
-
 public class WebhooksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    private DatabaseResetter? _resetter;
     public string ConnectionString { get; private set; } = string.Empty;
     public string RabbitMqConnectionString { get; private set; } = string.Empty;
 
     public async Task InitializeAsync()
     {
         ConnectionString = await SharedTestPostgres.CreateDatabaseAsync("webhooks");
-        RabbitMqConnectionString = await SharedTestRabbitMq.GetConnectionStringAsync();
+        RabbitMqConnectionString = "amqp://guest:guest@localhost:5672/";
+        _resetter = new DatabaseResetter(ConnectionString);
+
         JwtTestDefaults.SetTestEnvironmentVariables();
 
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Test");
         Environment.SetEnvironmentVariable("ConnectionStrings__webhooks", ConnectionString);
         Environment.SetEnvironmentVariable("ConnectionStrings__rabbitmq", RabbitMqConnectionString);
         Environment.SetEnvironmentVariable("Vault__Enabled", "false");
+        Environment.SetEnvironmentVariable("Kafka__Enabled", "false");
         Environment.SetEnvironmentVariable("Kafka__BootstrapServers", "localhost:9092");
         Environment.SetEnvironmentVariable("Kafka__GroupId", "webhooks-svc-cdc-test");
 
         // Force host build so Services are available, then apply schema
         _ = Services;
+        await EnsureSchemaAsync();
+    }
+
+    public async Task EnsureSchemaAsync()
+    {
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<WebhooksDbContext>();
         await db.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS webhooks;");
-        // EnsureCreatedAsync returns false when DB has Hangfire/other tables.
-        // CreateTablesAsync creates only the model's tables regardless.
-        var creator = db.Database.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalDatabaseCreator>();
+        
+        var creator = db.Database.GetService<IRelationalDatabaseCreator>();
         try { await creator.CreateTablesAsync(); }
         catch (Npgsql.PostgresException ex) when (string.Equals(ex.SqlState, "42P07", StringComparison.Ordinal)) { /* tables already exist */ }
     }
+
+    public Task ResetDatabaseAsync() => _resetter!.ResetAsync();
 
     async Task IAsyncLifetime.DisposeAsync()
     {
@@ -94,43 +71,18 @@ public class WebhooksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
                 ["ConnectionStrings:webhooks"] = ConnectionString,
                 ["ConnectionStrings:rabbitmq"] = RabbitMqConnectionString,
                 ["Vault:Enabled"] = "false",
-                ["Kafka:BootstrapServers"] = "localhost:9092",
-                ["Kafka:GroupId"] = "webhooks-svc-cdc-test",
+                ["Kafka:Enabled"] = "false",
             });
         });
 
         builder.ConfigureTestServices(services =>
         {
-            // Suppress PendingModelChangesWarning so EnsureCreatedAsync works
-            services.AddDbContext<WebhooksDbContext>((sp, options) =>
-            {
-                var connStr = sp.GetRequiredService<IConfiguration>().GetConnectionString("webhooks");
-                options.UseNpgsql(connStr);
-                options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
-            });
-
-            services.AddAuthentication(TestAuthenticationHandler.SchemeName)
-                .AddScheme<AuthenticationSchemeOptions, WebhooksTestAuthHandler>(
-                    TestAuthenticationHandler.SchemeName, _ => { });
-
-            // Mock HttpClient for WebhookValidator
-            var mockHandler = new Mock<HttpMessageHandler>();
-            mockHandler.Protected()
-                .Setup<Task<HttpResponseMessage>>(
-                    "SendAsync",
-                    ItExpr.IsAny<HttpRequestMessage>(),
-                    ItExpr.IsAny<CancellationToken>())
-                .ReturnsAsync(new HttpResponseMessage
-                {
-                    StatusCode = HttpStatusCode.OK
-                });
-
-            var httpClient = new HttpClient(mockHandler.Object);
-            
+            var httpClient = new HttpClient();
             var mockFactory = new Mock<IHttpClientFactory>();
             mockFactory.Setup(_ => _.CreateClient(It.IsAny<string>())).Returns(httpClient);
             
             services.AddSingleton(mockFactory.Object);
+            services.AddAuthentication(TestAuthenticationHandler.SchemeName).AddTestAuth();
         });
     }
 }

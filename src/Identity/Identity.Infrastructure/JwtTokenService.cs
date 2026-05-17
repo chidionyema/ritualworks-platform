@@ -95,19 +95,19 @@ public class JwtTokenService : IJwtTokenService
             var validationParameters = GetTokenValidationParameters(validateLifetime);
             var principal = tokenHandler.ValidateToken(tokenString, validationParameters, out _);
 
-            _logger.LogDebug("Token signature validated for {User}",
-                principal?.Identity?.Name ?? "unknown");
-
-            // Check revocation. IsTokenRevokedAsync is safe to block here: ASP.NET Core
-            // runs on thread-pool threads (no SynchronizationContext), so GetAwaiter().GetResult()
-            // cannot deadlock. Prefer ValidateTokenAsync for callers that are already async.
-            var jti = principal?.FindFirstValue(JwtRegisteredClaimNames.Jti);
-            if (!string.IsNullOrEmpty(jti) &&
-                _revocationService.IsTokenRevokedAsync(jti).GetAwaiter().GetResult())
+            // Extract JTI for revocation check
+            var jti = principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+            if (!string.IsNullOrEmpty(jti))
             {
-                _logger.LogWarning("Token {Jti} has been revoked", jti);
-                return null;
+                if (_revocationService.IsTokenRevoked(jti))
+                {
+                    _logger.LogWarning("Token {Jti} has been revoked (sync check)", jti);
+                    return null;
+                }
             }
+
+            _logger.LogDebug("Token signature and revocation validated for {User}",
+                principal?.Identity?.Name ?? "unknown");
 
             return principal;
         }

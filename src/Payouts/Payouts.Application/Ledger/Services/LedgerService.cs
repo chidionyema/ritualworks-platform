@@ -37,19 +37,19 @@ public class LedgerService : ILedgerService
     {
         if (amount <= 0) throw new ArgumentException("Amount must be positive", nameof(amount));
 
-        // Idempotency: if entries already exist for this reference, skip
-        var alreadyProcessed = await _context.LedgerEntries
-            .AnyAsync(e => e.ReferenceId == referenceId.ToString(), ct);
-        if (alreadyProcessed)
-        {
-            _logger.LogInformation("Ledger credit for reference {ReferenceId} already processed — skipping", referenceId);
-            return;
-        }
-
         var dbContext = (DbContext)_context;
         await using var tx = await dbContext.Database.BeginTransactionAsync(ct);
         try
         {
+            // Idempotency check INSIDE the transaction to eliminate check-then-act race
+            var alreadyProcessed = await _context.LedgerEntries
+                .AnyAsync(e => e.ReferenceId == referenceId.ToString(), ct);
+            if (alreadyProcessed)
+            {
+                _logger.LogInformation("Ledger credit for reference {ReferenceId} already processed — skipping", referenceId);
+                await tx.RollbackAsync(ct);
+                return;
+            }
             var profile = await _context.SellerProfiles.FirstOrDefaultAsync(p => p.SellerId == sellerId, ct);
             var commissionRate = profile?.CommissionPercentage ?? 10.00m;
             var commission = Math.Round(amount * commissionRate / 100m, 2, MidpointRounding.AwayFromZero);
@@ -97,17 +97,20 @@ public class LedgerService : ILedgerService
         if (amount <= 0) throw new ArgumentException("Amount must be positive", nameof(amount));
 
         var refId = $"REFUND:{referenceId}";
-        var alreadyProcessed = await _context.LedgerEntries.AnyAsync(e => e.ReferenceId == refId, ct);
-        if (alreadyProcessed)
-        {
-            _logger.LogInformation("Ledger debit for reference {ReferenceId} already processed — skipping", referenceId);
-            return;
-        }
 
         var dbContext = (DbContext)_context;
         await using var tx = await dbContext.Database.BeginTransactionAsync(ct);
         try
         {
+            // Idempotency check INSIDE the transaction to eliminate check-then-act race
+            var alreadyProcessed = await _context.LedgerEntries.AnyAsync(e => e.ReferenceId == refId, ct);
+            if (alreadyProcessed)
+            {
+                _logger.LogInformation("Ledger debit for reference {ReferenceId} already processed — skipping", referenceId);
+                await tx.RollbackAsync(ct);
+                return;
+            }
+
             var profile = await _context.SellerProfiles.FirstOrDefaultAsync(p => p.SellerId == sellerId, ct);
             var commissionRate = profile?.CommissionPercentage ?? 10.00m;
             var commission = Math.Round(amount * commissionRate / 100m, 2, MidpointRounding.AwayFromZero);
@@ -115,11 +118,18 @@ public class LedgerService : ILedgerService
 
             var transactionId = Guid.NewGuid();
 
-            // Try pending first, then payable
-            var sellerAccount = await _context.LedgerAccounts
-                .FirstOrDefaultAsync(a => a.OwnerId == sellerId && a.Type == AccountType.SellerPending && a.Currency == currency, ct)
-                ?? await _context.LedgerAccounts
-                .FirstOrDefaultAsync(a => a.OwnerId == sellerId && a.Type == AccountType.SellerPayable && a.Currency == currency, ct);
+            // Deterministic: find the account that was originally credited for this reference
+            var creditedAccountId = await _context.LedgerEntries
+                .Where(e => e.ReferenceId == referenceId.ToString())
+                .Join(_context.LedgerAccounts, e => e.AccountId, a => a.Id, (e, a) => new { Entry = e, Account = a })
+                .Where(x => x.Account.OwnerId == sellerId &&
+                             (x.Account.Type == AccountType.SellerPending || x.Account.Type == AccountType.SellerPayable))
+                .Select(x => x.Account.Id)
+                .FirstOrDefaultAsync(ct);
+
+            var sellerAccount = creditedAccountId != Guid.Empty
+                ? await _context.LedgerAccounts.FirstOrDefaultAsync(a => a.Id == creditedAccountId, ct)
+                : null;
 
             var platformHoldingAccount = await _context.LedgerAccounts
                 .FirstOrDefaultAsync(a => a.OwnerId == SystemPlatformId && a.Type == AccountType.PlatformHolding && a.Currency == currency, ct);

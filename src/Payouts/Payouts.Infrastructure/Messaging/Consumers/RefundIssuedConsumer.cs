@@ -1,6 +1,7 @@
 using Haworks.Contracts.Payments;
 using Haworks.Payouts.Application.Common.Interfaces;
 using Haworks.Payouts.Application.Ledger.Services;
+using Haworks.Payouts.Domain.Enums;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -33,30 +34,25 @@ public class RefundIssuedConsumer : IConsumer<RefundIssuedEvent>
         _logger.LogInformation("Processing refund for Payment {PaymentId}, Order {OrderId}, Amount: {Amount}",
             evt.PaymentId, evt.OrderId, refundAmount);
 
-        // Find the seller by looking up the original credit entry for this payment
-        var originalEntry = await _context.LedgerEntries
+        // Deterministic lookup: filter to seller accounts only (SellerPending or SellerPayable)
+        var sellerEntry = await _context.LedgerEntries
             .AsNoTracking()
-            .FirstOrDefaultAsync(e => e.ReferenceId == evt.PaymentId.ToString(), context.CancellationToken);
+            .Where(e => e.ReferenceId == evt.PaymentId.ToString())
+            .Join(_context.LedgerAccounts, e => e.AccountId, a => a.Id, (e, a) => new { Entry = e, Account = a })
+            .Where(x => x.Account.Type == AccountType.SellerPending || x.Account.Type == AccountType.SellerPayable)
+            .Select(x => new { x.Account.OwnerId, x.Account.Type })
+            .FirstOrDefaultAsync(context.CancellationToken);
 
-        if (originalEntry == null)
+        if (sellerEntry == null)
         {
-            _logger.LogWarning("No ledger entry found for PaymentId {PaymentId} — cannot reverse credit", evt.PaymentId);
+            _logger.LogWarning("No seller ledger entry found for PaymentId {PaymentId} — cannot reverse credit", evt.PaymentId);
             return;
         }
 
-        // Find the seller account from the entry
-        var sellerAccount = await _context.LedgerAccounts
-            .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.Id == originalEntry.AccountId, context.CancellationToken);
-
-        if (sellerAccount == null)
-        {
-            _logger.LogWarning("No seller account found for entry {EntryId}", originalEntry.Id);
-            return;
-        }
-
+        // DebitSellerAsync internally prefixes refId with "REFUND:" so the reference key
+        // is distinct from the original credit entry's reference.
         await _ledgerService.DebitSellerAsync(
-            sellerAccount.OwnerId,
+            sellerEntry.OwnerId,
             refundAmount,
             evt.Currency,
             evt.PaymentId,

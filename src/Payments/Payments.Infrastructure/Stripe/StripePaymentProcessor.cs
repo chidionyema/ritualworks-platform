@@ -5,6 +5,7 @@ using Haworks.Payments.Application.Common;
 using Haworks.Payments.Application.Interfaces;
 using Haworks.Payments.Domain;
 using Haworks.Payments.Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Polly;
 using Stripe.Checkout;
@@ -114,7 +115,14 @@ internal sealed class StripePaymentProcessor(
         }
 
         // 5. Atomic payment completion
-        await CompletePaymentAsync(sessionEvent, payment, ct).ConfigureAwait(false);
+        try
+        {
+            await CompletePaymentAsync(sessionEvent, payment, ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            logger.LogWarning(ex, "Concurrency conflict processing session {SessionId} — duplicate webhook, safely ignoring", sessionEvent.SessionId);
+        }
     }
 
     /// <inheritdoc />
@@ -154,10 +162,11 @@ internal sealed class StripePaymentProcessor(
             return false;
         }
 
-        // Verify with Stripe API using resilience policy
-        return await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
+        // Verify with Stripe API using resilience policy.
+        // Let transient exceptions (5xx, 429, network) propagate to Polly for retry.
+        try
         {
-            try
+            return await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
             {
                 var client = await stripeClientFactory.GetClientAsync(token).ConfigureAwait(false);
                 var session = await new SessionService(client).GetAsync(sessionId, cancellationToken: token).ConfigureAwait(false);
@@ -178,13 +187,14 @@ internal sealed class StripePaymentProcessor(
 
                 await sessionCache.SetAsync(sessionId, payment.OrderId, payment.UserId, token).ConfigureAwait(false);
                 return true;
-            }
-            catch (global::Stripe.StripeException ex)
-            {
-                logger.LogError(ex, "Stripe API error validating session {SessionId}", sessionId);
-                return false;
-            }
-        }, new Context(), ct);
+            }, new Context(), ct);
+        }
+        catch (global::Stripe.StripeException ex) when (IsNonTransientStripeError(ex))
+        {
+            // Non-transient client errors (4xx except 429) — return false after Polly gives up
+            logger.LogError(ex, "Non-transient Stripe error validating session {SessionId}", sessionId);
+            return false;
+        }
     }
 
     private async Task CompletePaymentAsync(
@@ -256,6 +266,17 @@ internal sealed class StripePaymentProcessor(
         }
 
         return string.Equals(sessionOrderId, payment.OrderId.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Returns true for non-transient Stripe errors (4xx except 429 rate-limit).
+    /// </summary>
+    private static bool IsNonTransientStripeError(global::Stripe.StripeException ex)
+    {
+        var code = ex.HttpStatusCode;
+        return code >= System.Net.HttpStatusCode.BadRequest
+            && code < System.Net.HttpStatusCode.InternalServerError
+            && code != (System.Net.HttpStatusCode)429;
     }
 
     private void TrackPaymentCompleted(Guid orderId, Payment payment, PaymentSessionEvent sessionEvent)

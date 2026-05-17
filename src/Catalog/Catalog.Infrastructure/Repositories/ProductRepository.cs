@@ -119,6 +119,7 @@ internal sealed class ProductRepository(CatalogDbContext db) : IProductRepositor
                     var available = await db.Products
                         .AsNoTracking()
                         .Where(p => p.Id == item.ProductId)
+                        .OrderBy(p => p.Id)
                         .Select(p => (int?)p.StockQuantity)
                         .FirstOrDefaultAsync(ct) ?? 0;
 

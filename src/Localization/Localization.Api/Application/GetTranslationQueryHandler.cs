@@ -44,16 +44,16 @@ public class GetTranslationQueryHandler : IRequestHandler<GetTranslationQuery, R
         return Result.Failure<string>(Error.NotFound("Translation.ValueNotFound", $"Translation for key '{request.Key}' and locale '{request.Locale}' (and fallbacks) not found."));
     }
 
-    private IEnumerable<string> GetLocaleHierarchy(string locale)
+    private static IEnumerable<string> GetLocaleHierarchy(string locale)
     {
         yield return locale;
 
-        if (locale.Contains('-'))
+        if (locale.Contains('-', StringComparison.Ordinal))
         {
             yield return locale.Split('-')[0];
         }
 
-        if (locale != DefaultLocale)
+        if (!string.Equals(locale, DefaultLocale, StringComparison.OrdinalIgnoreCase))
         {
             yield return DefaultLocale;
         }

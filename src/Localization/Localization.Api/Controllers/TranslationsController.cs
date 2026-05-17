@@ -24,4 +24,14 @@ public class TranslationsController : ControllerBase
         var result = await _mediator.Send(new GetTranslationQuery(key, locale));
         return result.ToActionResult();
     }
+
+    [HttpPut("{key}")]
+    public async Task<IActionResult> Upsert(string key, [FromBody] UpsertTranslationRequest request)
+    {
+        var userId = User.FindFirst("sub")?.Value ?? "anonymous";
+        var result = await _mediator.Send(new UpsertTranslationCommand(key, request.Locale, request.Value, userId));
+        return result.ToActionResult();
+    }
 }
+
+public sealed record UpsertTranslationRequest(string Locale, string Value);

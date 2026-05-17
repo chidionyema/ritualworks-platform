@@ -2,5 +2,11 @@ namespace Haworks.Scheduler.Application.Common.Interfaces;
 
 public interface IEventScheduler
 {
-    Task ScheduleEventAsync(DateTimeOffset scheduledTime, string targetExchange, string routingKey, string payload);
+    Task<string> ScheduleEventAsync(
+        string idempotencyKey,
+        DateTimeOffset scheduledTime,
+        string targetExchange,
+        string routingKey,
+        string payload,
+        string? scheduledBy);
 }

@@ -27,12 +27,20 @@ public class PrivacyDbContext : DbContext, IPrivacyDbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.UserId);
+            entity.Property<uint>("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
         });
 
         builder.Entity<PrivacyRequestStep>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.RequestId);
+            entity.Property<uint>("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
         });
 
         builder.Entity<PrivacyRequestState>(entity =>

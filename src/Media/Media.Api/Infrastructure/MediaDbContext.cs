@@ -15,6 +15,7 @@ public class MediaDbContext : DbContext
         modelBuilder.Entity<MediaFile>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.HasQueryFilter(f => !f.IsDeleted);
             entity.Property(e => e.FileName).IsRequired().HasMaxLength(255);
             entity.Property(e => e.Hash).IsRequired().HasMaxLength(64);
             // Unique index scoped per owner — different users may upload the same file
@@ -26,6 +27,11 @@ public class MediaDbContext : DbContext
             entity.Property(e => e.PartCount).HasDefaultValue(0);
             entity.Property(e => e.OwnerId).IsRequired().HasMaxLength(128);
             entity.HasIndex(e => e.OwnerId);
+
+            entity.Property(e => e.IsDeleted).HasDefaultValue(false);
+            entity.Property(e => e.DeletedAt);
+            entity.Property(e => e.UpdatedAt);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(128);
 
             entity.Property<uint>("xmin")
                 .HasColumnType("xid")

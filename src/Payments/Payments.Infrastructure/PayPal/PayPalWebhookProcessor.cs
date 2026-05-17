@@ -126,14 +126,15 @@ internal sealed class PayPalWebhookProcessor(
         }
     }
 
-    private Task<bool> ValidateSignatureWithPayPalAsync(
+    private async Task<bool> ValidateSignatureWithPayPalAsync(
         string payload,
         PayPalSignatureHeaders headers,
         CancellationToken ct)
     {
-        return _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
+        // Let transient exceptions propagate to Polly for retry.
+        try
         {
-            try
+            return await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
             {
                 var client = await clientFactory.GetAuthenticatedClientAsync(token);
 
@@ -156,9 +157,17 @@ internal sealed class PayPalWebhookProcessor(
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    var errorBody = await response.Content.ReadAsStringAsync(token);
-                    logger.LogError("PayPal signature verification failed: {Body}", errorBody);
-                    return false;
+                    var code = (int)response.StatusCode;
+                    if (code >= 400 && code < 500 && code != 429)
+                    {
+                        // Non-transient client error: signature invalid, no retry will help
+                        var errorBody = await response.Content.ReadAsStringAsync(token);
+                        logger.LogError("PayPal signature verification failed (non-transient): {Body}", errorBody);
+                        return false;
+                    }
+
+                    // Transient server error: throw so Polly retries
+                    response.EnsureSuccessStatusCode();
                 }
 
                 var result = await response.Content.ReadFromJsonAsync<PayPalVerifySignatureResponse>(
@@ -166,13 +175,14 @@ internal sealed class PayPalWebhookProcessor(
                     token);
 
                 return result?.VerificationStatus?.Equals(PayPalVerificationStatuses.Success, StringComparison.OrdinalIgnoreCase) == true;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "PayPal signature verification exception");
-                return false;
-            }
-        }, new Context(), ct);
+            }, new Context(), ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            // Polly exhausted retries for transient errors
+            logger.LogError(ex, "PayPal signature verification failed after retries exhausted");
+            return false;
+        }
     }
 
     private async Task<WebhookProcessingResult> HandleCaptureCompletedAsync(PaymentWebhookEvent webhookEvent, CancellationToken ct)

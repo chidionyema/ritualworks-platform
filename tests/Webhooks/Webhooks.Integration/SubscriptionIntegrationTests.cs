@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Haworks.Webhooks.Application.Subscriptions;
@@ -6,16 +7,21 @@ using Xunit;
 namespace Haworks.Webhooks.Integration;
 
 [Collection("Integration Tests")]
-public class SubscriptionIntegrationTests(WebhooksWebAppFactory factory) : IClassFixture<WebhooksWebAppFactory>
+public class SubscriptionIntegrationTests(WebhooksWebAppFactory factory) : IClassFixture<WebhooksWebAppFactory>, IAsyncLifetime
 {
     private readonly HttpClient _client = factory.CreateClient();
+    private static readonly Guid TestPartnerId = Guid.Parse("00000000-0000-0000-0000-000000000123");
+
+    public Task InitializeAsync() => factory.ResetDatabaseAsync();
+
+    public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
     public async Task Create_Subscription_Should_Persist_To_Database()
     {
         // Arrange
         var request = new CreateWebhookSubscriptionRequest(
-            PartnerId: WebhooksTestAuthHandler.TestPartnerId,
+            PartnerId: TestPartnerId,
             Url: "https://partner.com/webhook",
             Events: ["order.created"],
             Secret: "super-secret"
@@ -34,7 +40,7 @@ public class SubscriptionIntegrationTests(WebhooksWebAppFactory factory) : IClas
         var sub = await getResponse.Content.ReadFromJsonAsync<WebhookSubscriptionDto>();
         
         sub.Should().NotBeNull();
-        sub!.PartnerId.Should().Be(WebhooksTestAuthHandler.TestPartnerId);
+        sub!.PartnerId.Should().Be(TestPartnerId);
         sub.Url.Should().Be(request.Url);
         sub.Events.Should().BeEquivalentTo(request.Events);
         sub.SecretPreview.Should().Be("cret"); // last 4 chars of super-secret

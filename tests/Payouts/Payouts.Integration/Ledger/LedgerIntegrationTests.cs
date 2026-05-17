@@ -21,7 +21,11 @@ public class LedgerIntegrationTests : IAsyncLifetime
         _ledgerService = _scope.ServiceProvider.GetRequiredService<ILedgerService>();
     }
 
-    public Task InitializeAsync() => _factory.EnsureSchemaAsync();
+    public async Task InitializeAsync()
+    {
+        await _factory.EnsureSchemaAsync();
+        await _factory.ResetDatabaseAsync();
+    }
     public Task DisposeAsync() { _scope.Dispose(); return Task.CompletedTask; }
 
     [Fact]

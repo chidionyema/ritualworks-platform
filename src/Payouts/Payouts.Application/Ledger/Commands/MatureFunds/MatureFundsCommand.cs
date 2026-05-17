@@ -23,13 +23,12 @@ public class MatureFundsCommandHandler : IRequestHandler<MatureFundsCommand>
     public async Task Handle(MatureFundsCommand request, CancellationToken cancellationToken)
     {
         var pendingAccounts = await _context.LedgerAccounts
-            .Where(a => a.Type == AccountType.SellerPending && a.Balance > 0)
-            .Take(500)
+            .FromSqlRaw(@"SELECT * FROM payouts.""LedgerAccounts"" WHERE ""Type"" = {0} AND ""Balance"" > 0 ORDER BY ""Id"" ASC FOR UPDATE SKIP LOCKED LIMIT 500", (int)AccountType.SellerPending)
             .ToListAsync(cancellationToken);
 
         if (pendingAccounts.Count == 0) return;
 
-        var ownerIds = pendingAccounts.Select(a => a.OwnerId).ToList();
+        var ownerIds = pendingAccounts.Select(a => a.OwnerId).Distinct().ToList();
         var payableAccounts = await _context.LedgerAccounts
             .Where(a => ownerIds.Contains(a.OwnerId) && a.Type == AccountType.SellerPayable)
             .ToDictionaryAsync(a => (a.OwnerId, a.Currency), cancellationToken);

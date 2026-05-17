@@ -14,7 +14,7 @@ namespace Haworks.RulesEngine.Api.Infrastructure;
 /// Restricts Dynamic LINQ to primitive types only — prevents access to File, Process,
 /// Environment, and any other dangerous BCL type via expression injection.
 /// </summary>
-internal sealed class SafeTypeProvider : IDynamicLinkCustomTypeProvider
+internal sealed class SafeTypeProvider : IDynamicLinqCustomTypeProvider
 {
     private static readonly HashSet<Type> AllowedTypes =
     [
@@ -76,17 +76,7 @@ public class RulesEvaluator : IRulesEvaluator
             foreach (var kv in inputs)
                 trace.Append($"{kv.Key}={kv.Value} ");
 
-            // Build a typed parameter list for Dynamic LINQ
-            // We project inputs into a flat anonymous-like object using DynamicClass
-            var paramNames = inputs.Keys.ToArray();
-            var paramValues = inputs.Values.ToArray();
-
             // Use Dynamic LINQ to parse and evaluate the boolean expression
-            // We create a queryable of a single anonymous object containing all inputs
-            var dataSource = new[] { inputs }.AsQueryable();
-
-            // Transform the expression to reference dictionary access
-            // E.g. "age > 18" becomes accessing inputs["age"] > 18
             bool outcome;
             try
             {
@@ -105,7 +95,7 @@ public class RulesEvaluator : IRulesEvaluator
                     new[] { parameter },
                     typeof(bool),
                     TransformExpression(rule.Expression, inputs),
-                    BuildDynamicArgs(inputs));
+                    []);
 
                 var compiled = (Func<Dictionary<string, object>, bool>)lambdaExpression.Compile();
                 outcome = compiled(inputs);
@@ -207,11 +197,11 @@ public class RulesEvaluator : IRulesEvaluator
             return Error.Validation("RulesEngine.ExpressionTooLong",
                 "Rule expression must be 4000 characters or fewer.");
 
-        foreach (var token in ForbiddenTokens)
+        var forbiddenToken = ForbiddenTokens.FirstOrDefault(token => expression.Contains(token, StringComparison.OrdinalIgnoreCase));
+        if (forbiddenToken != null)
         {
-            if (expression.Contains(token, StringComparison.OrdinalIgnoreCase))
-                return Error.Validation("RulesEngine.InvalidExpression",
-                    $"Expression contains a forbidden token: '{token}'.");
+            return Error.Validation("RulesEngine.InvalidExpression",
+                $"Expression contains a forbidden token: '{forbiddenToken}'.");
         }
 
         return null;

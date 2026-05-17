@@ -27,6 +27,7 @@ public class SchedulerIntegrationTests : IClassFixture<SchedulerWebAppFactory>
     {
         // Arrange
         var command = new ScheduleEventCommand(
+            "integration-test-key-1",
             DateTimeOffset.UtcNow.AddDays(1),
             "test-exchange",
             "test.key",

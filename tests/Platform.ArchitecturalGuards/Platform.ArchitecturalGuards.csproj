@@ -24,6 +24,7 @@
     <ProjectReference Include="../../src/Payments/Payments.Infrastructure/Payments.Infrastructure.csproj" />
     <ProjectReference Include="../../src/Payouts/Payouts.Domain/Payouts.Domain.csproj" />
     <ProjectReference Include="../../src/Payouts/Payouts.Application/Payouts.Application.csproj" />
+    <ProjectReference Include="../../src/Payouts/Payouts.Infrastructure/Payouts.Infrastructure.csproj" />
     <ProjectReference Include="../../src/BuildingBlocks/Haworks.BuildingBlocks.csproj" />
   </ItemGroup>
 

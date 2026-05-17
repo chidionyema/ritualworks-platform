@@ -71,11 +71,10 @@ public class CreateAddressCommandHandler(
         };
 
         dbContext.Addresses.Add(address);
-        
-        // SaveChangesAsync triggers the EF Core Outbox
-        await dbContext.SaveChangesAsync(cancellationToken);
 
-        // Publish event to RabbitMQ via the outbox.
+        // Publish BEFORE save — outbox-friendly. The OutboxMessage row commits
+        // in the same EF transaction as the address insert; on rollback the
+        // publish is rolled back too.
         await publisher.PublishAsync(new LocationUpdated
         {
             LocationId = address.Id,
@@ -90,6 +89,8 @@ public class CreateAddressCommandHandler(
             Longitude = lon,
             Geohash = address.Geohash
         }, cancellationToken);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         return Result.Success(address.Id);
     }

@@ -86,6 +86,7 @@ dotnet_diagnostic.MA0048.severity = none        # File scoped namespace
 dotnet_diagnostic.MA0049.severity = none        # Type should be sealed
 dotnet_diagnostic.MA0051.severity = none        # Method too long — we'll enable selectively later
 dotnet_diagnostic.MA0053.severity = none        # Sealed attribute
+dotnet_diagnostic.MA0056.severity = none        # EF Core DbContext ChangeTracker in constructor is safe and required
 dotnet_diagnostic.MA0097.severity = none        # Class that implements IComparable
 dotnet_diagnostic.MA0134.severity = none        # Observe result of async
 

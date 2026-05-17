@@ -16,7 +16,7 @@ public class OrderStatusChangedConsumer : IConsumer<OrderStatusChanged>
         _logger = logger;
     }
 
-    public async Task Consume(ConsumeContext<OrderStatusChanged> context)
+    public Task Consume(ConsumeContext<OrderStatusChanged> context)
     {
         var @event = context.Message;
         _logger.LogInformation("Consumed OrderStatusChanged event for Order {OrderId}", @event.OrderId);
@@ -33,6 +33,6 @@ public class OrderStatusChangedConsumer : IConsumer<OrderStatusChanged>
             }
         };
 
-        await _sender.Send(command);
+        return _sender.Send(command);
     }
 }

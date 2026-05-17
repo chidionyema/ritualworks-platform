@@ -52,6 +52,8 @@ public class PayoutsDbContext : DbContext, IPayoutsDbContext
             entity.Property(e => e.Currency).HasMaxLength(3);
             entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
             entity.Property(e => e.ExternalReference).HasMaxLength(500);
+            entity.Property(e => e.TransitReference).HasMaxLength(500);
+            entity.Property<uint>("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
         });
 
         builder.Entity<SellerProfile>(entity =>

@@ -37,17 +37,27 @@ internal sealed class PayPalSubscriptionManager(
             return new SubscriptionStatusResult { IsActive = false, Provider = PaymentProvider.PayPal };
         }
 
-        return await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
+        // Let transient exceptions propagate to Polly for retry.
+        try
         {
-            try
+            return await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
             {
                 var client = await clientFactory.GetAuthenticatedClientAsync(token);
                 var response = await client.GetAsync(PayPalEndpoints.GetSubscription(subscription.ProviderSubscriptionId), token);
-                
+
                 if (!response.IsSuccessStatusCode)
                 {
-                    logger.LogWarning("Failed to fetch PayPal subscription {SubscriptionId} for status check", subscription.ProviderSubscriptionId);
-                    return MapToStatusResult(subscription);
+                    var code = (int)response.StatusCode;
+                    if (code >= 400 && code < 500 && code != 429)
+                    {
+                        // Non-transient client error: return local data without retry
+                        logger.LogWarning("Non-transient error fetching PayPal subscription {SubscriptionId}: {StatusCode}",
+                            subscription.ProviderSubscriptionId, response.StatusCode);
+                        return MapToStatusResult(subscription);
+                    }
+
+                    // Transient server error: throw so Polly retries
+                    response.EnsureSuccessStatusCode();
                 }
 
                 var paypalSub = await response.Content.ReadFromJsonAsync<PayPalSubscriptionResponse>(PayPalJsonOptions.Default, token);
@@ -70,13 +80,15 @@ internal sealed class PayPalSubscriptionManager(
                     CanceledAt = subscription.CanceledAt,
                     Provider = PaymentProvider.PayPal
                 };
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error verifying PayPal subscription {SubscriptionId}", subscription.ProviderSubscriptionId);
-                return MapToStatusResult(subscription);
-            }
-        }, new Context(), ct);
+            }, new Context(), ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            // Polly exhausted retries for transient errors — fall back to local data
+            logger.LogError(ex, "Error verifying PayPal subscription {SubscriptionId} after retries exhausted",
+                subscription.ProviderSubscriptionId);
+            return MapToStatusResult(subscription);
+        }
     }
 
     /// <inheritdoc />

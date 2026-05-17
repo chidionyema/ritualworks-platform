@@ -12,6 +12,7 @@ public sealed class ScheduleEventCommandValidatorTests
     public void Valid_command_passes()
     {
         var command = new ScheduleEventCommand(
+            "idem-key-001",
             DateTimeOffset.UtcNow.AddHours(1),
             "test-exchange",
             "test.routing.key",
@@ -26,6 +27,7 @@ public sealed class ScheduleEventCommandValidatorTests
     public void Past_scheduled_time_fails()
     {
         var command = new ScheduleEventCommand(
+            "idem-key-002",
             DateTimeOffset.UtcNow.AddHours(-1),
             "exchange",
             "key",
@@ -40,6 +42,7 @@ public sealed class ScheduleEventCommandValidatorTests
     public void Invalid_json_payload_fails()
     {
         var command = new ScheduleEventCommand(
+            "idem-key-003",
             DateTimeOffset.UtcNow.AddHours(1),
             "exchange",
             "key",
@@ -54,6 +57,7 @@ public sealed class ScheduleEventCommandValidatorTests
     public void Empty_exchange_fails()
     {
         var command = new ScheduleEventCommand(
+            "idem-key-004",
             DateTimeOffset.UtcNow.AddHours(1),
             "",
             "key",
@@ -62,5 +66,37 @@ public sealed class ScheduleEventCommandValidatorTests
         var result = _sut.Validate(command);
 
         result.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Empty_idempotency_key_fails()
+    {
+        var command = new ScheduleEventCommand(
+            "",
+            DateTimeOffset.UtcNow.AddHours(1),
+            "exchange",
+            "key",
+            "{}");
+
+        var result = _sut.Validate(command);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == "IdempotencyKey");
+    }
+
+    [Fact]
+    public void IdempotencyKey_exceeding_200_chars_fails()
+    {
+        var command = new ScheduleEventCommand(
+            new string('x', 201),
+            DateTimeOffset.UtcNow.AddHours(1),
+            "exchange",
+            "key",
+            "{}");
+
+        var result = _sut.Validate(command);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == "IdempotencyKey");
     }
 }

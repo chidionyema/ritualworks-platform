@@ -2,6 +2,12 @@ using System.Text.Json;
 
 namespace Haworks.Payments.Infrastructure.PayPal;
 
+/// <summary>
+/// Thrown inside Polly delegates for non-transient PayPal HTTP errors (4xx except 429).
+/// Caught outside the ExecuteAsync call to return a failure result without retry.
+/// </summary>
+public sealed class PayPalNonTransientException(string message) : Exception(message);
+
 // ============================================================================
 // PayPal Order API Models
 // ============================================================================

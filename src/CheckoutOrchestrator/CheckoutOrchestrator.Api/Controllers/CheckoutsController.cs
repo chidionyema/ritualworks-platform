@@ -2,6 +2,7 @@ using Haworks.CheckoutOrchestrator.Application.Commands;
 using Haworks.CheckoutOrchestrator.Application.Queries;
 using Haworks.CheckoutOrchestrator.Api.Models;
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Extensions;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -38,14 +39,18 @@ public sealed class CheckoutsController(IMediator mediator) : ControllerBase
     [HttpGet("{sagaId:guid}")]
     public async Task<IActionResult> Get(Guid sagaId, CancellationToken ct)
     {
-        var result = await mediator.Send(new GetCheckoutSagaQuery(sagaId), ct);
+        var userId = HttpContext.GetForwardedUserId();
+        bool isAdmin = User.IsInRole("Admin") || User.IsInRole("Service");
+        var result = await mediator.Send(new GetCheckoutSagaQuery(sagaId, userId, isAdmin), ct);
         return result.ToActionResult();
     }
 
     [HttpGet("by-order/{orderId:guid}")]
     public async Task<IActionResult> GetByOrderId(Guid orderId, CancellationToken ct)
     {
-        var result = await mediator.Send(new GetCheckoutSagaByOrderIdQuery(orderId), ct);
+        var userId = HttpContext.GetForwardedUserId();
+        bool isAdmin = User.IsInRole("Admin") || User.IsInRole("Service");
+        var result = await mediator.Send(new GetCheckoutSagaByOrderIdQuery(orderId, userId, isAdmin), ct);
         return result.ToActionResult();
     }
 }

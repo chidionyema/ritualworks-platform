@@ -142,6 +142,62 @@ public class UserTests
     #region IsActive Tests
 
     [Fact]
+    public void Deactivate_WhenActive_SetsIsActiveFalseAndDeactivatedAt()
+    {
+        // Arrange
+        var user = new User();
+        user.IsActive.Should().BeTrue();
+
+        // Act
+        user.Deactivate();
+
+        // Assert
+        user.IsActive.Should().BeFalse();
+        user.DeactivatedAt.Should().NotBeNull();
+        user.UpdatedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Deactivate_WhenAlreadyDeactivated_Throws()
+    {
+        // Arrange
+        var user = new User();
+        user.Deactivate();
+
+        // Act & Assert
+        var act = () => user.Deactivate();
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*already deactivated*");
+    }
+
+    [Fact]
+    public void Reactivate_WhenDeactivated_SetsIsActiveTrue()
+    {
+        // Arrange
+        var user = new User();
+        user.Deactivate();
+
+        // Act
+        user.Reactivate();
+
+        // Assert
+        user.IsActive.Should().BeTrue();
+        user.DeactivatedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public void Reactivate_WhenAlreadyActive_Throws()
+    {
+        // Arrange
+        var user = new User();
+
+        // Act & Assert
+        var act = () => user.Reactivate();
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*already active*");
+    }
+
+    [Fact]
     public void DeactivateAndReactivate_Workflow()
     {
         // Arrange
@@ -149,19 +205,19 @@ public class UserTests
         user.IsActive.Should().BeTrue();
 
         // Act - Deactivate
-        user.IsActive = false;
-        user.UpdatedAt = DateTime.UtcNow;
+        user.Deactivate();
 
         // Assert
         user.IsActive.Should().BeFalse();
         user.UpdatedAt.Should().NotBeNull();
+        user.DeactivatedAt.Should().NotBeNull();
 
         // Act - Reactivate
-        user.IsActive = true;
-        user.UpdatedAt = DateTime.UtcNow;
+        user.Reactivate();
 
         // Assert
         user.IsActive.Should().BeTrue();
+        user.DeactivatedAt.Should().BeNull();
     }
 
     #endregion

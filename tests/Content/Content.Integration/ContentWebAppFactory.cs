@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.TestHost;
 using Amazon.S3;
 using Amazon.S3.Model;
+using MassTransit;
+using MassTransit.Testing;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -131,6 +133,11 @@ public sealed class ContentWebAppFactory : WebApplicationFactory<Program>, IAsyn
             // Complete would otherwise crash inside the validation pipeline.
             services.RemoveAll<IVirusScanner>();
             services.AddSingleton<IVirusScanner>(_ => new FakeVirusScanner(this));
+
+            // MassTransit is not registered under Test env; provide an
+            // in-memory harness so command handlers can inject IPublishEndpoint
+            // and tests can assert published events.
+            services.AddMassTransitTestHarness();
 
             // Production DI skips the sweeper under env=Test so the loop
             // doesn't fight the fixture. Re-add it as a plain singleton

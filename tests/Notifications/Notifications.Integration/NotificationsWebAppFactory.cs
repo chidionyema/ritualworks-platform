@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Haworks.BuildingBlocks.Messaging;
+using Haworks.BuildingBlocks.Testing;
 using Haworks.BuildingBlocks.Testing.Authentication;
 using Haworks.BuildingBlocks.Testing.Containers;
 using Haworks.Notifications.Application.Channels;
@@ -30,11 +31,13 @@ namespace Haworks.Notifications.Integration;
 /// </summary>
 public class NotificationsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    private DatabaseResetter? _resetter;
     public string ConnectionString { get; private set; } = string.Empty;
 
     public async Task InitializeAsync()
     {
         ConnectionString = await SharedTestPostgres.CreateDatabaseAsync("notifications");
+        _resetter = new DatabaseResetter(ConnectionString);
         JwtTestDefaults.SetTestEnvironmentVariables();
 
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Test");
@@ -62,6 +65,9 @@ public class NotificationsWebAppFactory : WebApplicationFactory<Program>, IAsync
         Environment.SetEnvironmentVariable("Notifications__Providers__Twilio__FromNumber", "+15005550006");
         Environment.SetEnvironmentVariable("Notifications__Providers__Fcm__Enabled", "false");
         Environment.SetEnvironmentVariable("Notifications__Providers__Fcm__ProjectId", "test-project");
+
+        _ = Services;
+        await EnsureSchemaAsync();
     }
 
     async Task IAsyncLifetime.DisposeAsync()
@@ -145,4 +151,6 @@ public class NotificationsWebAppFactory : WebApplicationFactory<Program>, IAsync
             await db.Database.CloseConnectionAsync();
         }
     }
+
+    public Task ResetDatabaseAsync() => _resetter!.ResetAsync();
 }

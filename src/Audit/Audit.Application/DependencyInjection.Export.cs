@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using FluentValidation;
 using Haworks.Audit.Application.Export;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
@@ -10,6 +11,9 @@ public static class AuditExportRegistration
 {
     public static IServiceCollection AddAuditExport(this IServiceCollection services)
     {
+        // Validators
+        services.AddScoped<IValidator<AuditExportRequest>, AuditExportRequestValidator>();
+
         // Internal queue for export jobs
         var channel = Channel.CreateUnbounded<Guid>();
         services.AddSingleton(channel.Reader);
@@ -18,7 +22,7 @@ public static class AuditExportRegistration
         // Register implementations via reflection to avoid circular dependency
         // between Application and Infrastructure projects.
         var infraAssembly = "Haworks.Audit.Infrastructure";
-        
+
         var serviceType = Type.GetType($"Haworks.Audit.Infrastructure.Export.AuditExportJobService, {infraAssembly}");
         if (serviceType != null)
         {
@@ -44,16 +48,16 @@ public static class AuditExportRegistration
 
         if (s3ClientType != null && s3InterfaceType != null && s3ConfigType != null)
         {
-            services.AddSingleton(s3InterfaceType, sp => 
+            services.AddSingleton(s3InterfaceType, sp =>
             {
                 var config = sp.GetRequiredService<IConfiguration>();
                 var serviceUrl = config.GetConnectionString("s3")
                     ?? throw new InvalidOperationException("ConnectionStrings:s3 must be configured for audit export");
-                
+
                 var s3Config = Activator.CreateInstance(s3ConfigType);
                 s3ConfigType.GetProperty("ServiceURL")?.SetValue(s3Config, serviceUrl);
                 s3ConfigType.GetProperty("ForcePathStyle")?.SetValue(s3Config, true);
-                
+
                 return Activator.CreateInstance(s3ClientType, s3Config)!;
             });
         }

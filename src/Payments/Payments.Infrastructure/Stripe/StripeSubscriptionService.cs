@@ -10,7 +10,8 @@ namespace Haworks.Payments.Infrastructure.Stripe;
 
 internal sealed class StripeSubscriptionService(
     IStripeClientFactory clientFactory,
-    IResiliencePolicyFactory resiliencePolicyFactory) : ISubscriptionService
+    IResiliencePolicyFactory resiliencePolicyFactory,
+    ILogger<StripeSubscriptionService> logger) : ISubscriptionService
 {
     private readonly IAsyncPolicy _resiliencePolicy = resiliencePolicyFactory.CreateCombinedPolicy(ResilienceOptions.Stripe);
 
@@ -18,6 +19,9 @@ internal sealed class StripeSubscriptionService(
         CreateSubscriptionSessionRequest request,
         CancellationToken ct = default)
     {
+        logger.LogInformation("Creating subscription checkout session for plan {PlanId}, user {UserId}",
+            request.PlanId, request.UserId);
+
         return _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
         {
             var client = await clientFactory.GetClientAsync(token);
@@ -40,7 +44,20 @@ internal sealed class StripeSubscriptionService(
             if (!options.Metadata.ContainsKey("user_id")) options.Metadata["user_id"] = request.UserId;
 
             var requestOptions = new RequestOptions { IdempotencyKey = request.IdempotencyKey };
-            var session = await service.CreateAsync(options, requestOptions, token);
+            Session session;
+            try
+            {
+                session = await service.CreateAsync(options, requestOptions, token);
+            }
+            catch (StripeException ex)
+            {
+                logger.LogError(ex, "Stripe subscription session creation failed for plan {PlanId}, user {UserId}",
+                    request.PlanId, request.UserId);
+                throw;
+            }
+
+            logger.LogInformation("Subscription session {SessionId} created for plan {PlanId}",
+                session.Id, request.PlanId);
 
             return new CheckoutSessionResult
             {
