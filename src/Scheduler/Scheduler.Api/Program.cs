@@ -67,6 +67,20 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+// Register rotation recurring jobs (only when Hangfire is active)
+if (!app.Environment.IsEnvironment("Test"))
+{
+    RecurringJob.AddOrUpdate<Haworks.Scheduler.Application.Jobs.SecretExpiryWatcherJob>(
+        "secret-expiry-watcher",
+        job => job.RunAsync(CancellationToken.None),
+        "*/15 * * * *");
+
+    RecurringJob.AddOrUpdate<Haworks.Scheduler.Application.Jobs.RotateJwtKeyJob>(
+        "rotate-jwt-key",
+        job => job.RunAsync(CancellationToken.None),
+        Cron.Monthly());
+}
+
 app.Run();
 
 public partial class Program { }

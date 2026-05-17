@@ -32,6 +32,12 @@ path "secret/metadata/shared/*" { capabilities = ["read", "list"] }
 # cross-context access.
 path "database/creds/haworks-{{service}}" { capabilities = ["read"] }
 
+# Static database credential rotation — read rotated password for this service.
+path "database/static-creds/haworks-{{service}}" { capabilities = ["read"] }
+
+# PKI certificate issuance for this service's internal mTLS identity.
+path "pki/issue/haworks-{{service}}" { capabilities = ["create", "update"] }
+
 # Token self-management (used by the credential renewal background service).
 path "auth/token/renew-self"  { capabilities = ["update"] }
 path "auth/token/lookup-self" { capabilities = ["read"] }

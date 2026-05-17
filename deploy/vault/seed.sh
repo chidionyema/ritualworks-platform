@@ -191,4 +191,50 @@ else
   echo "[seed]   vault read database/creds/haworks-identity"
 fi
 
+# ---------------------------------------------------------------------------
+# PKI secrets engine: internal CA for mTLS certificates between services.
+#
+# Vault issues short-lived TLS certificates (24h default, 720h max) for
+# internal service-to-service communication. Each service can request a
+# certificate only for its own domain (haworks-<svc>.internal).
+# ---------------------------------------------------------------------------
+echo "[seed] enabling PKI secrets engine (if missing)..."
+if ! vault secrets list -format=json | jq -e '."pki/"' >/dev/null 2>&1; then
+  vault secrets enable pki
+fi
+vault secrets tune -max-lease-ttl=8760h pki 2>/dev/null || true
+
+# Generate internal root CA (idempotent — only if no CA exists yet)
+if ! vault read pki/cert/ca >/dev/null 2>&1; then
+  echo "[seed] generating internal root CA..."
+  vault write -field=certificate pki/root/generate/internal \
+    common_name="haworks-internal-ca" \
+    ttl=8760h \
+    key_type=ec \
+    key_bits=384 > /dev/null
+fi
+
+vault write pki/config/urls \
+  issuing_certificates="http://haworks-vault.internal:8200/v1/pki/ca" \
+  crl_distribution_points="http://haworks-vault.internal:8200/v1/pki/crl" >/dev/null
+
+# Per-service PKI roles
+PKI_SERVICE_COUNT=$(jq -r '.services | length' "$SERVICES_FILE")
+k=0
+while [ "$k" -lt "$PKI_SERVICE_COUNT" ]; do
+  PKI_SVC=$(jq -r ".services[$k].name" "$SERVICES_FILE")
+
+  vault write "pki/roles/haworks-$PKI_SVC" \
+    allowed_domains="haworks-$PKI_SVC.internal" \
+    allow_subdomains=false \
+    max_ttl=24h \
+    key_type=ec \
+    key_bits=256 >/dev/null
+  echo "[seed] configured PKI role haworks-$PKI_SVC"
+
+  k=$((k + 1))
+done
+
+echo "[seed] PKI engine ready."
+
 echo "[seed] done."

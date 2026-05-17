@@ -1,5 +1,6 @@
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Scheduler.Application.Common.Interfaces;
+using Haworks.Scheduler.Application.Jobs;
 using Haworks.Scheduler.Infrastructure.Messaging;
 using Haworks.Scheduler.Infrastructure.Persistence;
 using MassTransit;
@@ -56,6 +57,11 @@ public static class DependencyInjection
 
             services.AddHangfireServer();
         }
+
+        // Rotation jobs
+        services.AddScoped<SecretExpiryWatcherJob>();
+        services.AddScoped<RotateJwtKeyJob>();
+        services.AddScoped<ClearPreviousJwtKeyJob>();
 
         return services;
     }

@@ -27,4 +27,11 @@ public sealed class JwtOptions
     /// </summary>
     [Range(1, 90, ErrorMessage = "RefreshTokenExpiryDays must be between 1 and 90")]
     public int RefreshTokenExpiryDays { get; set; } = 7;
+
+    /// <summary>
+    /// Overlap window in minutes during which both old and new JWT signing keys
+    /// are valid after a key rotation. Default 15.
+    /// </summary>
+    [Range(5, 120, ErrorMessage = "OverlapMinutes must be between 5 and 120")]
+    public int OverlapMinutes { get; set; } = 15;
 }

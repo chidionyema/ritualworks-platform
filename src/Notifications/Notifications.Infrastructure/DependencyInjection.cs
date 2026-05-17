@@ -57,6 +57,7 @@ public static partial class DependencyInjection
                 x.AddConsumer<Notifications.Application.Consumers.NotificationRequestConsumer>();
                 x.AddConsumer<Haworks.Notifications.Application.Webhooks.NotificationWebhookValidatedConsumer>();
                 x.AddConsumer<Notifications.Application.Consumers.RefundEmailConsumer>();
+                x.AddConsumer<Notifications.Application.Consumers.SecretExpiryWarningConsumer>();
 
                 x.AddEntityFrameworkOutbox<NotificationsDbContext>(o =>
                 {

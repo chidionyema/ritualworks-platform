@@ -161,6 +161,9 @@ public static class DependencyInjection
             });
         }
 
+        // Dual-key JWT validator for overlap window during key rotation.
+        services.AddSingleton<Haworks.Identity.Application.Services.DualKeyJwtValidator>();
+
         // Domain repositories (EF-backed implementations from IdentityRepositories.cs).
         services.AddScoped<IUserRepository, IdentityUserRepository>();
         services.AddScoped<IUserProfileRepository, IdentityUserProfileRepository>();
@@ -236,6 +239,7 @@ public static class DependencyInjection
             {
                 mt.SetKebabCaseEndpointNameFormatter();
                 mt.AddConsumer<Haworks.Identity.Application.Consumers.PrivacyErasureRequestedConsumer>();
+                mt.AddConsumer<Haworks.Identity.Application.Consumers.JwtKeyRotatedConsumer>();
                 mt.UsingRabbitMq((context, cfg) =>
                 {
                     var rabbitConn = configuration.GetConnectionString("rabbitmq")

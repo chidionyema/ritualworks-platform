@@ -94,11 +94,11 @@ public static class VaultServiceCollectionExtensions
         string connectionString,
         string roleName)
     {
-        services.AddSingleton(sp => 
+        services.AddSingleton(sp =>
         {
             var vault = sp.GetRequiredService<IVaultService>();
             var builder = new NpgsqlDataSourceBuilder(connectionString);
-            builder.UsePeriodicPasswordProvider(async (sb, ct) => 
+            builder.UsePeriodicPasswordProvider(async (sb, ct) =>
             {
                 var (_, securePass) = await vault.GetDatabaseCredentialsAsync(roleName, ct);
                 var pass = new System.Net.NetworkCredential(string.Empty, securePass).Password;
@@ -106,6 +106,54 @@ public static class VaultServiceCollectionExtensions
             }, TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(30));
             return builder.Build();
         });
+        return services;
+    }
+
+    /// <summary>
+    /// Registers VaultCredentialProvider + VaultRotatingConnectionStringProvider
+    /// for zero-downtime Postgres credential rotation via Vault static roles.
+    /// The <see cref="IConnectionStringProvider"/> can be injected into DbContext
+    /// factories for dynamic connection string resolution.
+    /// </summary>
+    public static IServiceCollection AddVaultRotatingPostgres(
+        this IServiceCollection services,
+        string roleName,
+        IConfiguration configuration)
+    {
+        // Register IVaultCredentialProvider as singleton (it has internal caching).
+        // It resolves IVaultService (already registered by AddVaultIntegration) to
+        // obtain a VaultSharp IVaultClient via the existing factory infrastructure.
+        services.AddSingleton<IVaultCredentialProvider>(sp =>
+        {
+            var factory = sp.GetRequiredService<IVaultClientFactory>();
+            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Options.VaultOptions>>().Value;
+            // Create the client handle synchronously during DI build — token is short-lived but
+            // the VaultCredentialProvider re-fetches via the static-creds endpoint which is
+            // authenticated by the client's token.
+            var handle = factory.CreateClientAsync(options, CancellationToken.None).GetAwaiter().GetResult();
+            var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
+                .CreateLogger<VaultCredentialProvider>();
+            return new VaultCredentialProvider(handle.Client, logger);
+        });
+
+        // The base connection string is the static one from config (without dynamic user/pass).
+        var baseConnectionString = configuration.GetConnectionString("identity")
+            ?? configuration.GetConnectionString("DefaultConnection")
+            ?? string.Empty;
+
+        // Register the rotating provider as both IConnectionStringProvider and IHostedService.
+        services.AddSingleton<VaultRotatingConnectionStringProvider>(sp =>
+        {
+            var credProvider = sp.GetRequiredService<IVaultCredentialProvider>();
+            var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
+                .CreateLogger<VaultRotatingConnectionStringProvider>();
+            return new VaultRotatingConnectionStringProvider(credProvider, roleName, baseConnectionString, logger);
+        });
+        services.AddSingleton<IConnectionStringProvider>(sp =>
+            sp.GetRequiredService<VaultRotatingConnectionStringProvider>());
+        services.AddHostedService(sp =>
+            sp.GetRequiredService<VaultRotatingConnectionStringProvider>());
+
         return services;
     }
 }
