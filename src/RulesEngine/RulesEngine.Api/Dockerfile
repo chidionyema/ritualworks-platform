@@ -5,6 +5,7 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
 COPY Directory.Build.props ./
+COPY .editorconfig ./
 COPY src/ ./src/
 
 RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked dotnet restore src/RulesEngine/RulesEngine.Api/RulesEngine.Api.csproj
