@@ -297,8 +297,7 @@ public static class ServiceDefaults
         {
             var logger = app.Services.GetRequiredService<ILoggerFactory>()
                 .CreateLogger("GracefulShutdown");
-            logger.LogInformation("Shutdown signal received — draining in-flight requests (5s grace)");
-            Thread.Sleep(5000); // Allow K8s to remove pod from service endpoints
+            logger.LogInformation("Shutdown signal received — K8s drain grace period active via HostOptions.ShutdownTimeout");
         });
 
         return app;
