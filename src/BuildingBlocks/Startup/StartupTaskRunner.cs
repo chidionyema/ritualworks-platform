@@ -24,8 +24,10 @@ public sealed class StartupTaskRunner : BackgroundService
 
     public void AddTask(Func<IServiceProvider, CancellationToken, Task> task) => _tasks.Add(task);
 
+#pragma warning disable HWK036 // Intentional: failure throws to crash the host (fail-fast design)
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+#pragma warning restore HWK036
         var anyFailed = false;
         foreach (var task in _tasks)
         {

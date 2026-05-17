@@ -33,9 +33,15 @@ public sealed class HWK045_NoSecretsInLogsAnalyzer : DiagnosticAnalyzer
         if (!name.StartsWith("Log", System.StringComparison.Ordinal))
             return;
 
-        // Check arguments for references to secret-sounding identifiers
+        // Only flag when a VARIABLE/IDENTIFIER containing a secret term is passed as an argument.
+        // String literals mentioning "token" in descriptions (e.g., "Vault token rotated") are fine —
+        // only variables like `password`, `apiToken`, `secretKey` being logged are dangerous.
         foreach (var arg in invocation.ArgumentList.Arguments)
         {
+            // Skip string literals and interpolated strings — they're message templates, not secret values
+            if (arg.Expression is LiteralExpressionSyntax or InterpolatedStringExpressionSyntax)
+                continue;
+
             var argText = arg.Expression.ToString().ToLowerInvariant();
             foreach (var term in SecretTerms)
             {

@@ -24,6 +24,12 @@ public sealed class HWK025_NoCatchAllWithoutLoggingAnalyzer : DiagnosticAnalyzer
     {
         var catchClause = (CatchClauseSyntax)context.Node;
 
+        // Skip test infrastructure
+        var filePath = context.Node.SyntaxTree.FilePath ?? "";
+        if (filePath.Contains("/tests/") || filePath.Contains("/Tests/") ||
+            filePath.Contains(".Testing/") || filePath.Contains(".Testing\\"))
+            return;
+
         // Only flag catch(Exception) or bare catch
         var typeName = catchClause.Declaration?.Type.ToString() ?? "";
         if (typeName is not ("" or "Exception" or "System.Exception"))

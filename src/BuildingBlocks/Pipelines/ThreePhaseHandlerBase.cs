@@ -21,13 +21,13 @@ public abstract class ThreePhaseHandlerBase<TRequest, TResponse, TDbContext>(
         object? pendingState = null;
 
         // PHASE 1: LOCAL LOCK & STATE PREPARATION
-        await strategy.ExecuteAsync(async () =>
+        await strategy.ExecuteAsync(async (cancellation) =>
         {
-            await using var tx = await context.Database.BeginTransactionAsync(ct);
-            pendingState = await PrepareAndLockAsync(request, ct);
-            await context.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-        });
+            await using var tx = await context.Database.BeginTransactionAsync(cancellation);
+            pendingState = await PrepareAndLockAsync(request, cancellation);
+            await context.SaveChangesAsync(cancellation);
+            await tx.CommitAsync(cancellation);
+        }, ct);
 
         if (pendingState == null)
             return await HandleIdempotentShortCircuitAsync(request, ct);
@@ -37,7 +37,7 @@ public abstract class ThreePhaseHandlerBase<TRequest, TResponse, TDbContext>(
         try
         {
             gatewayResult = await resiliencePolicy.ExecuteAsync(
-                () => ExecuteExternalCallAsync(request, pendingState, ct));
+                (_, token) => ExecuteExternalCallAsync(request, pendingState, token), new Polly.Context(), ct);
         }
         catch (Exception ex)
         {
@@ -47,13 +47,13 @@ public abstract class ThreePhaseHandlerBase<TRequest, TResponse, TDbContext>(
 
         // PHASE 3: SETTLEMENT & OUTBOX RECONCILIATION
         TResponse result = default!;
-        await strategy.ExecuteAsync(async () =>
+        await strategy.ExecuteAsync(async (cancellation) =>
         {
-            await using var tx = await context.Database.BeginTransactionAsync(ct);
-            result = await SettleAsync(request, pendingState, gatewayResult, ct);
-            await context.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-        });
+            await using var tx = await context.Database.BeginTransactionAsync(cancellation);
+            result = await SettleAsync(request, pendingState, gatewayResult, cancellation);
+            await context.SaveChangesAsync(cancellation);
+            await tx.CommitAsync(cancellation);
+        }, ct);
 
         return result;
     }

@@ -71,7 +71,9 @@ internal sealed class VaultTokenRevocationHostedService(
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            #pragma warning disable HWK021 // Sync shutdown callback — no async overload
             vault.RevokeTokenAsync(cts.Token).GetAwaiter().GetResult();
+#pragma warning restore HWK021
         }
         catch (Exception ex)
         {
