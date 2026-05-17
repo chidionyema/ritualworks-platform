@@ -1,4 +1,5 @@
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
 using Haworks.Catalog.Application.Telemetry;
 using Haworks.Contracts.Catalog;
 using Haworks.Contracts.Checkout;
@@ -57,6 +58,16 @@ public sealed class StockReservationRequestedConsumer(
         logger.LogInformation(
             "Reserving stock for orderId={OrderId}, sagaId={SagaId}, items={ItemCount}",
             evt.OrderId, evt.SagaId, evt.Items.Count);
+
+        // Idempotency: if a reservation already exists for this order, skip processing
+        var existingReservation = await products.GetStockReservationByOrderIdAsync(evt.OrderId, context.CancellationToken);
+        if (existingReservation is not null)
+        {
+            logger.LogInformation(
+                "Reservation already exists for orderId={OrderId}; idempotent skip",
+                evt.OrderId);
+            return;
+        }
 
         var reserved = new List<StockReservationItem>(evt.Items.Count);
         var failed = new List<FailedReservationItem>();

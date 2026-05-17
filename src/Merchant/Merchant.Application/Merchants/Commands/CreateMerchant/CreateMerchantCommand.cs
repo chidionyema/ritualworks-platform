@@ -5,6 +5,7 @@ using Haworks.Merchant.Domain.Aggregates;
 using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Haworks.Merchant.Application.Merchants.Commands.CreateMerchant;
 
@@ -42,8 +43,10 @@ public class CreateMerchantCommandHandler : IRequestHandler<CreateMerchantComman
         var merchant = MerchantProfile.Create(request.OwnerId, request.Name, request.Slug);
 
         _context.Merchants.Add(merchant);
-        await _context.SaveChangesAsync(cancellationToken);
 
+        // Publish BEFORE save — outbox-friendly. The OutboxMessage row commits
+        // in the same EF transaction as the merchant insert; on rollback the
+        // publish is rolled back too.
         await _publishEndpoint.Publish(new MerchantCreatedEvent
         {
             MerchantId = merchant.Id,
@@ -51,6 +54,15 @@ public class CreateMerchantCommandHandler : IRequestHandler<CreateMerchantComman
             Name = merchant.Name,
             Slug = merchant.Slug
         }, cancellationToken);
+
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
+        {
+            throw new InvalidOperationException("Owner or slug already exists (concurrent insert detected).", ex);
+        }
 
         return merchant.Id;
     }

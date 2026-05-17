@@ -41,6 +41,7 @@ public sealed class UploadSweeperWorker(
         // Query filter excludes already-deleted files, so no IgnoreQueryFilters needed here.
         var stale = await context.MediaFiles
             .Where(f => (f.Status == MediaStatus.Pending || f.Status == MediaStatus.Rejected) && f.CreatedAt < cutoff)
+            .OrderBy(f => f.CreatedAt)
             .Take(100)
             .ToListAsync(ct);
 

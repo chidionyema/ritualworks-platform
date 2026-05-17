@@ -6,6 +6,7 @@ using Haworks.Localization.Api.Infrastructure;
 using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Haworks.Localization.Api.Application;
 
@@ -57,7 +58,20 @@ public sealed class UpsertTranslationCommandHandler : IRequestHandler<UpsertTran
             translation.UpdateValue(request.Locale, request.Value, request.UpdatedBy);
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
+        {
+            // Concurrent insert for the same key — retry as update
+            _dbContext.ChangeTracker.Clear();
+            translation = await _dbContext.Translations
+                .FirstOrDefaultAsync(t => t.Key == request.Key, cancellationToken)
+                ?? throw new InvalidOperationException("Translation disappeared after unique constraint violation.");
+            translation.UpdateValue(request.Locale, request.Value, request.UpdatedBy);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
 
         await _publishEndpoint.Publish(new TranslationUpdatedEvent
         {
