@@ -29,30 +29,35 @@ public sealed class CdcSearchIndexWorker(
     {
         consumer.Subscribe(Topics);
 
-        ConsumeResult<string, string>? result = null;
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
-            {
-                result = consumer.Consume(stoppingToken);
-                if (result?.Message?.Value == null) continue;
+            await ConsumeOneSafeAsync(stoppingToken);
+        }
+    }
 
-                await ProcessMessageAsync(result, stoppingToken);
-                consumer.Commit(result);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (Exception ex) when (ex is System.Text.Json.JsonException or KeyNotFoundException or FormatException or ArgumentNullException)
-            {
-                logger.LogError(ex, "Skipping malformed CDC message on {Topic}", result?.Topic);
-                if (result != null) consumer.Commit(result);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error processing CDC search index update");
-            }
+    private async Task ConsumeOneSafeAsync(CancellationToken stoppingToken)
+    {
+        ConsumeResult<string, string>? result = null;
+        try
+        {
+            result = consumer.Consume(stoppingToken);
+            if (result?.Message?.Value == null) return;
+
+            await ProcessMessageAsync(result, stoppingToken);
+            consumer.Commit(result);
+        }
+        catch (OperationCanceledException)
+        {
+            // shutting down
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or KeyNotFoundException or FormatException or ArgumentNullException)
+        {
+            logger.LogError(ex, "Skipping malformed CDC message on {Topic}", result?.Topic);
+            if (result != null) consumer.Commit(result);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error processing CDC search index update");
         }
     }
 

@@ -26,17 +26,22 @@ public class PartitionRolloverService : BackgroundService
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
-            {
-                await EnsurePartitionsExistAsync(stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to ensure audit partitions exist");
-            }
-
-            await Task.Delay(TimeSpan.FromHours(24), _timeProvider, stoppingToken);
+            await TickSafeAsync(stoppingToken);
         }
+    }
+
+    private async Task TickSafeAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await EnsurePartitionsExistAsync(stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to ensure audit partitions exist");
+        }
+
+        await Task.Delay(TimeSpan.FromHours(24), _timeProvider, stoppingToken);
     }
 
     private async Task EnsurePartitionsExistAsync(CancellationToken ct)

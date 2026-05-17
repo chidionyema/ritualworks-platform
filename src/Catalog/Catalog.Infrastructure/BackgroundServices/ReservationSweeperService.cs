@@ -52,36 +52,41 @@ internal sealed class ReservationSweeperService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
-            {
-                var expired = await SweepOnceAsync(stoppingToken).ConfigureAwait(false);
-                if (expired > 0)
-                {
-                    _logger.LogInformation("Sweeper expired {Count} reservations", expired);
-                }
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                // Resilient loop: log and keep going so a transient DB blip
-                // doesn't wedge the sweeper forever.
-                _logger.LogError(ex, "Reservation sweep failed; will retry next interval");
-            }
-
-            try
-            {
-                await Task.Delay(_options.Value.SweepInterval, stoppingToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
+            await SweepTickSafeAsync(stoppingToken);
         }
 
         _logger.LogInformation("Reservation sweeper stopped");
+    }
+
+    private async Task SweepTickSafeAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            var expired = await SweepOnceAsync(stoppingToken).ConfigureAwait(false);
+            if (expired > 0)
+            {
+                _logger.LogInformation("Sweeper expired {Count} reservations", expired);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // shutting down
+        }
+        catch (Exception ex)
+        {
+            // Resilient loop: log and keep going so a transient DB blip
+            // doesn't wedge the sweeper forever.
+            _logger.LogError(ex, "Reservation sweep failed; will retry next interval");
+        }
+
+        try
+        {
+            await Task.Delay(_options.Value.SweepInterval, stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // shutting down
+        }
     }
 
     /// <summary>

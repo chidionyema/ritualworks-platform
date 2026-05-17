@@ -64,45 +64,48 @@ public sealed class JourneyScheduler : BackgroundService
     {
         // Brief ramp-up so the BFF, downstream services, and SignalR hub all
         // have time to settle before we start firing.
-        try
-        {
-            await Task.Delay(TimeSpan.FromSeconds(InitialDelaySeconds), stoppingToken);
-        }
-        catch (TaskCanceledException) { return; }
+        if (!await DelaySafeAsync(TimeSpan.FromSeconds(InitialDelaySeconds), stoppingToken)) return;
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var journey = s_journeys[_index % s_journeys.Length];
-            _index++;
-
-            var sessionId = Guid.NewGuid();
-            var started = DateTimeOffset.UtcNow;
-            await BroadcastStartAsync(journey, sessionId, started, stoppingToken);
-
-            var ok = false;
-            try
-            {
-                ok = journey switch
-                {
-                    "place-order-saga" => await RunPlaceOrderSagaAsync(stoppingToken),
-                    "idempotent-retry" => await RunIdempotentRetryAsync(stoppingToken),
-                    "occ-race"         => await RunOccRaceAsync(stoppingToken),
-                    _ => false,
-                };
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Journey {Journey} threw — continuing rotation", journey);
-            }
-
-            await BroadcastEndAsync(journey, sessionId, started, ok, stoppingToken);
-
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(JourneyIntervalSeconds), stoppingToken);
-            }
-            catch (TaskCanceledException) { break; }
+            await RunNextJourneyAsync(stoppingToken);
         }
+    }
+
+    private async Task RunNextJourneyAsync(CancellationToken stoppingToken)
+    {
+        var journey = s_journeys[_index % s_journeys.Length];
+        _index++;
+
+        var sessionId = Guid.NewGuid();
+        var started = DateTimeOffset.UtcNow;
+        await BroadcastStartAsync(journey, sessionId, started, stoppingToken);
+
+        var ok = false;
+        try
+        {
+            ok = journey switch
+            {
+                "place-order-saga" => await RunPlaceOrderSagaAsync(stoppingToken),
+                "idempotent-retry" => await RunIdempotentRetryAsync(stoppingToken),
+                "occ-race"         => await RunOccRaceAsync(stoppingToken),
+                _ => false,
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Journey {Journey} threw — continuing rotation", journey);
+        }
+
+        await BroadcastEndAsync(journey, sessionId, started, ok, stoppingToken);
+
+        await DelaySafeAsync(TimeSpan.FromSeconds(JourneyIntervalSeconds), stoppingToken);
+    }
+
+    private static async Task<bool> DelaySafeAsync(TimeSpan delay, CancellationToken ct)
+    {
+        try { await Task.Delay(delay, ct); return true; }
+        catch (TaskCanceledException) { return false; }
     }
 
     // ───────────────────────────── Journey 1 ─────────────────────────────

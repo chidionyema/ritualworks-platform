@@ -53,67 +53,74 @@ public class DisbursementService : IDisbursementService
         var dbContext = (Microsoft.EntityFrameworkCore.DbContext)_context;
         var strategy = dbContext.Database.CreateExecutionStrategy();
 
-        return strategy.ExecuteAsync(async () =>
+        return strategy.ExecuteAsync(() => ExecutePayoutTransactionAsync(dbContext, accountId, profile));
+    }
+
+    private async Task ExecutePayoutTransactionAsync(Microsoft.EntityFrameworkCore.DbContext dbContext, Guid accountId, SellerProfile profile)
+    {
+        await using var tx = await dbContext.Database.BeginTransactionAsync();
+        try
         {
-            await using var tx = await dbContext.Database.BeginTransactionAsync();
-            try
-            {
-                // FOR UPDATE lock prevents concurrent payouts against the same account
-                var account = await _context.LedgerAccounts
-                    .FromSqlRaw("SELECT *, xmin FROM payouts.\"LedgerAccounts\" WHERE \"Id\" = {0} FOR UPDATE", accountId)
-                    .FirstAsync();
+            // FOR UPDATE lock prevents concurrent payouts against the same account
+            var account = await _context.LedgerAccounts
+                .FromSqlRaw("SELECT *, xmin FROM payouts.\"LedgerAccounts\" WHERE \"Id\" = {0} FOR UPDATE", accountId)
+                .FirstAsync();
 
-                var payoutAmount = account.Balance;
+            var payoutAmount = account.Balance;
 
-                if (payoutAmount <= 0 || payoutAmount < profile.PayoutThreshold)
-                {
-                    await tx.RollbackAsync();
-                    return;
-                }
-
-                var payout = Payout.Create(profile.SellerId, payoutAmount, account.Currency);
-                _context.Payouts.Add(payout);
-                await _context.SaveChangesAsync(CancellationToken.None);
-
-                try
-                {
-                    var (externalId, status) = await _payoutGateway.InitiatePayoutAsync(
-                        profile.ExternalProviderId!, payoutAmount, account.Currency, $"Payout for {profile.SellerId}");
-
-                    if (status == PayoutStatus.Succeeded)
-                    {
-                        payout.MarkInTransit(externalId);
-                        payout.MarkSucceeded();
-                        account.UpdateBalance(payoutAmount, EntryType.Debit);
-                        var entry = LedgerEntry.Create(account.Id, Guid.NewGuid(), payoutAmount, EntryType.Debit, "Payout processed", payout.Id.ToString());
-                        _context.LedgerEntries.Add(entry);
-                    }
-                    else
-                    {
-                        payout.MarkFailed("Gateway returned non-success status");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to process payout for seller {SellerId}", profile.SellerId);
-                    payout.MarkFailed(ex.Message);
-                }
-
-                await _context.SaveChangesAsync(CancellationToken.None);
-                await tx.CommitAsync();
-            }
-            catch (DbUpdateConcurrencyException ex)
+            if (payoutAmount <= 0 || payoutAmount < profile.PayoutThreshold)
             {
                 await tx.RollbackAsync();
-                _logger.LogWarning(ex, "Concurrency conflict during payout for account {AccountId}. The operation will be retried or skipped.", accountId);
-                throw;
+                return;
             }
-            catch (Exception ex)
+
+            var payout = Payout.Create(profile.SellerId, payoutAmount, account.Currency);
+            _context.Payouts.Add(payout);
+            await _context.SaveChangesAsync(CancellationToken.None);
+
+            await InitiatePayoutSafeAsync(payout, profile, payoutAmount, account);
+
+            await _context.SaveChangesAsync(CancellationToken.None);
+            await tx.CommitAsync();
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            await tx.RollbackAsync();
+            _logger.LogWarning(ex, "Concurrency conflict during payout for account {AccountId}. The operation will be retried or skipped.", accountId);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync();
+            _logger.LogError(ex, "Unexpected error during payout for account {AccountId}", accountId);
+            throw;
+        }
+    }
+
+    private async Task InitiatePayoutSafeAsync(Payout payout, SellerProfile profile, decimal payoutAmount, LedgerAccount account)
+    {
+        try
+        {
+            var (externalId, status) = await _payoutGateway.InitiatePayoutAsync(
+                profile.ExternalProviderId!, payoutAmount, account.Currency, $"Payout for {profile.SellerId}");
+
+            if (status == PayoutStatus.Succeeded)
             {
-                await tx.RollbackAsync();
-                _logger.LogError(ex, "Unexpected error during payout for account {AccountId}", accountId);
-                throw;
+                payout.MarkInTransit(externalId);
+                payout.MarkSucceeded();
+                account.UpdateBalance(payoutAmount, EntryType.Debit);
+                var entry = LedgerEntry.Create(account.Id, Guid.NewGuid(), payoutAmount, EntryType.Debit, "Payout processed", payout.Id.ToString());
+                _context.LedgerEntries.Add(entry);
             }
-        });
+            else
+            {
+                payout.MarkFailed("Gateway returned non-success status");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process payout for seller {SellerId}", profile.SellerId);
+            payout.MarkFailed(ex.Message);
+        }
     }
 }

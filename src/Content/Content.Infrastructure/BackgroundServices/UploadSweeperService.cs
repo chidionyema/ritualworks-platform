@@ -34,27 +34,32 @@ internal sealed class UploadSweeperService(
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
-            {
-                await SweepOnceAsync(stoppingToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Sweeper iteration crashed; will retry on next tick");
-            }
+            await SweepTickSafeAsync(opts, stoppingToken);
+        }
+    }
 
-            try
-            {
-                await Task.Delay(opts.SweepInterval, time, stoppingToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
+    private async Task SweepTickSafeAsync(StorageOptions opts, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await SweepOnceAsync(stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // shutting down
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Sweeper iteration crashed; will retry on next tick");
+        }
+
+        try
+        {
+            await Task.Delay(opts.SweepInterval, time, stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // shutting down
         }
     }
 

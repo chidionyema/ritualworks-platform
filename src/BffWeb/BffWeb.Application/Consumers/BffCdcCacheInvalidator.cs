@@ -28,22 +28,27 @@ public sealed class BffCdcCacheInvalidator(
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
-            {
-                var result = consumer.Consume(stoppingToken);
-                if (result?.Message?.Value == null) continue;
+            await ConsumeOneSafeAsync(stoppingToken);
+        }
+    }
 
-                await ProcessMessageAsync(result, stoppingToken);
-                consumer.Commit(result);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error processing CDC cache invalidation");
-            }
+    private async Task ConsumeOneSafeAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            var result = consumer.Consume(stoppingToken);
+            if (result?.Message?.Value == null) return;
+
+            await ProcessMessageAsync(result, stoppingToken);
+            consumer.Commit(result);
+        }
+        catch (OperationCanceledException)
+        {
+            // shutting down
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error processing CDC cache invalidation");
         }
     }
 
