@@ -3363,12 +3363,15 @@ string.Equals(referenced, "BuildingBlocks.Testing", StringComparison.Ordinal) ||
         foreach (var file in FindProductionCsFiles())
         {
             var content = File.ReadAllText(file);
-            if (!content.Contains("ExecuteAsync")) continue;
+            if (!content.Contains(".ExecuteAsync(")) continue;
 
             var lines = File.ReadAllLines(file);
             for (int i = 0; i < lines.Length; i++)
             {
-                if (!lines[i].Contains("ExecuteAsync")) continue;
+                // Only match Polly/resilience policy calls (dot-prefixed), not BackgroundService overrides
+                if (!lines[i].Contains(".ExecuteAsync(")) continue;
+                // Skip EF execution strategies — they require try/catch for transaction management
+                if (i > 0 && string.Join(" ", lines[Math.Max(0, i - 3)..(i + 1)]).Contains("CreateExecutionStrategy")) continue;
                 // Scan forward within the delegate body (up to 50 lines or a closing });)
                 int braceDepth = 0;
                 bool insideDelegate = false;
