@@ -770,6 +770,38 @@ services:
     volumes:
       - ./vault-creds:/creds:ro
 
+  # ===========================================================================
+  # EXPERIMENTATION (GrowthBook)
+  # ===========================================================================
+  growthbook-mongo:
+    image: mongo:7
+    container_name: rw-growthbook-mongo
+    volumes:
+      - growthbook-mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  growthbook:
+    image: growthbook/growthbook:latest
+    container_name: rw-growthbook
+    ports:
+      - "3100:3000"   # API + Admin UI
+    environment:
+      - MONGODB_URI=mongodb://growthbook-mongo:27017/growthbook
+      - APP_ORIGIN=http://localhost:3100
+      - API_HOST=http://localhost:3100
+    depends_on:
+      growthbook-mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
 volumes:
   postgres-data:
   redis-data:
@@ -783,3 +815,4 @@ volumes:
   loki-data:
   alertmanager-data:
   grafana-data:
+  growthbook-mongo-data:
