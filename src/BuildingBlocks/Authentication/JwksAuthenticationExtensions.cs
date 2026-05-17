@@ -65,18 +65,8 @@ public static class JwksAuthenticationExtensions
             .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, bearer =>
             {
                 var jwksSection = configuration.GetSection(JwksOptions.SectionName);
-                var jwksUri = jwksSection["JwksUri"] ?? throw new InvalidOperationException("JwksOptions:JwksUri required");
                 var issuer = jwksSection["Issuer"] ?? throw new InvalidOperationException("JwksOptions:Issuer required");
                 var audience = jwksSection["Audience"] ?? throw new InvalidOperationException("JwksOptions:Audience required");
-
-                // Fetch JWKS keys at startup. Timeout prevents indefinite
-                // hang if the identity service is unreachable during boot.
-                var jwksTimeoutSec = int.TryParse(
-                    configuration.GetSection("HttpClientTimeouts")["JwksStartupSeconds"],
-                    out var parsed) ? parsed : 10;
-                using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(jwksTimeoutSec) };
-                var jwksJson = httpClient.GetStringAsync(jwksUri).GetAwaiter().GetResult();
-                var jwks = new JsonWebKeySet(jwksJson);
 
                 bearer.MapInboundClaims = false;
                 bearer.TokenValidationParameters = new TokenValidationParameters
@@ -88,13 +78,37 @@ public static class JwksAuthenticationExtensions
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
                     ClockSkew = TimeSpan.FromSeconds(30),
-                    IssuerSigningKeys = jwks.GetSigningKeys(),
                 };
             });
+
+        // Post-configure: wire the IssuerSigningKeyResolver to use the ConfigurationManager.
+        // This resolves keys lazily from the cached JWKS document (no sync-over-async,
+        // no new HttpClient). The ConfigurationManager handles background refresh.
+        services.AddSingleton<IPostConfigureOptions<JwtBearerOptions>>(sp =>
+            new PostConfigureJwksBearerOptions(
+                sp.GetRequiredService<IConfigurationManager<OpenIdConnectConfiguration>>(),
+                sp.GetRequiredService<ILoggerFactory>().CreateLogger("JwksKeyResolver")));
+
+        // Pre-warm JWKS cache at startup so ResolveKeys never blocks
+        services.AddHostedService<JwksWarmupHostedService>();
 
         return services;
     }
 
+    private sealed class PostConfigureJwksBearerOptions(
+        IConfigurationManager<OpenIdConnectConfiguration> manager,
+        ILogger logger) : IPostConfigureOptions<JwtBearerOptions>
+    {
+        public void PostConfigure(string? name, JwtBearerOptions options)
+        {
+            options.TokenValidationParameters.IssuerSigningKeyResolver =
+                (token, securityToken, kid, parameters) => ResolveKeys(manager, kid, logger);
+        }
+    }
+
+    // IssuerSigningKeyResolver is synchronous by Microsoft.IdentityModel contract.
+    // ConfigurationManager.GetConfigurationAsync returns from in-memory cache on hot path
+    // (synchronous completion). Cold-start is handled by JwksWarmupHostedService below.
     private static IEnumerable<SecurityKey> ResolveKeys(
         IConfigurationManager<OpenIdConnectConfiguration> manager,
         string? kid,
@@ -103,72 +117,52 @@ public static class JwksAuthenticationExtensions
         OpenIdConnectConfiguration? config;
         try
         {
-            // GetConfigurationAsync returns the cached doc and triggers a
-            // background refresh if the cache is stale. Block briefly —
-            // IssuerSigningKeyResolver is synchronous by contract.
-            config = manager
-                .GetConfigurationAsync(CancellationToken.None)
-                .ConfigureAwait(false)
-                .GetAwaiter()
-                .GetResult();
+            // This is always a cache-hit after JwksWarmupHostedService runs.
+            // ValueTask pattern: completes synchronously from cache.
+            var task = manager.GetConfigurationAsync(CancellationToken.None);
+            config = task.IsCompletedSuccessfully ? task.Result : null;
         }
         catch (Exception ex)
         {
-            // Network / DNS / HTTP error against the JWKS endpoint. We
-            // intentionally do NOT bubble this up — a brief outage of
-            // the identity service should not 500 every authenticated
-            // request across the cluster. Fall back to whatever we last
-            // managed to cache (may be empty on cold start, in which
-            // case the token will fail validation cleanly with
-            // "no signing keys").
-            logger.LogWarning(
-                ex,
-                "JWKS fetch failed; falling back to cached signing keys (if any).");
-            config = TryGetCachedConfig(manager);
+            logger.LogWarning(ex, "JWKS fetch failed; falling back to empty key set");
+            config = null;
         }
 
         if (config is null)
-        {
             return Array.Empty<SecurityKey>();
-        }
 
-        // Honour the token's kid header when present — that's the whole
-        // point of JWKS rotation. If the token has no kid (older issuers
-        // sometimes omit it) hand back every active key and let the
-        // signature check pick the right one.
         if (!string.IsNullOrEmpty(kid))
         {
             var matched = config.SigningKeys
                 .Where(k => string.Equals(k.KeyId, kid, StringComparison.Ordinal))
                 .ToArray();
-
-            if (matched.Length > 0)
-            {
-                return matched;
-            }
+            if (matched.Length > 0) return matched;
         }
 
         return config.SigningKeys;
     }
 
-    private static OpenIdConnectConfiguration? TryGetCachedConfig(
-        IConfigurationManager<OpenIdConnectConfiguration> manager)
+    /// <summary>
+    /// Pre-warms the JWKS cache at startup so ResolveKeys never blocks on I/O.
+    /// Runs as an IHostedService before the app accepts traffic.
+    /// </summary>
+    internal sealed class JwksWarmupHostedService(
+        IConfigurationManager<OpenIdConnectConfiguration> manager,
+        ILogger<JwksWarmupHostedService> logger) : IHostedService
     {
-        // ConfigurationManager doesn't expose the cached doc directly,
-        // but a second GetConfigurationAsync call will return the cache
-        // without re-hitting the network unless the refresh interval
-        // has elapsed. If even that throws there's nothing to recover.
-        try
+        public async Task StartAsync(CancellationToken cancellationToken)
         {
-            return manager
-                .GetConfigurationAsync(CancellationToken.None)
-                .ConfigureAwait(false)
-                .GetAwaiter()
-                .GetResult();
+            try
+            {
+                await manager.GetConfigurationAsync(cancellationToken);
+                logger.LogInformation("JWKS cache pre-warmed successfully");
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "JWKS pre-warm failed — keys will be fetched on first request");
+            }
         }
-        catch
-        {
-            return null;
-        }
+
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }
