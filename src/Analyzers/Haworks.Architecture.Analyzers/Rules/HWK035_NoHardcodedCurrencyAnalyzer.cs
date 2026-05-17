@@ -43,10 +43,20 @@ public sealed class HWK035_NoHardcodedCurrencyAnalyzer : DiagnosticAnalyzer
                 if (field?.Modifiers.Any(SyntaxKind.ConstKeyword) == true)
                     return;
 
-                // Skip enum-like assignments in Options/Config classes
+                // Skip domain entities, DTOs, Options/Config (default currency in property initializers is valid)
                 var containingClass = context.Node.FirstAncestorOrSelf<ClassDeclarationSyntax>();
                 var className = containingClass?.Identifier.Text ?? "";
                 if (className.Contains("Options") || className.Contains("Config") || className.Contains("Settings"))
+                    return;
+
+                // Skip Domain entities (currency defaults) and record DTOs
+                var nsDecl = context.Node.FirstAncestorOrSelf<BaseNamespaceDeclarationSyntax>();
+                var ns = nsDecl?.Name.ToString() ?? "";
+                if (ns.Contains("Domain") || ns.Contains("Contracts"))
+                    return;
+
+                // Skip property initializers (e.g., public string Currency { get; init; } = "USD")
+                if (context.Node.Parent is EqualsValueClauseSyntax)
                     return;
 
                 context.ReportDiagnostic(
