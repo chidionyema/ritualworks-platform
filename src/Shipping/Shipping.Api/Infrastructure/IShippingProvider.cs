@@ -57,8 +57,10 @@ public sealed record TrackingInfo(
     DateTime? EstimatedDelivery,
     IReadOnlyList<TrackingEvent> Events);
 
-public sealed record TrackingEvent(
-    DateTime Timestamp,
-    string Status,
-    string? Location,
-    string? Description);
+public sealed record TrackingEvent
+{
+    public required DateTime Timestamp { get; init; }
+    public required string Status { get; init; }
+    public string? Location { get; init; }
+    public string? Description { get; init; }
+}

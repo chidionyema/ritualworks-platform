@@ -50,30 +50,32 @@ public sealed class EasyPostShippingProvider : IShippingProvider
                 Height = request.Parcel.HeightInches,
                 Weight = request.Parcel.WeightOz,
             },
-        });
+        }, ct);
 
         var rates = shipment.Rates?.Select(r => new RateDto(
-            r.Id,
+            r.Id ?? "unknown",
             r.Carrier ?? "unknown",
             r.Service ?? "standard",
-            decimal.TryParse(r.Rate, out var amt) ? amt : 0m,
-            r.Currency ?? "USD",
+            decimal.TryParse(r.Price, out var amt) ? amt : 0m,
+            r.Currency ?? string.Empty,
             r.DeliveryDays
         )).ToList() ?? [];
 
         _logger.LogInformation("Created EasyPost shipment {ShipmentId} with {RateCount} rates",
             shipment.Id, rates.Count);
 
-        return new CreateShipmentResult(shipment.Id, rates);
+        return new CreateShipmentResult(shipment.Id ?? "", rates);
     }
 
     public async Task<BuyLabelResult> BuyLabelAsync(string shipmentId, string rateId, CancellationToken ct)
     {
-        var shipment = await _client.Shipment.Retrieve(shipmentId);
-        var rate = shipment.Rates?.FirstOrDefault(r => r.Id == rateId)
+        var shipment = await _client.Shipment.Retrieve(shipmentId, ct);
+        var rate = shipment.Rates?.FirstOrDefault(r => string.Equals(r.Id, rateId, StringComparison.Ordinal))
             ?? shipment.LowestRate();
 
-        var bought = await _client.Shipment.Buy(shipmentId, rate);
+#pragma warning disable CA2016, HWK050 // EasyPost SDK Buy() does not accept CancellationToken
+        var bought = await _client.Shipment.Buy(shipmentId, rate.Id);
+#pragma warning restore CA2016, HWK050
 
         return new BuyLabelResult(
             bought.TrackingCode ?? "",
@@ -81,21 +83,25 @@ public sealed class EasyPostShippingProvider : IShippingProvider
             bought.PostageLabel?.LabelUrl ?? "",
             rate.Carrier ?? "unknown",
             rate.Service ?? "standard",
-            decimal.TryParse(rate.Rate, out var amt) ? amt : 0m,
-            rate.Currency ?? "USD",
+            decimal.TryParse(rate.Price, out var amt) ? amt : 0m,
+            rate.Currency ?? string.Empty,
             bought.Tracker?.EstDeliveryDate);
     }
 
     public async Task<TrackingInfo> GetTrackingAsync(string trackingNumber, CancellationToken ct)
     {
-        var tracker = await _client.Tracker.Create(trackingNumber);
+        var tracker = await _client.Tracker.Create(new EasyPost.Parameters.Tracker.Create
+        {
+            TrackingCode = trackingNumber,
+        }, ct);
 
-        var events = tracker.TrackingDetails?.Select(d => new TrackingEvent(
-            d.Datetime ?? DateTime.UtcNow,
-            d.Status ?? "unknown",
-            d.TrackingLocation?.City,
-            d.Message
-        )).ToList() ?? [];
+        var events = tracker.TrackingDetails?.Select(d => new TrackingEvent
+        {
+            Timestamp = d.Datetime ?? DateTime.UtcNow,
+            Status = d.Status ?? "unknown",
+            Location = d.TrackingLocation?.City,
+            Description = d.Message,
+        }).ToList() ?? [];
 
         return new TrackingInfo(
             tracker.Status ?? "unknown",

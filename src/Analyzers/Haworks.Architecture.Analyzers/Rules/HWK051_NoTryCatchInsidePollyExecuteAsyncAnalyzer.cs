@@ -76,8 +76,9 @@ public sealed class HWK051_NoTryCatchInsidePollyExecuteAsyncAnalyzer : Diagnosti
             return false;
 
         // Check receiver type contains Polly/Policy/Resilience
-        var receiverText = ma.Expression.ToString().ToLowerInvariant();
-        return receiverText.IndexOf("policy", System.StringComparison.Ordinal) >= 0 ||
-               receiverText.IndexOf("resilience", System.StringComparison.Ordinal) >= 0;
+        var receiverText = ma.Expression.ToString();
+        return receiverText.IndexOf("policy", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+               receiverText.IndexOf("resilience", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+               receiverText.IndexOf("Policy", System.StringComparison.Ordinal) >= 0;
     }
 }
