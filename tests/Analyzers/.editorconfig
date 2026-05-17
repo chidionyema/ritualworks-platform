@@ -1,5 +1,6 @@
 [*.cs]
 dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1000.severity = none
 dotnet_diagnostic.S101.severity = none
 dotnet_diagnostic.AsyncFixer01.severity = none
 dotnet_diagnostic.CA1852.severity = none

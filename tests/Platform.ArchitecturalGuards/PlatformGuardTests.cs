@@ -3803,8 +3803,8 @@ string.Equals(referenced, "BuildingBlocks.Testing", StringComparison.Ordinal) ||
             // Exclude intentionally bare consumers
             if (string.Equals(fileName, "GlobalFaultConsumer", StringComparison.Ordinal)) continue;
 
-            // Exclude BuildingBlocks (shared infrastructure, not a service)
-            if (file.Contains("BuildingBlocks")) continue;
+            // Exclude BuildingBlocks and Analyzers (shared infrastructure, not a service)
+            if (file.Contains("BuildingBlocks") || file.Contains("Analyzers")) continue;
 
             // Exclude read-only service consumers
             var serviceName = file.Replace(SrcRoot + Path.DirectorySeparatorChar, "")
@@ -3839,10 +3839,11 @@ string.Equals(referenced, "BuildingBlocks.Testing", StringComparison.Ordinal) ||
                 violations.Add($"{Relative(file)}: {fileName} implements IConsumer<T> but has no ConsumerDefinition — retry/prefetch/concurrency unconfigured");
             }
         }
-        // Known gaps — services without EF Outbox cannot use BoundedContextConsumerDefinition:
-        // - Identity (2): no EF outbox (ASP.NET Identity manages its own persistence)
-        // - Audit (1): append-only, no outbox needed, dedup via message_id index
-        // - Pricing (2): no EF outbox yet (Gemini agent code, needs migration)
+        // Remaining gaps — these consumers use assembly-scanning or reflection registration
+        // which doesn't support inline ConsumerDefinition pairing. Protected by UseBusOutbox.
+        // - Audit (1): reflection-registered AuditConsumer<T>
+        // - Pricing (2): assembly-scanned consumers
+        // - Identity (2): outbox configured but no ConsumerDefinition class yet
         var definitionBaseline = 5;
         violations.Should().HaveCountLessOrEqualTo(definitionBaseline,
             $"consumers missing ConsumerDefinition must not increase beyond baseline ({definitionBaseline}) — add BoundedContextConsumerDefinition or service-specific definition");

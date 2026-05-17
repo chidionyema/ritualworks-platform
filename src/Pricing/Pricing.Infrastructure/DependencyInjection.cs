@@ -86,6 +86,11 @@ public static class DependencyInjection
                     typeof(DependencyInjection).Assembly,
                     typeof(Haworks.Pricing.Application.Services.PriceCalculationEngine).Assembly);
 
+                mt.AddEntityFrameworkOutbox<Persistence.PricingDbContext>(o =>
+                {
+                    o.UsePostgres().UseBusOutbox();
+                });
+
                 mt.UsingRabbitMq((context, cfg) =>
                 {
                     var rabbitHost = configuration.GetConnectionString("rabbitmq")

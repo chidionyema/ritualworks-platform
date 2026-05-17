@@ -240,6 +240,12 @@ public static class DependencyInjection
                 mt.SetKebabCaseEndpointNameFormatter();
                 mt.AddConsumer<Haworks.Identity.Application.Consumers.PrivacyErasureRequestedConsumer>();
                 mt.AddConsumer<Haworks.Identity.Application.Consumers.JwtKeyRotatedConsumer>();
+
+                mt.AddEntityFrameworkOutbox<AppIdentityDbContext>(o =>
+                {
+                    o.UsePostgres().UseBusOutbox();
+                });
+
                 mt.UsingRabbitMq((context, cfg) =>
                 {
                     var rabbitConn = configuration.GetConnectionString("rabbitmq")

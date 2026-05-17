@@ -28,7 +28,7 @@ public class HWK001Tests
 
         var expected = CSharpAnalyzerVerifier<HWK001_NoManualSaveChangesInConsumerAnalyzer>
             .Diagnostic(Diagnostics.NoManualSaveChangesInConsumer)
-            .WithLocation(11, 15)
+            .WithSpan("/0/Test3.cs", 11, 15, 11, 62)
             .WithArguments("SaveChangesAsync");
 
         await CSharpAnalyzerVerifier<HWK001_NoManualSaveChangesInConsumerAnalyzer>

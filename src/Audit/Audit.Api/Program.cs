@@ -32,6 +32,11 @@ if (!builder.Environment.IsEnvironment("Test"))
     {
         AuditMassTransit.RegisterConsumers(cfg);
 
+        cfg.AddEntityFrameworkOutbox<Haworks.Audit.Infrastructure.Persistence.AuditDbContext>(o =>
+        {
+            o.UsePostgres().UseBusOutbox();
+        });
+
         cfg.UsingRabbitMq((ctx, rabbit) =>
         {
             var amqp = builder.Configuration.GetConnectionString("rabbitmq")
