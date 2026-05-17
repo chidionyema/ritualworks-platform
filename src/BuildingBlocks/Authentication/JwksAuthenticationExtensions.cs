@@ -102,44 +102,38 @@ public static class JwksAuthenticationExtensions
         public void PostConfigure(string? name, JwtBearerOptions options)
         {
             options.TokenValidationParameters.IssuerSigningKeyResolver =
-                (token, securityToken, kid, parameters) => ResolveKeys(manager, kid, logger);
+                (token, securityToken, kid, parameters) => ResolveKeys(kid);
         }
-    }
 
-    // IssuerSigningKeyResolver is synchronous by Microsoft.IdentityModel contract.
-    // ConfigurationManager.GetConfigurationAsync returns from in-memory cache on hot path
-    // (synchronous completion). Cold-start is handled by JwksWarmupHostedService below.
-    private static IEnumerable<SecurityKey> ResolveKeys(
-        IConfigurationManager<OpenIdConnectConfiguration> manager,
-        string? kid,
-        ILogger logger)
-    {
-        OpenIdConnectConfiguration? config;
-        try
+        private IEnumerable<SecurityKey> ResolveKeys(string? kid)
         {
-            // This is always a cache-hit after JwksWarmupHostedService runs.
-            // ValueTask pattern: completes synchronously from cache.
-            var task = manager.GetConfigurationAsync(CancellationToken.None);
-            config = task.IsCompletedSuccessfully ? task.Result : null;
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "JWKS fetch failed; falling back to empty key set");
-            config = null;
-        }
+            OpenIdConnectConfiguration? config;
+            try
+            {
+                var task = manager.GetConfigurationAsync(CancellationToken.None);
+#pragma warning disable HWK021 // IssuerSigningKeyResolver is sync by MS contract; cache-hit is non-blocking
+                config = task.IsCompletedSuccessfully ? task.Result : null;
+#pragma warning restore HWK021
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "JWKS fetch failed; falling back to empty key set");
+                config = null;
+            }
 
-        if (config is null)
-            return Array.Empty<SecurityKey>();
+            if (config is null)
+                return Array.Empty<SecurityKey>();
 
-        if (!string.IsNullOrEmpty(kid))
-        {
-            var matched = config.SigningKeys
-                .Where(k => string.Equals(k.KeyId, kid, StringComparison.Ordinal))
-                .ToArray();
-            if (matched.Length > 0) return matched;
+            if (!string.IsNullOrEmpty(kid))
+            {
+                var matched = config.SigningKeys
+                    .Where(k => string.Equals(k.KeyId, kid, StringComparison.Ordinal))
+                    .ToArray();
+                if (matched.Length > 0) return matched;
+            }
+
+            return config.SigningKeys;
         }
-
-        return config.SigningKeys;
     }
 
     /// <summary>

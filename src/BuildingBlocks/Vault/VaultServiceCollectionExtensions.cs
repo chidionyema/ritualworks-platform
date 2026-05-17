@@ -53,7 +53,7 @@ public static class VaultServiceCollectionExtensions
             .PostConfigure(opts =>
             {
                 if (string.IsNullOrWhiteSpace(opts.Host))
-                    throw new InvalidOperationException("Vault:DynamicDb:Host must be configured — no localhost fallback in containers");
+                    throw new InvalidOperationException("Vault:DynamicDb:Host must be configured — loopback fallback disabled for container safety");
                 if (opts.Port == 0) opts.Port = 5432;
                 if (string.IsNullOrWhiteSpace(opts.Database))
                     throw new InvalidOperationException("Vault:DynamicDb:Database must be configured");

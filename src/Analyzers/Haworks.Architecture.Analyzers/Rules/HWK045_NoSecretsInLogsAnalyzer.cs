@@ -30,8 +30,14 @@ public sealed class HWK045_NoSecretsInLogsAnalyzer : DiagnosticAnalyzer
             return;
 
         var name = ma.Name.Identifier.Text;
-        if (!name.StartsWith("Log", System.StringComparison.Ordinal))
+        // Must be a logger method (LogInformation, LogWarning, etc.) — not LoginAsync, Logout, etc.
+        if (!name.StartsWith("Log", System.StringComparison.Ordinal) ||
+            name.StartsWith("Login", System.StringComparison.Ordinal) ||
+            name.StartsWith("Logout", System.StringComparison.Ordinal))
             return;
+        if (name is "Log" or "LogTrace" or "LogDebug" or "LogInformation" or "LogWarning" or "LogError" or "LogCritical")
+        { /* valid logger method */ }
+        else return;
 
         // Only flag when a VARIABLE/IDENTIFIER containing a secret term is passed as an argument.
         // String literals mentioning "token" in descriptions (e.g., "Vault token rotated") are fine —

@@ -39,25 +39,31 @@ public sealed class OutboxMetricsWorker<TContext> : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await using var scope = _scopeFactory.CreateAsyncScope();
-                var db = scope.ServiceProvider.GetRequiredService<TContext>();
+                try
+                {
+                    await using var scope = _scopeFactory.CreateAsyncScope();
+                    var db = scope.ServiceProvider.GetRequiredService<TContext>();
 
-                // MassTransit EF outbox table: OutboxMessage with DeliveredAt NULL = pending
-                _pendingCount = await db.Database
-                    .SqlQueryRaw<int>(
-                        "SELECT COUNT(*)::int AS \"Value\" FROM outbox_message WHERE delivered_at IS NULL")
-                    .SingleAsync(stoppingToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogDebug(ex, "Outbox metrics query failed — will retry next cycle");
-            }
+                    _pendingCount = await db.Database
+                        .SqlQueryRaw<int>(
+                            "SELECT COUNT(*)::int AS \"Value\" FROM outbox_message WHERE delivered_at IS NULL")
+                        .SingleAsync(stoppingToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogDebug(ex, "Outbox metrics query failed — will retry next cycle");
+                }
 
-            await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown
         }
     }
 }
