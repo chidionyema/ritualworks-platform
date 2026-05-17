@@ -1,3 +1,4 @@
+using Xunit;
 using FluentAssertions;
 using Haworks.BuildingBlocks.Vault;
 using Microsoft.Extensions.Logging;
@@ -45,8 +46,7 @@ public class VaultCredentialProviderTests
         result.Username.Should().Be("user1");
         result.Password.Should().Be("pass1");
         _dbEngine.Verify(x => x.GetStaticCredentialsAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once);
     }
 
     [Fact]
@@ -78,8 +78,7 @@ public class VaultCredentialProviderTests
         // Setup Vault to fail
         await Task.Delay(10);
         _dbEngine.Setup(x => x.GetStaticCredentialsAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ThrowsAsync(new VaultApiException(System.Net.HttpStatusCode.ServiceUnavailable, "sealed"));
 
         // Act
@@ -96,8 +95,7 @@ public class VaultCredentialProviderTests
         var secret = new VaultSharp.V1.Commons.Secret<StaticCredentials> { Data = credData };
 
         _dbEngine.Setup(x => x.GetStaticCredentialsAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(secret);
     }
 

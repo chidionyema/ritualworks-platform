@@ -19,7 +19,7 @@ public sealed class DualKeyJwtValidator
 
     private SecurityKey? _previousKey;
     private DateTimeOffset _previousKeyExpiresAt = DateTimeOffset.MinValue;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     public DualKeyJwtValidator(
         IOptionsMonitor<JwtOptions> jwtOptions,

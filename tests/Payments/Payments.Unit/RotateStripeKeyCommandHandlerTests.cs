@@ -1,10 +1,14 @@
+using Xunit;
 using FluentAssertions;
+using Hangfire;
 using Haworks.Contracts.Secrets;
 using Haworks.Payments.Application.Commands.Secrets;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
+using VaultSharp;
+using VaultSharp.V1.SecretsEngines.KeyValue.V2;
 
 namespace Haworks.Payments.Unit;
 
@@ -12,18 +16,43 @@ public class RotateStripeKeyCommandHandlerTests
 {
     private readonly Mock<IPublishEndpoint> _publishEndpoint;
     private readonly Mock<ILogger<RotateStripeKeyCommandHandler>> _logger;
+    private readonly Mock<IVaultClient> _vaultClient;
+    private readonly Mock<IBackgroundJobClient> _backgroundJobClient;
+    private readonly Mock<IHttpClientFactory> _httpClientFactory;
     private readonly IConfiguration _configuration;
 
     public RotateStripeKeyCommandHandlerTests()
     {
         _publishEndpoint = new Mock<IPublishEndpoint>();
         _logger = new Mock<ILogger<RotateStripeKeyCommandHandler>>();
+        _vaultClient = new Mock<IVaultClient>();
+        _backgroundJobClient = new Mock<IBackgroundJobClient>();
+        _httpClientFactory = new Mock<IHttpClientFactory>();
+
         _configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Stripe:OverlapHours"] = "24"
             })
             .Build();
+
+        var v1Mock = new Mock<VaultSharp.V1.IVaultClientV1>();
+        var secretsMock = new Mock<VaultSharp.V1.SecretsEngines.ISecretsEngine>();
+        var kvMock = new Mock<VaultSharp.V1.SecretsEngines.KeyValue.IKeyValueSecretsEngine>();
+        var kv2Mock = new Mock<IKeyValueSecretsEngineV2>();
+
+        _vaultClient.Setup(x => x.V1).Returns(v1Mock.Object);
+        v1Mock.Setup(x => x.Secrets).Returns(secretsMock.Object);
+        secretsMock.Setup(x => x.KeyValue).Returns(kvMock.Object);
+        kvMock.Setup(x => x.V2).Returns(kv2Mock.Object);
+
+        kv2Mock.Setup(x => x.ReadSecretAsync(It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ThrowsAsync(new Exception("no existing key"));
+        kv2Mock.Setup(x => x.WriteSecretAsync(It.IsAny<string>(), It.IsAny<Dictionary<string, object>>(), It.IsAny<int?>(), It.IsAny<string>()))
+            .Returns(Task.FromResult(new VaultSharp.V1.Commons.Secret<VaultSharp.V1.Commons.CurrentSecretMetadata> { Data = new VaultSharp.V1.Commons.CurrentSecretMetadata() }));
+
+        _httpClientFactory.Setup(x => x.CreateClient("StripeVerification"))
+            .Returns(new System.Net.Http.HttpClient(new OkHttpMessageHandler()));
     }
 
     [Fact]
@@ -44,14 +73,14 @@ public class RotateStripeKeyCommandHandlerTests
     [InlineData("invalid_key")]
     [InlineData("pk_test_123")]
     [InlineData("rk_live_123")]
-    public async Task Rejects_invalid_key_format(string invalidKey)
+    public void Rejects_invalid_key_format(string invalidKey)
     {
         var handler = CreateHandler();
         var command = new RotateStripeKeyCommand { NewSecretKey = invalidKey };
 
         var act = () => handler.Handle(command, CancellationToken.None);
 
-        await act.Should().ThrowAsync<ArgumentException>();
+        act.Should().ThrowAsync<ArgumentException>();
     }
 
     [Fact]
@@ -92,5 +121,13 @@ public class RotateStripeKeyCommandHandlerTests
     }
 
     private RotateStripeKeyCommandHandler CreateHandler() =>
-        new(_publishEndpoint.Object, _configuration, _logger.Object);
+        new(_publishEndpoint.Object, _configuration, _logger.Object,
+            _vaultClient.Object, _backgroundJobClient.Object, _httpClientFactory.Object);
+}
+
+internal sealed class OkHttpMessageHandler : System.Net.Http.HttpMessageHandler
+{
+    protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(
+        System.Net.Http.HttpRequestMessage request, CancellationToken cancellationToken) =>
+        Task.FromResult(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK));
 }
