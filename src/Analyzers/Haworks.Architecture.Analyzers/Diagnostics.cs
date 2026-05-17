@@ -149,4 +149,36 @@ public static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NoStringConcatInSql = new(
+        id: "HWK027",
+        title: "Do not use string concatenation in SQL queries",
+        messageFormat: "String interpolation/concatenation in '{0}' is a SQL injection vector — use parameterized queries",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NoReturnTaskWithoutAwaitInTryCatch = new(
+        id: "HWK028",
+        title: "Do not return Task without await inside try/catch",
+        messageFormat: "Returning a Task without await in '{0}' means the catch block will never execute for async exceptions",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NoDecimalArithmeticWithoutRounding = new(
+        id: "HWK030",
+        title: "Financial decimal arithmetic must use explicit rounding",
+        messageFormat: "Arithmetic on '{0}' may produce more than 2 decimal places — use Math.Round for financial precision",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor ClassShouldBeSealed = new(
+        id: "HWK031",
+        title: "Classes should be sealed unless designed for inheritance",
+        messageFormat: "Class '{0}' is not sealed and has no virtual members — seal it for performance",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true);
 }
