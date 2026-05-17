@@ -25,7 +25,7 @@ public class PayoutsWebAppFactory : WebApplicationFactory<Program>, IAsyncLifeti
     public async Task InitializeAsync() 
     { 
         ConnString = await SharedTestPostgres.CreateDatabaseAsync("payouts"); 
-        _resetter = new DatabaseResetter(ConnString);
+        _resetter = new DatabaseResetter(ConnString, "payouts");
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Test"); 
         Environment.SetEnvironmentVariable("ConnectionStrings__payouts", ConnString); 
         Environment.SetEnvironmentVariable("Stripe__SecretKey", "sk_test_dummy"); 

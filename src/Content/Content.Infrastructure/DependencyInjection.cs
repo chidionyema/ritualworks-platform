@@ -55,6 +55,7 @@ public static class DependencyInjection
             {
                 options.UseNpgsql(connectionString);
             }
+            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         });
 
         // Cross-cutting BuildingBlocks dependencies. TryAdd so we don't

@@ -1,12 +1,14 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Xunit;
 using Haworks.BuildingBlocks.Testing.Authentication;
 using Haworks.BuildingBlocks.Testing.Containers;
+using Haworks.Scheduler.Infrastructure.Persistence;
 using Hangfire;
 
 namespace Haworks.Scheduler.Integration;
@@ -26,6 +28,10 @@ public class SchedulerWebAppFactory : WebApplicationFactory<Program>, IAsyncLife
         // AddPlatformAuthentication requires JwksOptions to be present at host startup.
         // Values are test-grade placeholders; the real JWT pipeline is bypassed by TestAuthenticationHandler.
         JwtTestDefaults.SetTestEnvironmentVariables();
+
+        // Force host build so Services are available, then apply schema
+        _ = Services;
+        await EnsureSchemaAsync();
     }
 
     public new Task DisposeAsync() => Task.CompletedTask;
@@ -48,5 +54,13 @@ public class SchedulerWebAppFactory : WebApplicationFactory<Program>, IAsyncLife
             services.AddSingleton(mockBackgroundJobClient.Object);
             services.AddAuthentication(TestAuthenticationHandler.SchemeName).AddTestAuth();
         });
+    }
+
+    public async Task EnsureSchemaAsync()
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<SchedulerDbContext>();
+        await db.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS scheduler;");
+        await db.Database.EnsureCreatedAsync();
     }
 }

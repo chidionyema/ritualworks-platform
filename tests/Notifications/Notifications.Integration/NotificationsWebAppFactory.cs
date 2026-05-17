@@ -37,7 +37,7 @@ public class NotificationsWebAppFactory : WebApplicationFactory<Program>, IAsync
     public async Task InitializeAsync()
     {
         ConnectionString = await SharedTestPostgres.CreateDatabaseAsync("notifications");
-        _resetter = new DatabaseResetter(ConnectionString);
+        _resetter = new DatabaseResetter(ConnectionString, "notifications");
         JwtTestDefaults.SetTestEnvironmentVariables();
 
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Test");

@@ -62,6 +62,8 @@ public class LocationWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
             geocodingMock.Setup(x => x.GeocodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((51.5074, -0.1278));
             services.AddScoped(_ => geocodingMock.Object);
+
+            services.AddAuthentication(TestAuthenticationHandler.SchemeName).AddTestAuth();
         });
     }
 }

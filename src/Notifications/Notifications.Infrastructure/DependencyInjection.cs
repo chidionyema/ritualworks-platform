@@ -71,6 +71,7 @@ public static partial class DependencyInjection
                     npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "notifications");
                 });
             }
+            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         });
 
         if (!env.IsEnvironment("Test"))

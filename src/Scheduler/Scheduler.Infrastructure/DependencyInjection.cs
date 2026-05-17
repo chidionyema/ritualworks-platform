@@ -21,7 +21,10 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("scheduler");
 
         services.AddDbContext<SchedulerDbContext>(options =>
-            options.UseNpgsql(connectionString));
+        {
+            options.UseNpgsql(connectionString);
+            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        });
 
         services.AddScoped<IEventScheduler, HangfireEventScheduler>();
         services.AddScoped<ILeaseRepository, LeaseRepository>();

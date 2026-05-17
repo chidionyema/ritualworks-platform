@@ -3580,4 +3580,53 @@ string.Equals(referenced, "BuildingBlocks.Testing", StringComparison.Ordinal) ||
         violations.Should().BeEmpty("hardcoded localhost URIs cause silent production failures — use configuration");
     }
 
+    // ─── Migration Drift Guard ────────────────────────────────────────
+
+    [Fact]
+    public void Every_DbContext_with_new_properties_has_a_matching_migration()
+    {
+        var violations = new List<string>();
+        var dbContextFiles = Directory.GetFiles(SrcRoot, "*DbContext.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains("/obj/") && !f.Contains("/bin/") && !f.Contains("Test"))
+            .ToList();
+
+        foreach (var dbContextFile in dbContextFiles)
+        {
+            var content = File.ReadAllText(dbContextFile);
+            if (!content.Contains("OnModelCreating")) continue;
+
+            var dir = Path.GetDirectoryName(dbContextFile)!;
+            var infraDir = dir;
+            while (!string.IsNullOrEmpty(infraDir) && !Path.GetFileName(infraDir).EndsWith("Infrastructure", StringComparison.OrdinalIgnoreCase))
+            {
+                infraDir = Path.GetDirectoryName(infraDir);
+            }
+            if (string.IsNullOrEmpty(infraDir)) continue;
+
+            var migrationsDir = Path.Combine(infraDir, "Migrations");
+            if (!Directory.Exists(migrationsDir)) continue;
+
+            var snapshotFiles = Directory.GetFiles(migrationsDir, "*ModelSnapshot.cs", SearchOption.TopDirectoryOnly);
+            if (snapshotFiles.Length == 0) continue;
+
+            var snapshot = File.ReadAllText(snapshotFiles[0]);
+
+            var propertyPattern = new Regex(@"entity\.Property[<(].*?""(\w+)""", RegexOptions.NonBacktracking);
+            var dbContextProperties = propertyPattern.Matches(content)
+                .Select(m => m.Groups[1].Value)
+                .Where(p => !string.Equals(p, "xmin", StringComparison.Ordinal))
+                .ToHashSet();
+
+            foreach (var prop in dbContextProperties)
+            {
+                if (!snapshot.Contains($"\"{prop}\"") && !snapshot.Contains($".{prop}"))
+                {
+                    violations.Add($"{Relative(dbContextFile)}: property '{prop}' configured in DbContext but not found in migration snapshot — run `dotnet ef migrations add`");
+                }
+            }
+        }
+
+        violations.Should().BeEmpty("DbContext schema changes must have corresponding migrations to prevent PendingModelChangesWarning at runtime");
+    }
+
 }

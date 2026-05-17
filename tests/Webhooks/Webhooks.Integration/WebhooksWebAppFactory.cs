@@ -25,7 +25,7 @@ public class WebhooksWebAppFactory : WebApplicationFactory<Program>, IAsyncLifet
     {
         ConnectionString = await SharedTestPostgres.CreateDatabaseAsync("webhooks");
         RabbitMqConnectionString = "amqp://guest:guest@localhost:5672/";
-        _resetter = new DatabaseResetter(ConnectionString);
+        _resetter = new DatabaseResetter(ConnectionString, "webhooks");
 
         JwtTestDefaults.SetTestEnvironmentVariables();
 

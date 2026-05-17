@@ -71,12 +71,12 @@ public class OrderDbContext : DbContext
             entity.HasIndex(o => o.IdempotencyKey).HasDatabaseName("IX_Orders_IdempotencyKey");
             entity.HasIndex(o => o.Status).HasDatabaseName("IX_Orders_Status");
 
-            entity.HasMany(typeof(OrderStatusHistory), "_statusHistory")
+            entity.HasMany(o => o.StatusHistory)
                 .WithOne()
-                .HasForeignKey("OrderId")
+                .HasForeignKey(h => h.OrderId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.Navigation("_statusHistory").UsePropertyAccessMode(PropertyAccessMode.Field);
+            entity.Navigation(nameof(Order.StatusHistory)).UsePropertyAccessMode(PropertyAccessMode.Field);
         });
 
         modelBuilder.Entity<OrderStatusHistory>(entity =>

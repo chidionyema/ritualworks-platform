@@ -56,6 +56,7 @@ public sealed class IdentityWebAppFactory : WebApplicationFactory<Program>, IAsy
                 ["Jwt:Issuer"]   = "test-issuer",
                 ["Jwt:Audience"] = "test-audience",
                 ["Vault:Enabled"] = "false",
+                ["Cors:AllowedOrigins:0"] = "http://localhost:3000",
             });
         });
 

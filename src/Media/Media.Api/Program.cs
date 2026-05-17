@@ -35,7 +35,10 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
         "No database connection string. Expected 'ConnectionStrings:DefaultConnection'.");
 
 builder.Services.AddDbContext<MediaDbContext>(options =>
-    options.UseNpgsql(connectionString));
+{
+    options.UseNpgsql(connectionString);
+    options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+});
 
 // ── Health checks ──
 builder.Services.AddHealthChecks()

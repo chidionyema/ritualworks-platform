@@ -1,0 +1,94 @@
+{
+  "consumer": {
+    "name": "ConsumerOfPayments"
+  },
+  "interactions": [
+    {
+      "contents": {
+        "content": {
+          "actualPaid": 75.0,
+          "difference": 25.0,
+          "eventId": "00000000-0000-0000-0000-000000000000",
+          "expectedTotal": 50.0,
+          "occurredAt": "2026-05-03T12:00:00Z",
+          "orderId": "77777777-7777-7777-7777-777777777777",
+          "paymentId": "66666666-6666-6666-6666-666666666666",
+          "provider": "Stripe",
+          "reason": "Stripe captured 75.00 USD; expected 50.00 USD"
+        },
+        "contentType": "application/json",
+        "encoded": false
+      },
+      "description": "a PaymentAmountMismatchEvent when Stripe captured a different amount than authorized",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "payment 66666666-... was authorized for 50.00 USD but Stripe captured 75.00 USD"
+        }
+      ],
+      "type": "Asynchronous/Messages"
+    },
+    {
+      "contents": {
+        "content": {
+          "amount": 50.0,
+          "currency": "USD",
+          "eventId": "00000000-0000-0000-0000-000000000000",
+          "occurredAt": "2026-05-03T12:00:00Z",
+          "orderId": "22222222-2222-2222-2222-222222222222",
+          "paymentId": "11111111-1111-1111-1111-111111111111",
+          "provider": "Stripe",
+          "sagaId": "33333333-3333-3333-3333-333333333333",
+          "transactionReference": "pi_abc"
+        },
+        "contentType": "application/json",
+        "encoded": false
+      },
+      "description": "a PaymentCompletedEvent for a Stripe-completed payment",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "payment 11111111-... for orderId 22222222-... was just marked Completed by the webhook consumer"
+        }
+      ],
+      "type": "Asynchronous/Messages"
+    },
+    {
+      "contents": {
+        "content": {
+          "attemptNumber": 1,
+          "errorCode": "payment_intent.payment_failed",
+          "errorMessage": "Stripe reported payment_intent.payment_failed for session sess_x",
+          "eventId": "00000000-0000-0000-0000-000000000000",
+          "isFinalAttempt": true,
+          "occurredAt": "2026-05-03T12:00:00Z",
+          "orderId": "44444444-4444-4444-4444-444444444444",
+          "provider": "Stripe",
+          "sagaId": "55555555-5555-5555-5555-555555555555"
+        },
+        "contentType": "application/json",
+        "encoded": false
+      },
+      "description": "a PaymentSessionFailedEvent after Stripe rejected the session",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "payment session for orderId 44444444-... failed terminally on Stripe"
+        }
+      ],
+      "type": "Asynchronous/Messages"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "ffi": "0.4.23",
+      "models": "1.2.5"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "payments-svc"
+  }
+}
