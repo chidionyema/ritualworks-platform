@@ -4,6 +4,7 @@ using Haworks.BuildingBlocks.Common;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Contracts.Payments;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Haworks.Payments.Application.Commands.Refunds;
@@ -33,14 +34,36 @@ public sealed class CreateRefundCommandHandler(
             return Result.Failure<Guid>(Error.Validation("Payment.NotCompleted", $"Payment must be completed before refund. Current status: {payment.Status}"));
         }
 
-        var remainingRefundable = payment.Amount - payment.TotalRefunded;
-        if (request.Amount > remainingRefundable)
+        var refundId = Guid.NewGuid();
+
+        // Mutate domain state first — RecordRefund validates remaining amount
+        // and throws if total would exceed payment amount.
+        try
         {
-            return Result.Failure<Guid>(Error.Validation("Refund.ExceedsRemaining",
-                $"Refund amount {request.Amount} exceeds remaining refundable amount {remainingRefundable} (already refunded: {payment.TotalRefunded})"));
+            payment.RecordRefund(request.Amount);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Result.Failure<Guid>(Error.Validation("Refund.InvalidState", ex.Message));
+        }
+        catch (ArgumentException ex)
+        {
+            return Result.Failure<Guid>(Error.Validation("Refund.InvalidAmount", ex.Message));
         }
 
-        var refundId = Guid.NewGuid();
+        // Persist state BEFORE publishing the event to prevent double-refund.
+        // The Payment entity carries an xmin concurrency token — EF will throw
+        // DbUpdateConcurrencyException if another refund raced us.
+        try
+        {
+            await paymentRepository.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            logger.LogWarning("Concurrent refund detected for Payment {PaymentId}; rejecting", payment.Id);
+            return Result.Failure<Guid>(Error.Conflict("Refund.ConcurrencyConflict",
+                "Another refund for this payment was processed concurrently. Please retry."));
+        }
 
         await eventPublisher.PublishAsync(new RefundRequestedEvent
         {

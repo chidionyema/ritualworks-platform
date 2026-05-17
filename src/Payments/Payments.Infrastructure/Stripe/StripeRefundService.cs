@@ -59,11 +59,12 @@ internal sealed class StripeRefundService(
                     options.Amount = request.AmountCents.Value;
                 }
 
-                var requestOptions = new RequestOptions();
-                if (!string.IsNullOrEmpty(request.IdempotencyKey))
+                var requestOptions = new RequestOptions
                 {
-                    requestOptions.IdempotencyKey = request.IdempotencyKey;
-                }
+                    IdempotencyKey = !string.IsNullOrWhiteSpace(request.IdempotencyKey)
+                        ? request.IdempotencyKey
+                        : Guid.NewGuid().ToString()
+                };
 
                 logger.LogInformation(
                     "Creating Stripe refund for PaymentIntent {TransactionId}",
