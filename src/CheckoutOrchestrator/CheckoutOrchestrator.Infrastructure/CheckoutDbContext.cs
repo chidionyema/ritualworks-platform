@@ -72,6 +72,7 @@ public class CheckoutDbContext : DbContext, ICheckoutDbContext
                 .IsConcurrencyToken();
 
             entity.HasIndex(s => s.OrderId).IsUnique().HasDatabaseName("IX_CheckoutSagas_OrderId");
+            entity.HasIndex(s => s.IdempotencyKey).IsUnique().HasFilter("\"IdempotencyKey\" IS NOT NULL").HasDatabaseName("IX_CheckoutSagas_IdempotencyKey");
             entity.HasIndex(s => s.CurrentState).HasDatabaseName("IX_CheckoutSagas_CurrentState");
         });
 

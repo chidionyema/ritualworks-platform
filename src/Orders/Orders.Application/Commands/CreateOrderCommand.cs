@@ -1,5 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Haworks.Contracts.Orders;
 using Haworks.Orders.Application.Telemetry;
 
@@ -37,10 +40,7 @@ internal sealed class CreateOrderCommandHandler(
         activity?.SetTag("saga.id", request.SagaId);
 
         // Idempotency: if an order already exists for this SagaId, return its
-        // Id rather than creating a duplicate. SagaId has a unique index on
-        // the Orders table — the alternative is hitting that constraint at
-        // SaveChanges time and translating to Conflict, which is uglier UX
-        // for a deliberately-retryable command.
+        // Id rather than creating a duplicate.
         var existing = await orders.GetBySagaIdTrackedAsync(request.SagaId, ct);
         if (existing is not null)
         {
@@ -61,30 +61,44 @@ internal sealed class CreateOrderCommandHandler(
 
         await orders.AddAsync(order, ct);
 
-        // Publish BEFORE save so the OutboxMessage commits in the same EF txn
-        // as the Order INSERT. CustomerId on the contract is Guid (required),
-        // so if the UserId can't be parsed as a Guid we skip the publish —
-        // the order still saves so REST queries find it. Phase 5+ saga lookups
-        // will revisit when checkout-svc supplies the canonical Guid CustomerId.
-        if (Guid.TryParse(request.UserId, out var customerGuid))
-        {
-            await eventPublisher.PublishAsync(new OrderCreatedEvent
-            {
-                OrderId = order.Id,
-                CustomerId = customerGuid,
-                TotalAmount = order.TotalAmount,
-                CustomerEmail = order.CustomerEmail,
-            }, ct);
-        }
-        else
+        // M2 fix: Always publish OrderCreatedEvent. If UserId is not a valid GUID,
+        // derive a deterministic one from the UserId string so the saga always sees the order.
+        var customerGuid = Guid.TryParse(request.UserId, out var parsed)
+            ? parsed
+            : new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(request.UserId)).AsSpan(0, 16));
+
+        if (!Guid.TryParse(request.UserId, out _))
         {
             logger.LogWarning(
-                "Order {OrderId}: UserId '{UserId}' is not a Guid — skipping OrderCreatedEvent. " +
-                "Downstream consumers won't see this order until UserId-as-Guid is enforced upstream.",
-                order.Id, request.UserId);
+                "Order {OrderId}: UserId '{UserId}' is not a Guid — using deterministic hash {DerivedGuid}",
+                order.Id, request.UserId, customerGuid);
         }
 
-        await orders.SaveChangesAsync(ct);
+        await eventPublisher.PublishAsync(new OrderCreatedEvent
+        {
+            OrderId = order.Id,
+            CustomerId = customerGuid,
+            TotalAmount = order.TotalAmount,
+            CustomerEmail = order.CustomerEmail,
+        }, ct);
+
+        // M1 fix: catch unique constraint violation (23505) on SagaId for concurrent duplicates.
+        // On conflict, re-read the existing order and return its ID as idempotent success.
+        try
+        {
+            await orders.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        {
+            logger.LogInformation(
+                "CreateOrderCommand: concurrent duplicate for sagaId {SagaId}; returning existing order",
+                request.SagaId);
+            var duplicate = await orders.GetBySagaIdTrackedAsync(request.SagaId, ct);
+            if (duplicate is not null)
+                return Result.Success(duplicate.Id);
+            throw; // constraint was on something else
+        }
+
         logger.LogInformation("Order {OrderId} created for sagaId {SagaId}", order.Id, request.SagaId);
         return Result.Success(order.Id);
     }

@@ -166,6 +166,7 @@ internal sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenC
             }
 
             await _refreshTokenRepository.SaveChangesAsync(cancellationToken);
+            await _refreshTokenRepository.CommitTransactionAsync(cancellationToken);
 
             _logger.LogInformation("Successfully rotated tokens for User {UserId}", userId);
 

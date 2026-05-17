@@ -90,17 +90,17 @@ public class OrdersControllerTests : TestBase
     public async Task Get_WithUnauthorizedUser_ReturnsForbid()
     {
         var orderId = Guid.NewGuid();
-        var orderDto = new OrderDto(orderId, "owner-user", Guid.NewGuid(), "email", 100m, "USD", "Pending", null, null, DateTime.UtcNow, new List<OrderItemDto>());
 
         // Set up a different user (not owner, not admin)
         SetupHttpContext(forwardedUserId: "different-user");
 
         _mediatorMock
             .Setup(m => m.Send(It.IsAny<GetOrderByIdQuery>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success(orderDto));
+            .ReturnsAsync(Result.Failure<OrderDto>(Error.Orders.Forbidden));
 
         var result = await _controller.Get(orderId, CancellationToken.None);
 
-        Assert.IsType<ForbidResult>(result);
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(403, objectResult.StatusCode);
     }
 }

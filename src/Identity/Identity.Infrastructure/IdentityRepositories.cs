@@ -147,6 +147,13 @@ public class IdentityRefreshTokenRepository : IRefreshTokenRepository
         return await _context.Database.BeginTransactionAsync(ct);
     }
 
+    public async Task CommitTransactionAsync(CancellationToken ct = default)
+    {
+        var transaction = _context.Database.CurrentTransaction
+            ?? throw new InvalidOperationException("No active transaction to commit.");
+        await transaction.CommitAsync(ct);
+    }
+
     public Task SaveChangesAsync(CancellationToken ct = default)
     {
         return _context.SaveChangesAsync(ct);
