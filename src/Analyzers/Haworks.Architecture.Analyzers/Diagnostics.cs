@@ -174,11 +174,51 @@ public static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
-    public static readonly DiagnosticDescriptor ClassShouldBeSealed = new(
-        id: "HWK031",
-        title: "Classes should be sealed unless designed for inheritance",
-        messageFormat: "Class '{0}' is not sealed and has no virtual members — seal it for performance",
+    public static readonly DiagnosticDescriptor NoFloatForFinancial = new(
+        id: "HWK029",
+        title: "Do not use float or double for financial values",
+        messageFormat: "Property '{0}' uses floating-point which causes precision loss in financial calculations — use decimal",
         category: Category,
-        defaultSeverity: DiagnosticSeverity.Info,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor FinancialEntityMustHaveConcurrencyToken = new(
+        id: "HWK030",
+        title: "Financial entities must have a concurrency token",
+        messageFormat: "Entity '{0}' has financial properties but no concurrency token (xmin/RowVersion/[ConcurrencyCheck])",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor EventsMustUseImmutableCollections = new(
+        id: "HWK031",
+        title: "Event records must use immutable collections",
+        messageFormat: "Property '{0}' uses mutable collection '{1}' — use IReadOnlyList or ImmutableArray for events",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NoAsNoTrackingWithSaveChanges = new(
+        id: "HWK032",
+        title: "Do not mix AsNoTracking() with SaveChangesAsync()",
+        messageFormat: "Method '{0}' calls AsNoTracking() and SaveChangesAsync() which silently discards mutations",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor PollyMustAcceptCancellationToken = new(
+        id: "HWK033",
+        title: "Polly ExecuteAsync must accept CancellationToken",
+        messageFormat: "'{0}' without CancellationToken creates zombie tasks that cannot be cancelled",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NoHardcodedCurrency = new(
+        id: "HWK035",
+        title: "Do not hardcode currency strings",
+        messageFormat: "Hardcoded currency '{0}' must come from configuration or source event",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 }
