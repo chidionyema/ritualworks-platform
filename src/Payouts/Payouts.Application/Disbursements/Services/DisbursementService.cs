@@ -24,7 +24,7 @@ public class DisbursementService : IDisbursementService
         _logger = logger;
     }
 
-    public async Task ProcessEligiblePayoutsAsync()
+    public async Task ProcessEligiblePayoutsAsync(CancellationToken ct = default)
     {
         _logger.LogInformation("Starting payout disbursement cycle");
 
@@ -33,12 +33,12 @@ public class DisbursementService : IDisbursementService
             .Where(a => a.Type == AccountType.SellerPayable && a.Balance > 0)
             .OrderBy(a => a.Id)
             .Take(500)
-            .ToListAsync();
+            .ToListAsync(ct);
 
         var ownerIds = eligibleAccounts.Select(a => a.OwnerId).ToList();
         var profiles = await _context.SellerProfiles
             .Where(p => ownerIds.Contains(p.SellerId))
-            .ToDictionaryAsync(p => p.SellerId);
+            .ToDictionaryAsync(p => p.SellerId, ct);
 
         // M5 Fix: Process payouts concurrently (bounded to 5 parallel gateway calls)
         // Sequential processing of 500 accounts with Stripe calls took 30+ minutes.
@@ -53,13 +53,13 @@ public class DisbursementService : IDisbursementService
             "Found {EligibleCount} accounts, {QualifiedCount} qualified for payout",
             eligibleAccounts.Count, payoutList.Count);
 
-        await Parallel.ForEachAsync(payoutList, new ParallelOptions { MaxDegreeOfParallelism = 5 },
-            async (item, ct) => await ExecutePayout(item.Id, item.Item2));
+        await Parallel.ForEachAsync(payoutList, new ParallelOptions { MaxDegreeOfParallelism = 5, CancellationToken = ct },
+            async (item, loopCt) => await ExecutePayout(item.Id, item.Item2, loopCt));
 
         _logger.LogInformation("Payout disbursement cycle complete. Processed={Count}", payoutList.Count);
     }
 
-    private async Task ExecutePayout(Guid accountId, SellerProfile profile)
+    private async Task ExecutePayout(Guid accountId, SellerProfile profile, CancellationToken ct = default)
     {
         var dbContext = (Microsoft.EntityFrameworkCore.DbContext)_context;
         var strategy = dbContext.Database.CreateExecutionStrategy();

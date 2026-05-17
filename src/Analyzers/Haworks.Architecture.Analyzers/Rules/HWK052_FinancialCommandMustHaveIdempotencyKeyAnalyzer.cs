@@ -24,7 +24,8 @@ public sealed class HWK052_FinancialCommandMustHaveIdempotencyKeyAnalyzer : Diag
         title: "Commands must have an IdempotencyKey property",
         messageFormat: "Command '{0}' lacks an IdempotencyKey — network retries will create duplicate side effects",
         category: "Haworks.Architecture",
-        defaultSeverity: DiagnosticSeverity.Error,
+        // Warning during migration. Escalate to Error once all commands implement IIdempotentCommand.
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
@@ -56,7 +57,11 @@ public sealed class HWK052_FinancialCommandMustHaveIdempotencyKeyAnalyzer : Diag
         if (!baseList.Contains("IRequest"))
             return;
 
-        // Check if it has an IdempotencyKey property or parameter
+        // Check if it implements IIdempotentCommand (the infrastructure-level interface)
+        if (baseList.Contains("IIdempotentCommand"))
+            return;
+
+        // Also check for IdempotencyKey property (backward compat with commands not yet migrated)
         var hasIdempotencyKey = false;
 
         if (record.ParameterList is not null)

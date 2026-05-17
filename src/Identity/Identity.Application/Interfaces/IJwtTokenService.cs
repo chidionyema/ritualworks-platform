@@ -12,7 +12,7 @@ public interface IJwtTokenService
     /// <summary>
     /// Generates a JWT token for the specified user.
     /// </summary>
-    Task<JwtSecurityToken> GenerateTokenAsync(User user, DateTime expiration);
+    Task<JwtSecurityToken> GenerateTokenAsync(User user, DateTime expiration, CancellationToken ct = default);
 
     /// <summary>
     /// Validates a JWT token string and returns the claims principal.

@@ -179,7 +179,7 @@ internal sealed class LoginCommandHandler : IRequestHandler<LoginCommand, Result
 
         _logger.LogInformation("Login successful for user: {Username}, Id: {UserId}", user.UserName, user.Id);
 
-        var token = await _jwtTokenService.GenerateTokenAsync(user, DateTime.UtcNow.AddMinutes(_jwtOptions.TokenExpiryMinutes));
+        var token = await _jwtTokenService.GenerateTokenAsync(user, DateTime.UtcNow.AddMinutes(_jwtOptions.TokenExpiryMinutes), cancellationToken);
         var refreshTokenEntity = await _refreshTokenService.GenerateRefreshTokenAsync(user.Id, cancellationToken);
         _jwtTokenService.SetSecureCookie(request.HttpContext, token);
 

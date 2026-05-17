@@ -43,7 +43,7 @@ public class JwtTokenService : IJwtTokenService
         _environment = environment;
     }
 
-    public async Task<JwtSecurityToken> GenerateTokenAsync(User user, DateTime expiration)
+    public async Task<JwtSecurityToken> GenerateTokenAsync(User user, DateTime expiration, CancellationToken ct = default)
     {
         var claims = new List<Claim>
         {

@@ -373,7 +373,7 @@ internal sealed class ExternalLoginCallbackCommandHandler
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
-        var token = await _jwtTokenService.GenerateTokenAsync(user, DateTime.UtcNow.AddMinutes(15));
+        var token = await _jwtTokenService.GenerateTokenAsync(user, DateTime.UtcNow.AddMinutes(15), cancellationToken);
         var refreshTokenEntity = await _refreshTokenService.GenerateRefreshTokenAsync(user.Id, cancellationToken);
         _jwtTokenService.SetSecureCookie(httpContext, token);
 
