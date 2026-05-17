@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Haworks.Shipping.Api.Domain;
+using Xunit;
 
 namespace Haworks.Shipping.Unit;
 

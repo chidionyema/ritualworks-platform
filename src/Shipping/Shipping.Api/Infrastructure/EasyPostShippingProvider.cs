@@ -57,7 +57,7 @@ public sealed class EasyPostShippingProvider : IShippingProvider
             r.Carrier ?? "unknown",
             r.Service ?? "standard",
             decimal.TryParse(r.Price, out var amt) ? amt : 0m,
-            r.Currency ?? "USD",
+            r.Currency ?? string.Empty,
             r.DeliveryDays
         )).ToList() ?? [];
 
@@ -73,9 +73,9 @@ public sealed class EasyPostShippingProvider : IShippingProvider
         var rate = shipment.Rates?.FirstOrDefault(r => string.Equals(r.Id, rateId, StringComparison.Ordinal))
             ?? shipment.LowestRate();
 
-#pragma warning disable CA2016 // EasyPost SDK Buy() does not accept CancellationToken
+#pragma warning disable CA2016, HWK050 // EasyPost SDK Buy() does not accept CancellationToken
         var bought = await _client.Shipment.Buy(shipmentId, rate.Id);
-#pragma warning restore CA2016
+#pragma warning restore CA2016, HWK050
 
         return new BuyLabelResult(
             bought.TrackingCode ?? "",
@@ -84,7 +84,7 @@ public sealed class EasyPostShippingProvider : IShippingProvider
             rate.Carrier ?? "unknown",
             rate.Service ?? "standard",
             decimal.TryParse(rate.Price, out var amt) ? amt : 0m,
-            rate.Currency ?? "USD",
+            rate.Currency ?? string.Empty,
             bought.Tracker?.EstDeliveryDate);
     }
 
@@ -95,12 +95,13 @@ public sealed class EasyPostShippingProvider : IShippingProvider
             TrackingCode = trackingNumber,
         }, ct);
 
-        var events = tracker.TrackingDetails?.Select(d => new TrackingEvent(
-            d.Datetime ?? DateTime.UtcNow,
-            d.Status ?? "unknown",
-            d.TrackingLocation?.City,
-            d.Message
-        )).ToList() ?? [];
+        var events = tracker.TrackingDetails?.Select(d => new TrackingEvent
+        {
+            Timestamp = d.Datetime ?? DateTime.UtcNow,
+            Status = d.Status ?? "unknown",
+            Location = d.TrackingLocation?.City,
+            Description = d.Message,
+        }).ToList() ?? [];
 
         return new TrackingInfo(
             tracker.Status ?? "unknown",

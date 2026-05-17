@@ -18,6 +18,7 @@ public class ShipmentsController(
 {
     /// <summary>Create shipment and fetch carrier rates.</summary>
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> CreateShipment([FromBody] CreateShipmentHttpRequest request, CancellationToken ct)
     {
         var result = await provider.CreateShipmentAsync(new CreateShipmentRequest(
@@ -39,6 +40,8 @@ public class ShipmentsController(
 
     /// <summary>Buy the selected (or cheapest) rate — generates label.</summary>
     [HttpPost("{id:guid}/buy")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> BuyLabel(Guid id, [FromBody] BuyLabelRequest request, CancellationToken ct)
     {
         var shipment = await db.Shipments.FirstOrDefaultAsync(s => s.Id == id, ct);
@@ -66,6 +69,8 @@ public class ShipmentsController(
 
     /// <summary>Get shipment details + tracking.</summary>
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetShipment(Guid id, CancellationToken ct)
     {
         var shipment = await db.Shipments.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, ct);
@@ -74,6 +79,7 @@ public class ShipmentsController(
 
     /// <summary>Get shipments for an order.</summary>
     [HttpGet("by-order/{orderId:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetByOrder(Guid orderId, CancellationToken ct)
     {
         var shipments = await db.Shipments.AsNoTracking()
@@ -85,6 +91,7 @@ public class ShipmentsController(
     /// <summary>EasyPost tracking webhook.</summary>
     [HttpPost("webhooks/easypost")]
     [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> HandleWebhook([FromBody] EasyPostWebhookPayload payload, CancellationToken ct)
     {
         if (!string.Equals(payload.Description, "tracker.updated", StringComparison.Ordinal)
