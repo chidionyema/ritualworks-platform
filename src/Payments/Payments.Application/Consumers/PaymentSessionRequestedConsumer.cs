@@ -112,6 +112,7 @@ public sealed class PaymentSessionRequestedConsumer(
             {
                 OrderId = evt.OrderId,
                 SagaId = evt.SagaId,
+                UserId = evt.UserId,
                 PaymentId = payment.Id,
                 SessionId = result.SessionId,
                 CheckoutUrl = result.SessionUrl,
@@ -156,6 +157,7 @@ public sealed class PaymentSessionRequestedConsumer(
         {
             OrderId = evt.OrderId,
             SagaId = evt.SagaId,
+            UserId = evt.UserId,
             PaymentId = paymentId,
             SessionId = sessionId,
             CheckoutUrl = $"{brandOptions.Value.PrimaryUrl.TrimEnd('/')}/checkout/{sessionId}",

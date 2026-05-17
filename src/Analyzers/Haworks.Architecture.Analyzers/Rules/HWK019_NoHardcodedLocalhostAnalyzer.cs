@@ -44,6 +44,12 @@ public sealed class HWK019_NoHardcodedLocalhostAnalyzer : DiagnosticAnalyzer
                     return;
 
                 // Skip validation/SSRF-blocking code (where localhost is being REJECTED, not USED)
+                var containingClass = context.Node.FirstAncestorOrSelf<ClassDeclarationSyntax>();
+                var className = containingClass?.Identifier.Text ?? "";
+                if (className.Contains("Ssrf") || className.Contains("Guard") ||
+                    className.Contains("Validator") || className.Contains("Sanitiz"))
+                    return;
+
                 var method = context.Node.FirstAncestorOrSelf<MethodDeclarationSyntax>();
                 var methodName = method?.Identifier.Text ?? "";
                 if (methodName.Contains("Valid") || methodName.Contains("Block") ||
