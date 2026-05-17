@@ -1,6 +1,5 @@
 using Haworks.Architecture.Analyzers.Rules;
 using Haworks.Architecture.Analyzers.Tests.Verifiers;
-using Microsoft.CodeAnalysis.Testing;
 using Xunit;
 
 namespace Haworks.Architecture.Analyzers.Tests.Rules;
@@ -21,14 +20,14 @@ public class HWK001Tests
                 private readonly MyDb _db = new();
                 public async Task Consume(ConsumeContext<OrderCreatedEvent> context)
                 {
-                    await _db.SaveChangesAsync(context.CancellationToken);
+                    await {|#0:_db.SaveChangesAsync(context.CancellationToken)|};
                 }
             }
             """;
 
         var expected = CSharpAnalyzerVerifier<HWK001_NoManualSaveChangesInConsumerAnalyzer>
             .Diagnostic(Diagnostics.NoManualSaveChangesInConsumer)
-            .WithSpan("/0/Test3.cs", 11, 15, 11, 62)
+            .WithLocation(0)
             .WithArguments("SaveChangesAsync");
 
         await CSharpAnalyzerVerifier<HWK001_NoManualSaveChangesInConsumerAnalyzer>
@@ -45,9 +44,27 @@ public class HWK001Tests
             public class OrderService
             {
                 private readonly MyDb _db = new();
-                public async Task DoWork()
+                public async Task DoWork() { await _db.SaveChangesAsync(); }
+            }
+            """;
+
+        await CSharpAnalyzerVerifier<HWK001_NoManualSaveChangesInConsumerAnalyzer>
+            .VerifyNoDiagnosticsAsync(source);
+    }
+
+    [Fact]
+    public async Task ContextPublish_InsideConsumer_IsCorrectPattern()
+    {
+        const string source = """
+            using System.Threading.Tasks;
+            using MassTransit;
+            public record OrderCreatedEvent;
+            public record NotifyEvent;
+            public class GoodConsumer : IConsumer<OrderCreatedEvent>
+            {
+                public async Task Consume(ConsumeContext<OrderCreatedEvent> context)
                 {
-                    await _db.SaveChangesAsync();
+                    await context.Publish(new NotifyEvent());
                 }
             }
             """;

@@ -13,14 +13,14 @@ public static class CSharpAnalyzerVerifier<TAnalyzer>
 
     public static async Task VerifyAnalyzerAsync(string source, params DiagnosticResult[] expected)
     {
-        var test = new Test { TestCode = source };
+        var test = new Test { TestCode = Stubs.All + "\n" + source };
         test.ExpectedDiagnostics.AddRange(expected);
         await test.RunAsync(CancellationToken.None);
     }
 
     public static async Task VerifyNoDiagnosticsAsync(string source)
     {
-        var test = new Test { TestCode = source };
+        var test = new Test { TestCode = Stubs.All + "\n" + source };
         await test.RunAsync(CancellationToken.None);
     }
 
@@ -29,15 +29,14 @@ public static class CSharpAnalyzerVerifier<TAnalyzer>
         public Test()
         {
             ReferenceAssemblies = ReferenceAssemblies.Net.Net80;
-            TestState.Sources.Add(Stubs.MassTransit);
-            TestState.Sources.Add(Stubs.EfCore);
-            TestState.Sources.Add(Stubs.Polly);
         }
     }
 }
 
 internal static class Stubs
 {
+    public static string All => MassTransit + "\n" + EfCore + "\n" + Polly;
+
     public const string MassTransit = """
         namespace MassTransit
         {
