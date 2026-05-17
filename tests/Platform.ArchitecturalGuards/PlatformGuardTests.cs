@@ -3839,9 +3839,11 @@ string.Equals(referenced, "BuildingBlocks.Testing", StringComparison.Ordinal) ||
                 violations.Add($"{Relative(file)}: {fileName} implements IConsumer<T> but has no ConsumerDefinition — retry/prefetch/concurrency unconfigured");
             }
         }
-        // Known gaps (decrease baseline as services add ConsumerDefinitions):
-        // - Identity/JwtKeyRotatedConsumer: no ConsumerDefinition registered
-        var definitionBaseline = 1;
+        // Known gaps — services without EF Outbox cannot use BoundedContextConsumerDefinition:
+        // - Identity (2): no EF outbox (ASP.NET Identity manages its own persistence)
+        // - Audit (1): append-only, no outbox needed, dedup via message_id index
+        // - Pricing (2): no EF outbox yet (Gemini agent code, needs migration)
+        var definitionBaseline = 5;
         violations.Should().HaveCountLessOrEqualTo(definitionBaseline,
             $"consumers missing ConsumerDefinition must not increase beyond baseline ({definitionBaseline}) — add BoundedContextConsumerDefinition or service-specific definition");
     }

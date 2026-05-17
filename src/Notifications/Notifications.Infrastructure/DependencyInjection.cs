@@ -77,10 +77,10 @@ public static partial class DependencyInjection
         {
             services.AddMassTransit(x =>
             {
-                x.AddConsumer<Notifications.Application.Consumers.NotificationRequestConsumer>();
-                x.AddConsumer<Haworks.Notifications.Application.Webhooks.NotificationWebhookValidatedConsumer>();
-                x.AddConsumer<Notifications.Application.Consumers.RefundEmailConsumer>();
-                x.AddConsumer<Notifications.Application.Consumers.SecretExpiryWarningConsumer>();
+                x.AddConsumer<Notifications.Application.Consumers.NotificationRequestConsumer, Messaging.NotificationsConsumerDefinition<Notifications.Application.Consumers.NotificationRequestConsumer>>();
+                x.AddConsumer<Haworks.Notifications.Application.Webhooks.NotificationWebhookValidatedConsumer, Messaging.NotificationsConsumerDefinition<Haworks.Notifications.Application.Webhooks.NotificationWebhookValidatedConsumer>>();
+                x.AddConsumer<Notifications.Application.Consumers.RefundEmailConsumer, Messaging.NotificationsConsumerDefinition<Notifications.Application.Consumers.RefundEmailConsumer>>();
+                x.AddConsumer<Notifications.Application.Consumers.SecretExpiryWarningConsumer, Messaging.NotificationsConsumerDefinition<Notifications.Application.Consumers.SecretExpiryWarningConsumer>>();
 
                 x.AddEntityFrameworkOutbox<NotificationsDbContext>(o =>
                 {

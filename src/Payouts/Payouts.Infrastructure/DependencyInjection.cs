@@ -31,8 +31,8 @@ public static class DependencyInjection
         {
             services.AddMassTransit(x => {
                 x.SetKebabCaseEndpointNameFormatter();
-                x.AddConsumer<PaymentCompletedConsumer>();
-                x.AddConsumer<RefundIssuedConsumer>();
+                x.AddConsumer<PaymentCompletedConsumer, Messaging.PayoutsConsumerDefinition<PaymentCompletedConsumer>>();
+                x.AddConsumer<RefundIssuedConsumer, Messaging.PayoutsConsumerDefinition<RefundIssuedConsumer>>();
                 x.AddEntityFrameworkOutbox<PayoutsDbContext>(o =>
                 {
                     o.UsePostgres();

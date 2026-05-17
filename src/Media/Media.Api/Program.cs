@@ -148,9 +148,9 @@ if (!builder.Environment.IsEnvironment("Test"))
         mt.SetKebabCaseEndpointNameFormatter();
         mt.AddDelayedMessageScheduler();
         mt.AddConsumer<Haworks.BuildingBlocks.Messaging.GlobalFaultConsumer>();
-        mt.AddConsumer<Haworks.Media.Api.Infrastructure.Workers.ProcessMediaConsumer>();
-        mt.AddConsumer<Haworks.Media.Api.Infrastructure.Workers.ProcessMediaFaultConsumer>();
-        mt.AddConsumer<Haworks.Media.Api.Infrastructure.Workers.MediaUploadCompletedConsumer>();
+        mt.AddConsumer<Haworks.Media.Api.Infrastructure.Workers.ProcessMediaConsumer, Haworks.Media.Api.Infrastructure.Messaging.MediaConsumerDefinition<Haworks.Media.Api.Infrastructure.Workers.ProcessMediaConsumer>>();
+        mt.AddConsumer<Haworks.Media.Api.Infrastructure.Workers.ProcessMediaFaultConsumer, Haworks.Media.Api.Infrastructure.Messaging.MediaConsumerDefinition<Haworks.Media.Api.Infrastructure.Workers.ProcessMediaFaultConsumer>>();
+        mt.AddConsumer<Haworks.Media.Api.Infrastructure.Workers.MediaUploadCompletedConsumer, Haworks.Media.Api.Infrastructure.Messaging.MediaConsumerDefinition<Haworks.Media.Api.Infrastructure.Workers.MediaUploadCompletedConsumer>>();
 
         mt.AddEntityFrameworkOutbox<MediaDbContext>(o =>
         {
