@@ -346,10 +346,23 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
+// Security headers — OWASP recommended for public-facing BFF
+app.Use(async (ctx, next) =>
+{
+    ctx.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    ctx.Response.Headers["X-Frame-Options"] = "DENY";
+    ctx.Response.Headers["X-XSS-Protection"] = "0"; // Modern browsers use CSP; disable legacy
+    ctx.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    ctx.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    if (!ctx.Request.Path.StartsWithSegments("/api"))
+    {
+        ctx.Response.Headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'";
+    }
+    await next();
+});
+
 // CORS must run before auth so the preflight OPTIONS request is answered
-// without challenging credentials. Demo endpoints are AllowAnonymous so
-// position relative to UseAuthentication doesn't matter for the response,
-// but it does matter for the OPTIONS preflight.
+// without challenging credentials.
 app.UseCors("portfolio-site");
 app.UseRateLimiter();
 // Activity middleware sits before auth so a 401 still records traffic into
