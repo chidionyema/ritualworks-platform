@@ -61,6 +61,53 @@ groups:
           summary: "Prometheus storage pressure"
           description: "TSDB head chunks exceed 15 GiB — consider increasing retention or reducing cardinality"
 
+  - name: messaging-health
+    rules:
+      - alert: RabbitMqQueueBacklog
+        expr: rabbitmq_queue_messages{queue=~".*"} > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RabbitMQ queue {{ $labels.queue }} has backlog"
+          description: "Queue {{ $labels.queue }} has {{ $value }} messages pending (threshold: 1000)"
+
+      - alert: RabbitMqErrorQueue
+        expr: rabbitmq_queue_messages{queue=~".*_error"} > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Messages in error queue: {{ $labels.queue }}"
+          description: "{{ $value }} message(s) in {{ $labels.queue }} — consumer crash or poison message"
+
+      - alert: OutboxBacklogHigh
+        expr: masstransit_outbox_pending_count > 100
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MassTransit outbox backlog on {{ $labels.service_name }}"
+          description: "{{ $value }} undelivered outbox messages on {{ $labels.service_name }} — relay may be stalled"
+
+      - alert: KafkaConsumerLagHigh
+        expr: kafka_consumer_lag_messages > 5000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka consumer lag on {{ $labels.topic }}"
+          description: "Consumer group {{ $labels.group }} has {{ $value }} messages lag on {{ $labels.topic }}"
+
+      - alert: RabbitMqDown
+        expr: up{job="rabbitmq"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "RabbitMQ is unreachable"
+          description: "RabbitMQ metrics endpoint has been down for over 1 minute"
+
   - name: saga-health-instant
     rules:
       # Test-only rule with for: 0m — validates alert routing without 5-min wait

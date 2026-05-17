@@ -10,14 +10,14 @@ distributor:
 
 ingester:
   max_block_duration: 5m
-  max_block_bytes: 1048576
+  max_block_bytes: 104857600
 
 compactor:
   compaction:
     compaction_window: 1h
-    max_block_bytes: 104857600
-    block_retention: 1h
-    compacted_block_retention: 10m
+    max_block_bytes: 524288000
+    block_retention: 168h      # 7 days — matches Loki retention for correlated investigation
+    compacted_block_retention: 1h
 
 storage:
   trace:

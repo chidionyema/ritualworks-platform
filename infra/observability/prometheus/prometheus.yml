@@ -48,9 +48,9 @@ scrape_configs:
         labels:
           service_name: checkout
       - targets:
-          - content-svc:8080
+          - media-svc:8080
         labels:
-          service_name: content
+          service_name: media
       - targets:
           - search-svc:8080
         labels:
@@ -67,6 +67,14 @@ scrape_configs:
           - bff-web:8080
         labels:
           service_name: bff-web
+
+  # RabbitMQ metrics (queue depth, message rates, connections)
+  # Requires rabbitmq_prometheus plugin enabled on the broker
+  - job_name: rabbitmq
+    metrics_path: /metrics
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["rabbitmq:15692"]
 
   # Prometheus self-monitoring
   - job_name: prometheus

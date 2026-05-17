@@ -120,7 +120,10 @@ public static class ServiceDefaults
                     .AddMeter("Haworks.Localization")
                     .AddMeter("Haworks.Media")
                     .AddMeter("Haworks.Realtime")
-                    .AddMeter("Haworks.RulesEngine");
+                    .AddMeter("Haworks.RulesEngine")
+                    // Infrastructure Meters
+                    .AddMeter("Haworks.MassTransit")
+                    .AddMeter("Resilience.Policies");
             })
             .WithTracing(tracing =>
             {
@@ -263,6 +266,12 @@ public static class ServiceDefaults
 
         // Readiness check - all database contexts must be connected
         app.MapHealthChecks("/health/ready", new HealthCheckOptions
+        {
+            Predicate = r => r.Tags.Contains("ready")
+        });
+
+        // Startup check - passes only after migrations/warmup complete (K8s startupProbe)
+        app.MapHealthChecks("/health/startup", new HealthCheckOptions
         {
             Predicate = r => r.Tags.Contains("ready")
         });
