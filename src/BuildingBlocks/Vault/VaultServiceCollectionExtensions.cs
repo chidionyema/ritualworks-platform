@@ -102,7 +102,14 @@ public static class VaultServiceCollectionExtensions
         services.AddSingleton(sp =>
         {
             var vault = sp.GetRequiredService<IVaultService>();
-            var builder = new NpgsqlDataSourceBuilder(connectionString);
+            // Ensure production-grade pool defaults are applied if not in connection string.
+            // Npgsql default is 100 max / 0 min; we set sensible defaults for microservices.
+            var csb = new NpgsqlConnectionStringBuilder(connectionString);
+            if (csb.MaxPoolSize == 100) csb.MaxPoolSize = 50;    // 50 per service avoids Neon/PG saturation
+            if (csb.MinPoolSize == 0) csb.MinPoolSize = 5;       // Keep 5 warm connections
+            if (csb.ConnectionIdleLifetime == 300) csb.ConnectionIdleLifetime = 120; // Recycle faster for serverless PG
+
+            var builder = new NpgsqlDataSourceBuilder(csb.ConnectionString);
             builder.UsePeriodicPasswordProvider(async (sb, ct) =>
             {
                 var (_, securePass) = await vault.GetDatabaseCredentialsAsync(roleName, ct);
