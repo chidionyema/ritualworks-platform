@@ -83,8 +83,8 @@ public sealed class NotificationRequestConsumerTests
         // Assert
         notification.Status.Should().Be(NotificationStatus.Sent);
         notification.ProviderMessageId.Should().Be("provider-msg-id");
-        // SaveChanges twice: once after MarkRendering, once after the dispatch.
-        _repository.Verify(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+        // SaveChanges 3x: MarkRendering, SetRenderedContent, final dispatch.
+        _repository.Verify(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(3));
         _emailGateway.Verify(g => g.SendAsync(notification, It.IsAny<CancellationToken>()), Times.Once);
     }
 
