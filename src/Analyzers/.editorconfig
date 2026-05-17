@@ -1,0 +1,8 @@
+# Analyzer project-specific overrides
+[*.cs]
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.S101.severity = none
+dotnet_diagnostic.RS2008.severity = none
+dotnet_diagnostic.MA0006.severity = suggestion
+dotnet_diagnostic.MA0074.severity = none
+dotnet_diagnostic.S3267.severity = none
