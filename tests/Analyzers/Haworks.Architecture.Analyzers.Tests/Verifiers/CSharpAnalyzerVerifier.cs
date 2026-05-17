@@ -13,14 +13,14 @@ public static class CSharpAnalyzerVerifier<TAnalyzer>
 
     public static async Task VerifyAnalyzerAsync(string source, params DiagnosticResult[] expected)
     {
-        var test = new Test { TestCode = Stubs.All + "\n" + source };
+        var test = new Test { TestCode = source };
         test.ExpectedDiagnostics.AddRange(expected);
         await test.RunAsync(CancellationToken.None);
     }
 
     public static async Task VerifyNoDiagnosticsAsync(string source)
     {
-        var test = new Test { TestCode = Stubs.All + "\n" + source };
+        var test = new Test { TestCode = source };
         await test.RunAsync(CancellationToken.None);
     }
 
@@ -29,6 +29,9 @@ public static class CSharpAnalyzerVerifier<TAnalyzer>
         public Test()
         {
             ReferenceAssemblies = ReferenceAssemblies.Net.Net80;
+            TestState.Sources.Add(Stubs.MassTransit);
+            TestState.Sources.Add(Stubs.EfCore);
+            TestState.Sources.Add(Stubs.Polly);
         }
     }
 }
@@ -48,6 +51,7 @@ internal static class Stubs
             {
                 T Message { get; }
                 System.Threading.CancellationToken CancellationToken { get; }
+                System.Threading.Tasks.Task Publish<TMsg>(TMsg message, System.Threading.CancellationToken ct = default) where TMsg : class;
             }
         }
         """;
