@@ -83,8 +83,7 @@ public sealed class NotificationRequestConsumerTests
         // Assert
         notification.Status.Should().Be(NotificationStatus.Sent);
         notification.ProviderMessageId.Should().Be("provider-msg-id");
-        // SaveChanges 3x: MarkRendering, SetRenderedContent, final dispatch.
-        _repository.Verify(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(3));
+        // MassTransit EF Outbox auto-commits; no explicit SaveChangesAsync in consumer.
         _emailGateway.Verify(g => g.SendAsync(notification, It.IsAny<CancellationToken>()), Times.Once);
     }
 
