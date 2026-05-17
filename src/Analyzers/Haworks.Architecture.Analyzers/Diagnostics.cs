@@ -221,4 +221,46 @@ public static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
+
+    // ─── Framework Laws (HWK036-045) ───
+
+    public static readonly DiagnosticDescriptor BackgroundServiceMustTryCatch = new(
+        id: "HWK036",
+        title: "BackgroundService.ExecuteAsync must have root-level try/catch",
+        messageFormat: "'{0}' overrides ExecuteAsync without a root try/catch — unhandled exceptions crash the host",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor CacheMustHaveExpiration = new(
+        id: "HWK037",
+        title: "Distributed cache writes must specify expiration",
+        messageFormat: "'{0}' writes to cache without expiration options — entries will never expire",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NoReturnDomainEntityFromController = new(
+        id: "HWK038",
+        title: "Controllers must not return domain entities directly",
+        messageFormat: "Action '{0}' returns domain entity '{1}' — map to a DTO instead",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor ControllerActionsMustHaveProducesResponseType = new(
+        id: "HWK039",
+        title: "Controller actions must have ProducesResponseType attributes",
+        messageFormat: "Action '{0}' is missing [ProducesResponseType] attributes for OpenAPI generation",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor AsyncMethodMustAcceptCancellationToken = new(
+        id: "HWK040",
+        title: "Public async methods must accept CancellationToken",
+        messageFormat: "Method '{0}' is async but does not accept a CancellationToken parameter",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
 }
