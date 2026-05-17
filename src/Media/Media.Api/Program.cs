@@ -90,6 +90,7 @@ builder.Services.AddOptions<ClamAvOptions>()
     .Bind(builder.Configuration.GetSection(ClamAvOptions.SectionName));
 
 builder.Services.AddScoped<IVirusScanner, ClamAvScanner>();
+builder.Services.AddSingleton<IFileSignatureValidator, FileSignatureValidator>();
 
 // ── MediatR + pipeline behaviours ──
 builder.Services.AddMediatR(cfg =>

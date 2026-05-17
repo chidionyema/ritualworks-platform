@@ -15,6 +15,9 @@ public interface IS3Service
     Task UploadAsync(string key, string mimeType, Stream content, CancellationToken ct);
     string GeneratePresignedGetUrl(string key);
     Task<string> DownloadToFileAsync(string key, string destinationPath, CancellationToken ct);
+    Task QuarantineAsync(string key, CancellationToken ct);
+    Task<string> ComputeSha256Async(string key, CancellationToken ct);
+    Task DeleteAsync(string key, CancellationToken ct);
 }
 
 /// <summary>
@@ -191,5 +194,40 @@ public class S3Service : IS3Service
             Expires = DateTime.UtcNow.AddMinutes(_opts.PresignedUrlExpiryMinutes),
             Protocol = _presignProtocol,
         });
+    }
+
+    public async Task QuarantineAsync(string key, CancellationToken ct)
+    {
+        if (!_opts.Enabled) return;
+
+        var quarantineKey = $"quarantine/{key}";
+        await _s3.CopyObjectAsync(new CopyObjectRequest
+        {
+            SourceBucket = _opts.BucketName,
+            SourceKey = key,
+            DestinationBucket = _opts.BucketName,
+            DestinationKey = quarantineKey,
+        }, ct);
+
+        await _s3.DeleteObjectAsync(_opts.BucketName, key, ct);
+    }
+
+    public async Task<string> ComputeSha256Async(string key, CancellationToken ct)
+    {
+        var response = await _s3.GetObjectAsync(new GetObjectRequest
+        {
+            BucketName = _opts.BucketName,
+            Key = key,
+        }, ct);
+
+        await using var stream = response.ResponseStream;
+        var hash = await System.Security.Cryptography.SHA256.HashDataAsync(stream, ct);
+        return Convert.ToHexStringLower(hash);
+    }
+
+    public async Task DeleteAsync(string key, CancellationToken ct)
+    {
+        if (!_opts.Enabled) return;
+        await _s3.DeleteObjectAsync(_opts.BucketName, key, ct);
     }
 }

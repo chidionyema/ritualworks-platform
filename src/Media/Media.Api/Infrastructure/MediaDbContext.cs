@@ -1,3 +1,4 @@
+using Haworks.Media.Api.Domain;
 using MassTransit;
 
 namespace Haworks.Media.Api.Infrastructure;
@@ -39,6 +40,21 @@ public class MediaDbContext : DbContext
                 .HasColumnType("xid")
                 .ValueGeneratedOnAddOrUpdate()
                 .IsConcurrencyToken();
+        });
+
+        modelBuilder.Entity<MediaMetadata>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Key).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.Value).IsRequired().HasMaxLength(2048);
+            entity.HasIndex(e => new { e.MediaFileId, e.Key }).IsUnique();
+        });
+
+        modelBuilder.Entity<MediaVersion>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ObjectName).IsRequired().HasMaxLength(512);
+            entity.HasIndex(e => new { e.MediaFileId, e.VersionNumber }).IsUnique();
         });
 
         // MassTransit transactional outbox tables — required for Publish() to write

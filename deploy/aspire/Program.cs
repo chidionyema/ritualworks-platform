@@ -37,7 +37,7 @@ var identityDb = postgres.AddDatabase("identity");
 var catalogDb  = postgres.AddDatabase("catalog");
 var ordersDb   = postgres.AddDatabase("orders");
 var paymentsDb = postgres.AddDatabase("payments");
-var contentDb  = postgres.AddDatabase("content");
+var mediaDb    = postgres.AddDatabase("media");
 var checkoutDb = postgres.AddDatabase("checkout");
 var notificationsDb = postgres.AddDatabase("notifications");
 var auditDb         = postgres.AddDatabase("audit");
@@ -113,7 +113,7 @@ var pactBroker = builder.AddContainer("pact-broker", "pactfoundation/pact-broker
     .WithHttpEndpoint(targetPort: 9292, name: "ui");
 
 // LocalStack S3 emulator for hermetic local-dev. Production uses Fly Tigris;
-// the AWS-SDK-based StorageOptions (feat/content/s3-presigned-storage) targets
+// the AWS-SDK-based StorageOptions targets
 // both transparently — only ServiceUrl + ForcePathStyle differ.
 var localstack = builder.AddContainer("localstack", "localstack/localstack", "3")
     .WithLifetime(ContainerLifetime.Persistent)
@@ -271,13 +271,11 @@ var payments = AddJwksConfig(builder.AddProject<Projects.Payments_Api>("payments
     .WithEnvironment("Vault__SecretIdPath", SecretIdPath("payments"))
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
 
-// --- content-svc -----------------------------------------------------------
-// content-svc reads/writes via the AWS S3 SDK against LocalStack here.
-// Storage__* shape is set by StorageOptions on feat/content/s3-presigned-storage.
-var content = AddJwksConfig(builder.AddProject<Projects.Content_Api>("content-svc")
+// --- media-svc -----------------------------------------------------------
+var media = AddJwksConfig(builder.AddProject<Projects.Media_Api>("media-svc")
     .WaitFor(vault)
-    .WaitFor(contentDb)
-    .WithReference(contentDb)
+    .WaitFor(mediaDb)
+    .WithReference(mediaDb)
     .WaitFor(rabbitmq)
     .WithReference(rabbitmq)
     .WaitFor(identity)
@@ -285,12 +283,12 @@ var content = AddJwksConfig(builder.AddProject<Projects.Content_Api>("content-sv
     .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", tempo.GetEndpoint("grpc"))
     .WithEnvironment("Vault__Enabled",      "false")
     .WithEnvironment("Vault__Address",      vault.GetEndpoint("http"))
-    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("content"))
-    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("content"))
+    .WithEnvironment("Vault__RoleIdPath",   RoleIdPath("media"))
+    .WithEnvironment("Vault__SecretIdPath", SecretIdPath("media"))
     .WithEnvironment("Storage__ServiceUrl",     localstack.GetEndpoint("edge"))
     .WithEnvironment("Storage__AccessKey",      "test")
     .WithEnvironment("Storage__SecretKey",      "test")
-    .WithEnvironment("Storage__BucketName",     "content-dev")
+    .WithEnvironment("Storage__BucketName",     "media-dev")
     .WithEnvironment("Storage__Region",         "us-east-1")
     .WithEnvironment("Storage__ForcePathStyle", "true")
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development"), identity);
@@ -456,8 +454,8 @@ var bffWeb = AddJwksConfig(builder.AddProject<Projects.BffWeb_Api>("bff-web")
     .WithReference(payments)
     .WaitFor(checkout)
     .WithReference(checkout)
-    .WaitFor(content)
-    .WithReference(content)
+    .WaitFor(media)
+    .WithReference(media)
     .WaitFor(search)
     .WithReference(search)
     .WaitFor(webhooks)
