@@ -28,6 +28,30 @@ groups:
           summary: "GDPR erasure request stalled"
           description: "Privacy erasure stuck in Processing/Stalled — GDPR 30-day deadline at risk"
 
+      - alert: CheckoutSagaSlow
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(saga_duration_seconds_bucket{saga_name="checkout"}[15m])) by (le))
+          > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Checkout P99 duration exceeds 30s SLO"
+          description: "P99 checkout saga duration is {{ $value }}s (SLO: 30s)"
+
+      - alert: RefundSagaSlow
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(saga_duration_seconds_bucket{saga_name="refund"}[15m])) by (le))
+          > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Refund P99 duration exceeds 5m SLO"
+          description: "P99 refund saga duration is {{ $value }}s (SLO: 300s)"
+
       - alert: DunningExhausted
         expr: increase(payments_subscription_dunning_exhausted_total[24h]) > 5
         for: 10m

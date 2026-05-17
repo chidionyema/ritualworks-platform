@@ -123,6 +123,7 @@ public static class ServiceDefaults
                     .AddMeter("Haworks.RulesEngine")
                     // Infrastructure Meters
                     .AddMeter("Haworks.MassTransit")
+                    .AddMeter("Haworks.Sagas")
                     .AddMeter("Resilience.Policies");
             })
             .WithTracing(tracing =>
