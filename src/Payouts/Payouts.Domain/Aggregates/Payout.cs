@@ -11,6 +11,8 @@ public sealed class Payout : AuditableEntity
     public required Guid SellerId { get; init; }
     public required decimal Amount { get; init; }
     public required string Currency { get; init; }
+    // L2 Fix: Persist idempotency key so recovery jobs can retry with the same key
+    public string? IdempotencyKey { get; set; }
     public PayoutStatus Status { get; private set; }
     public string? ExternalReference { get; private set; }
     public string? TransitReference { get; private set; }

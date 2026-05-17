@@ -22,6 +22,13 @@ public class LedgerController(IMediator mediator) : ControllerBase
         if (!Guid.TryParse(userId, out var parsedUserId) || parsedUserId != ownerId)
             return Forbid();
 
+        // M1 Fix: Non-admin callers can only query seller account types (not platform internals)
+        if (!User.IsInRole("Admin") &&
+            type is not (AccountType.SellerPending or AccountType.SellerPayable))
+        {
+            return Forbid();
+        }
+
         var balance = await mediator.Send(new GetBalanceQuery(ownerId, type, currency));
         return Ok(new { Balance = balance, Currency = currency });
     }

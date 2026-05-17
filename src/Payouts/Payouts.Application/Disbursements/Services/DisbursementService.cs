@@ -38,14 +38,16 @@ public class DisbursementService : IDisbursementService
             .Where(p => ownerIds.Contains(p.SellerId))
             .ToDictionaryAsync(p => p.SellerId);
 
-        foreach (var account in eligibleAccounts)
-        {
-            if (!profiles.TryGetValue(account.OwnerId, out var profile)) continue;
-            if (!profile.PayoutsEnabled || string.IsNullOrEmpty(profile.ExternalProviderId)) continue;
-            if (account.Balance < profile.PayoutThreshold) continue;
+        // M5 Fix: Process payouts concurrently (bounded to 5 parallel gateway calls)
+        // Sequential processing of 500 accounts with Stripe calls took 30+ minutes.
+        var payoutTasks = eligibleAccounts
+            .Where(account => profiles.TryGetValue(account.OwnerId, out var p) &&
+                              p.PayoutsEnabled && !string.IsNullOrEmpty(p.ExternalProviderId) &&
+                              account.Balance >= p.PayoutThreshold)
+            .Select(account => (account.Id, profiles[account.OwnerId]));
 
-            await ExecutePayout(account.Id, profile);
-        }
+        await Parallel.ForEachAsync(payoutTasks, new ParallelOptions { MaxDegreeOfParallelism = 5 },
+            async (item, ct) => await ExecutePayout(item.Id, item.Item2));
     }
 
     private async Task ExecutePayout(Guid accountId, SellerProfile profile)
