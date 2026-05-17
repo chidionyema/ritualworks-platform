@@ -29,8 +29,24 @@ public sealed class HWK016_NoPositionalRecordForEventsAnalyzer : DiagnosticAnaly
             return;
 
         var name = record.Identifier.Text;
-        if (!EventSuffixes.Any(s => name.EndsWith(s, System.StringComparison.Ordinal)))
+
+        // Only flag Event/Message suffix (MassTransit contracts serialized over the wire).
+        // MediatR Commands are local in-process — positional records are fine for those.
+        if (!name.EndsWith("Event", System.StringComparison.Ordinal) &&
+            !name.EndsWith("Message", System.StringComparison.Ordinal))
             return;
+
+        // Only flag records in Contracts namespace or that inherit DomainEvent
+        var ns = record.FirstAncestorOrSelf<BaseNamespaceDeclarationSyntax>();
+        var nsName = ns?.Name.ToString() ?? "";
+        if (!nsName.Contains("Contracts") && !nsName.Contains("Events") &&
+            !nsName.Contains("Messages"))
+        {
+            // Check if it's in a file that looks like a hub notifier DTO (not serialized over broker)
+            var filePath = context.Node.SyntaxTree.FilePath ?? "";
+            if (filePath.Contains("Hub") || filePath.Contains("Notifier") || filePath.Contains("SignalR"))
+                return;
+        }
 
         context.ReportDiagnostic(
             Diagnostic.Create(Diagnostics.NoPositionalRecordForEvents, record.Identifier.GetLocation(), name));

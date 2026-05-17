@@ -85,7 +85,7 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                     sagaState.UserId = msg.UserId;
                     sagaState.CustomerEmail = msg.CustomerEmail;
                     sagaState.TotalAmount = msg.TotalAmount;
-                    sagaState.Currency = msg.Currency ?? "USD";
+                    sagaState.Currency = msg.Currency ?? throw new InvalidOperationException("Currency is required on CheckoutStartedEvent");
                     sagaState.IdempotencyKey = msg.IdempotencyKey;
                     sagaState.LineItemsJson = JsonSerializer.Serialize(msg.Items);
                     sagaState.CreatedAt = DateTime.UtcNow;

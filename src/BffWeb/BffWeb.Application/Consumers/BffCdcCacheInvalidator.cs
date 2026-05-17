@@ -24,26 +24,34 @@ public sealed class BffCdcCacheInvalidator(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        consumer.Subscribe(Topics);
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
-            {
-                var result = consumer.Consume(stoppingToken);
-                if (result?.Message?.Value == null) continue;
+            consumer.Subscribe(Topics);
 
-                await ProcessMessageAsync(result, stoppingToken);
-                consumer.Commit(result);
-            }
-            catch (OperationCanceledException)
+            while (!stoppingToken.IsCancellationRequested)
             {
-                break;
+                try
+                {
+                    var result = consumer.Consume(stoppingToken);
+                    if (result?.Message?.Value == null) continue;
+
+                    await ProcessMessageAsync(result, stoppingToken);
+                    consumer.Commit(result);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error processing CDC cache invalidation");
+                }
             }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error processing CDC cache invalidation");
-            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogCritical(ex, "BffCdcCacheInvalidator crashed");
+            throw;
         }
     }
 
