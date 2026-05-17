@@ -52,9 +52,11 @@ public static class VaultServiceCollectionExtensions
             // don't have to populate the section.
             .PostConfigure(opts =>
             {
-                if (string.IsNullOrWhiteSpace(opts.Host)) opts.Host = "localhost";
+                if (string.IsNullOrWhiteSpace(opts.Host))
+                    throw new InvalidOperationException("Vault:DynamicDb:Host must be configured — no localhost fallback in containers");
                 if (opts.Port == 0) opts.Port = 5432;
-                if (string.IsNullOrWhiteSpace(opts.Database)) opts.Database = "postgres";
+                if (string.IsNullOrWhiteSpace(opts.Database))
+                    throw new InvalidOperationException("Vault:DynamicDb:Database must be configured");
             })
             .ValidateOnStart();
 
