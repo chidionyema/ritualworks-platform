@@ -16,6 +16,9 @@
          concrete client lives in Payments.Infrastructure; the interface in
          Application needs the Stripe.net types it abstracts. -->
     <PackageReference Include="Stripe.net" Version="44.10.0" />
+    <PackageReference Include="VaultSharp" Version="1.17.5" />
+    <PackageReference Include="Hangfire.Core" Version="1.8.15" />
+    <PackageReference Include="MassTransit" Version="8.3.4" />
   </ItemGroup>
 
   <ItemGroup>

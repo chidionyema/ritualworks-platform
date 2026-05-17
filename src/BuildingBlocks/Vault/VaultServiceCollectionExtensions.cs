@@ -2,6 +2,8 @@ using Haworks.BuildingBlocks.Resilience;
 using Haworks.BuildingBlocks.Vault.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using System;
 
@@ -32,6 +34,7 @@ namespace Haworks.BuildingBlocks.Vault;
 /// </summary>
 public static class VaultServiceCollectionExtensions
 {
+    private static readonly string[] VaultHealthCheckTags = ["vault", "ready"];
     public static IServiceCollection AddVaultIntegration(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -137,7 +140,9 @@ public static class VaultServiceCollectionExtensions
         });
 
         // The base connection string is the static one from config (without dynamic user/pass).
-        var baseConnectionString = configuration.GetConnectionString("identity")
+        // Resolve by stripping the "haworks-" prefix to match the ConnectionStrings key.
+        var serviceKey = roleName.Replace("haworks-", string.Empty, StringComparison.Ordinal);
+        var baseConnectionString = configuration.GetConnectionString(serviceKey)
             ?? configuration.GetConnectionString("DefaultConnection")
             ?? string.Empty;
 
@@ -153,6 +158,17 @@ public static class VaultServiceCollectionExtensions
             sp.GetRequiredService<VaultRotatingConnectionStringProvider>());
         services.AddHostedService(sp =>
             sp.GetRequiredService<VaultRotatingConnectionStringProvider>());
+
+        // Register Vault lease health check
+        services.AddHealthChecks()
+            .Add(new HealthCheckRegistration(
+                $"vault-lease-{roleName}",
+                sp => new VaultLeaseHealthCheck(
+                    sp.GetRequiredService<IVaultCredentialProvider>(),
+                    roleName,
+                    sp.GetRequiredService<ILogger<VaultLeaseHealthCheck>>()),
+                failureStatus: HealthStatus.Degraded,
+                tags: VaultHealthCheckTags));
 
         return services;
     }

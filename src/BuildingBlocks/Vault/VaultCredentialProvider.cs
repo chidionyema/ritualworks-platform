@@ -17,6 +17,7 @@ public sealed class VaultCredentialProvider : IVaultCredentialProvider, IDisposa
 
     private (string Username, string Password)? _cached;
     private DateTimeOffset _cachedUntil = DateTimeOffset.MinValue;
+    private DateTimeOffset _fetchedAt = DateTimeOffset.MinValue;
 
     /// <param name="vaultClient">VaultSharp client instance.</param>
     /// <param name="logger">Logger.</param>
@@ -58,7 +59,8 @@ public sealed class VaultCredentialProvider : IVaultCredentialProvider, IDisposa
                 var password = secret.Data.Password;
 
                 _cached = (username, password);
-                _cachedUntil = DateTimeOffset.UtcNow.Add(_cacheExpiry);
+                _fetchedAt = DateTimeOffset.UtcNow;
+                _cachedUntil = _fetchedAt.Add(_cacheExpiry);
 
                 _logger.LogDebug(
                     "Fetched fresh credentials from Vault for role {RoleName}, cached until {CachedUntil:O}",
@@ -84,6 +86,35 @@ public sealed class VaultCredentialProvider : IVaultCredentialProvider, IDisposa
         {
             _semaphore.Release();
         }
+    }
+
+    public VaultLeaseStatus GetLeaseStatus()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var hasCredentials = _cached.HasValue;
+
+        if (!hasCredentials)
+        {
+            return new VaultLeaseStatus
+            {
+                CachedUntil = DateTimeOffset.MinValue,
+                FetchedAt = DateTimeOffset.MinValue,
+                TtlPercentElapsed = 0.0,
+                HasCredentials = false
+            };
+        }
+
+        var totalTtlSeconds = _cacheExpiry.TotalSeconds;
+        var elapsedSeconds = (now - _fetchedAt).TotalSeconds;
+        var percentElapsed = totalTtlSeconds > 0 ? elapsedSeconds / totalTtlSeconds : 1.0;
+
+        return new VaultLeaseStatus
+        {
+            CachedUntil = _cachedUntil,
+            FetchedAt = _fetchedAt,
+            TtlPercentElapsed = percentElapsed,
+            HasCredentials = true
+        };
     }
 
     public void Dispose()

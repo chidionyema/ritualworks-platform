@@ -39,16 +39,39 @@ public static partial class DependencyInjection
     internal static IServiceCollection AddNotificationsPersistence(
         this IServiceCollection services, IConfiguration configuration, IHostEnvironment env)
     {
-        var connectionString = configuration.GetConnectionString("Notifications");
+        var connectionString = configuration.GetConnectionString("Notifications")
+            ?? throw new InvalidOperationException(
+                "No notifications database connection string. Expected 'ConnectionStrings:Notifications'.");
+
+        var vaultEnabled = configuration.GetValue("Vault:Enabled", false)
+            && !env.IsEnvironment("Test");
+        if (vaultEnabled)
+        {
+            services.AddVaultIntegration(configuration);
+            services.AddVaultNpgsqlDataSource(connectionString, "haworks-notifications");
+        }
 
         services.AddScoped<Haworks.Notifications.Application.Commands.INotificationRepository, Haworks.Notifications.Infrastructure.Persistence.NotificationRepository>();
-        
-        services.AddDbContext<NotificationsDbContext>(options =>
-            options.UseNpgsql(connectionString, npgsqlOptions =>
+
+        services.AddDbContext<NotificationsDbContext>((sp, options) =>
+        {
+            if (vaultEnabled)
             {
-                npgsqlOptions.MigrationsAssembly(typeof(NotificationsDbContext).Assembly.FullName);
-                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "notifications");
-            }));
+                options.UseNpgsql(sp.GetRequiredService<Npgsql.NpgsqlDataSource>(), npgsqlOptions =>
+                {
+                    npgsqlOptions.MigrationsAssembly(typeof(NotificationsDbContext).Assembly.FullName);
+                    npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "notifications");
+                });
+            }
+            else
+            {
+                options.UseNpgsql(connectionString, npgsqlOptions =>
+                {
+                    npgsqlOptions.MigrationsAssembly(typeof(NotificationsDbContext).Assembly.FullName);
+                    npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "notifications");
+                });
+            }
+        });
 
         if (!env.IsEnvironment("Test"))
         {
