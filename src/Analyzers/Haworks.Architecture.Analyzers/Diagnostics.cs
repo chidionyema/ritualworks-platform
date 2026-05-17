@@ -263,4 +263,50 @@ public static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
+
+    // ─── DI / Lifetime (HWK041-042) ───
+
+    public static readonly DiagnosticDescriptor NoScopedInSingleton = new(
+        id: "HWK041",
+        title: "Singleton must not depend on scoped services",
+        messageFormat: "Singleton '{0}' injects scoped service '{1}' which will be captured and never refreshed",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    // ─── Logging / Observability (HWK045-046) ───
+
+    public static readonly DiagnosticDescriptor NoSecretsInLogs = new(
+        id: "HWK045",
+        title: "Do not log secrets, tokens, or passwords",
+        messageFormat: "Log statement references '{0}' which may contain sensitive data",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NoStringInterpolationInLogger = new(
+        id: "HWK046",
+        title: "Do not use string interpolation in logger calls",
+        messageFormat: "Logger call uses string interpolation which defeats structured logging — use message templates",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    // ─── Domain / DDD (HWK047-048) ───
+
+    public static readonly DiagnosticDescriptor NoPublicSetterOnEntityId = new(
+        id: "HWK047",
+        title: "Entity Id property must not have a public setter",
+        messageFormat: "Property '{0}' on entity allows identity mutation via public setter",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor EntityMustHaveParameterlessConstructor = new(
+        id: "HWK048",
+        title: "EF entities must have a parameterless constructor",
+        messageFormat: "Entity '{0}' has no parameterless constructor — EF Core cannot materialize it",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
 }
