@@ -76,7 +76,7 @@ jobs:
         continue-on-error: true
 
       - name: ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.14.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: ${{ env.TARGET_URL }}
           rules_file_name: .github/zap-rules.tsv
