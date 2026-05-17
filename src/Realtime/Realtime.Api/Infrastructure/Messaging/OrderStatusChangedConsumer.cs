@@ -33,6 +33,7 @@ public class OrderStatusChangedConsumer : IConsumer<OrderStatusChanged>
             }
         };
 
-        return _sender.Send(command);
+        // H6 Fix: Propagate CancellationToken so shutdown cancels the pipeline
+        return _sender.Send(command, context.CancellationToken);
     }
 }

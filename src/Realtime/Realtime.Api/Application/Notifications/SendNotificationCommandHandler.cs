@@ -24,26 +24,22 @@ public class SendNotificationCommandHandler : IRequestHandler<SendNotificationCo
 
     public async Task<Result<Unit>> Handle(SendNotificationCommand request, CancellationToken cancellationToken)
     {
+        // H1 Fix: Single messageId shared between inbox and SignalR push for client-side dedup
         var messageId = Guid.NewGuid();
-        var success = false;
 
-        try
-        {
-            // Store in inbox for offline/reconnect support
-            await _inboxService.StoreMessageAsync(request.UserId, new { request.MessageType, request.Data }, cancellationToken);
+        // C1+C2 Fix: Pass explicit messageId and messageType to inbox (dedup + correct type)
+        await _inboxService.StoreMessageAsync(
+            request.UserId, messageId, request.MessageType, request.Data, cancellationToken);
 
-            // Send via SignalR
-            await _hubContext.Clients.User(request.UserId.ToString())
-                .SendAsync("ReceiveNotification", new { MessageId = messageId, request.MessageType, request.Data }, cancellationToken);
+        await _hubContext.Clients.User(request.UserId.ToString())
+            .SendAsync("ReceiveNotification",
+                new { MessageId = messageId, request.MessageType, request.Data },
+                cancellationToken);
 
-            success = true;
-            return Result<Unit>.Success(Unit.Value);
-        }
-        finally
-        {
-            _logger.LogInformation(
-                "Notification pushed. UserId={UserId}, MessageType={MessageType}, MessageId={MessageId}, Success={Success}",
-                request.UserId, request.MessageType, messageId, success);
-        }
+        _logger.LogInformation(
+            "Notification pushed. UserId={UserId}, MessageType={MessageType}, MessageId={MessageId}",
+            request.UserId, request.MessageType, messageId);
+
+        return Result<Unit>.Success(Unit.Value);
     }
 }

@@ -4,18 +4,10 @@ using StackExchange.Redis;
 
 namespace Haworks.Realtime.Api.Infrastructure.Persistence;
 
-/// <summary>
-/// Redis-backed inbox using a LIST per user.
-///
-/// Write path: LPUSH + LTRIM (caps at <see cref="InboxConstants.MaxInboxSize"/>).
-/// Read path: LRANGE (non-destructive peek).
-/// Ack path: DEL (only after SignalR confirms delivery).
-///
-/// Each message carries a <see cref="InboxMessage.MessageId"/> (Guid) for client-side deduplication.
-/// </summary>
-public class RedisInboxService : IInboxService
+public sealed class RedisInboxService : IInboxService
 {
     private const int InboxTtlDays = 7;
+    private const int DedupTtlDays = 3;
 
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RedisInboxService> _logger;
@@ -26,23 +18,37 @@ public class RedisInboxService : IInboxService
         _logger = logger;
     }
 
-    public async Task StoreMessageAsync(Guid userId, object message, CancellationToken ct = default)
+    public async Task StoreMessageAsync(Guid userId, Guid messageId, string messageType, object message, CancellationToken ct = default)
     {
         var db = _redis.GetDatabase();
-        var key = InboxKey(userId);
-        var messageId = Guid.NewGuid();
+        var inboxKey = InboxKey(userId);
+        var dedupKey = DedupKey(userId);
 
-        var envelope = new InboxEnvelope(messageId, message);
+        // C2 Fix: Atomic dedup check — if messageId already seen, skip (idempotent)
+        var alreadySeen = await db.SetAddAsync(dedupKey, messageId.ToString());
+        if (!alreadySeen)
+        {
+            _logger.LogDebug(
+                "Duplicate message skipped. UserId={UserId}, MessageId={MessageId}",
+                userId, messageId);
+            return;
+        }
+
+        // C1 Fix: Store messageType explicitly in envelope (not derived from GetType after deserialization)
+        var envelope = new InboxEnvelope(messageId, messageType, JsonSerializer.Serialize(message));
         var json = JsonSerializer.Serialize(envelope);
 
-        // LPUSH is atomic; cap the list to avoid unbounded growth.
-        await db.ListLeftPushAsync(key, json);
-        await db.ListTrimAsync(key, 0, InboxConstants.MaxInboxSize - 1);
-        await db.KeyExpireAsync(key, TimeSpan.FromDays(InboxTtlDays));
+        // Atomic: LPUSH + LTRIM + EXPIRE via transaction
+        var tran = db.CreateTransaction();
+        _ = tran.ListLeftPushAsync(inboxKey, json);
+        _ = tran.ListTrimAsync(inboxKey, 0, InboxConstants.MaxInboxSize - 1);
+        _ = tran.KeyExpireAsync(inboxKey, TimeSpan.FromDays(InboxTtlDays));
+        _ = tran.KeyExpireAsync(dedupKey, TimeSpan.FromDays(DedupTtlDays));
+        await tran.ExecuteAsync();
 
         _logger.LogInformation(
             "Inbox message stored. UserId={UserId}, MessageId={MessageId}, MessageType={MessageType}",
-            userId, messageId, message.GetType().Name);
+            userId, messageId, messageType);
     }
 
     public async Task<IReadOnlyList<InboxMessage>> GetMessagesAsync(Guid userId, CancellationToken ct = default)
@@ -54,35 +60,48 @@ public class RedisInboxService : IInboxService
         if (items.Length == 0)
             return Array.Empty<InboxMessage>();
 
-        // Items were pushed left; reverse so oldest is first.
         var messages = new List<InboxMessage>(items.Length);
         for (var i = items.Length - 1; i >= 0; i--)
         {
             var envelope = JsonSerializer.Deserialize<InboxEnvelope>((string)items[i]!);
             if (envelope is not null)
             {
-                messages.Add(new InboxMessage(
-                    envelope.MessageId,
-                    envelope.Data.GetType().Name,
-                    envelope.Data));
+                // C1 Fix: Use stored MessageType and raw JSON data
+                var data = JsonSerializer.Deserialize<JsonElement>(envelope.DataJson);
+                messages.Add(new InboxMessage(envelope.MessageId, envelope.MessageType, data));
             }
         }
 
         return messages;
     }
 
-    public async Task AcknowledgeMessagesAsync(Guid userId, CancellationToken ct = default)
+    // H2 Fix: Trim only the count actually delivered (not DEL), preserving new arrivals
+    public async Task AcknowledgeMessagesAsync(Guid userId, int deliveredCount, CancellationToken ct = default)
     {
+        if (deliveredCount <= 0) return;
+
         var db = _redis.GetDatabase();
         var key = InboxKey(userId);
-        await db.KeyDeleteAsync(key);
+
+        // LTRIM keeps elements [0, newLength-1]. We want to remove the LAST deliveredCount elements
+        // (oldest, pushed right). Trim from 0 to (currentLength - deliveredCount - 1).
+        var currentLength = await db.ListLengthAsync(key);
+        if (currentLength <= deliveredCount)
+        {
+            await db.KeyDeleteAsync(key);
+        }
+        else
+        {
+            await db.ListTrimAsync(key, 0, currentLength - deliveredCount - 1);
+        }
 
         _logger.LogInformation(
-            "Inbox acknowledged and cleared. UserId={UserId}",
-            userId);
+            "Inbox acknowledged. UserId={UserId}, DeliveredCount={Count}",
+            userId, deliveredCount);
     }
 
-    private static string InboxKey(Guid userId) => $"inbox:{userId}";
+    private static string InboxKey(Guid userId) => $"realtime:inbox:{userId}";
+    private static string DedupKey(Guid userId) => $"realtime:inbox-dedup:{userId}";
 
-    private sealed record InboxEnvelope(Guid MessageId, object Data);
+    private sealed record InboxEnvelope(Guid MessageId, string MessageType, string DataJson);
 }

@@ -8,9 +8,10 @@ public sealed record InboxMessage(Guid MessageId, string MessageType, object Dat
 public interface IInboxService
 {
     /// <summary>
-    /// Stores a message in the user's inbox. Caps at <see cref="InboxConstants.MaxInboxSize"/> messages.
+    /// Stores a message in the user's inbox with server-side deduplication.
+    /// If <paramref name="messageId"/> was already stored, this is a no-op (idempotent).
     /// </summary>
-    Task StoreMessageAsync(Guid userId, object message, CancellationToken ct = default);
+    Task StoreMessageAsync(Guid userId, Guid messageId, string messageType, object message, CancellationToken ct = default);
 
     /// <summary>
     /// Reads all pending messages without removing them (peek).
@@ -18,9 +19,10 @@ public interface IInboxService
     Task<IReadOnlyList<InboxMessage>> GetMessagesAsync(Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Acknowledges delivery — removes messages from the inbox after SignalR confirms send.
+    /// Acknowledges delivery — trims only the count of messages actually delivered,
+    /// preserving any that arrived during the flush window.
     /// </summary>
-    Task AcknowledgeMessagesAsync(Guid userId, CancellationToken ct = default);
+    Task AcknowledgeMessagesAsync(Guid userId, int deliveredCount, CancellationToken ct = default);
 }
 
 public static class InboxConstants

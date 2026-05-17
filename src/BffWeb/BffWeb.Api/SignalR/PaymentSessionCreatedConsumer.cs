@@ -30,7 +30,7 @@ public sealed class PaymentSessionCreatedConsumer(
 
         try
         {
-            await hub.Clients.Group(CheckoutHub.GroupNameFor(evt.SagaId))
+            await hub.Clients.Group(CheckoutHub.GroupNameFor(evt.UserId, evt.SagaId))
                 .SendAsync("CheckoutReady", new
                 {
                     sagaId = evt.SagaId,

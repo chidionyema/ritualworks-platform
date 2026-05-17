@@ -15,6 +15,9 @@ public sealed record PaymentSessionCreatedEvent : DomainEvent
     /// <summary>The saga correlation ID for distributed tracing.</summary>
     public required Guid SagaId { get; init; }
 
+    /// <summary>The user who initiated the checkout (for SignalR group targeting).</summary>
+    public required string UserId { get; init; }
+
     /// <summary>The payment record ID.</summary>
     public required Guid PaymentId { get; init; }
 

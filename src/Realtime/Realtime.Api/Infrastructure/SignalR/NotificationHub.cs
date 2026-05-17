@@ -54,8 +54,9 @@ public class NotificationHub : Hub
             await Clients.Caller.SendAsync("ReceiveNotification", msg);
         }
 
-        // All sends succeeded — acknowledge (delete) from inbox.
-        await _inboxService.AcknowledgeMessagesAsync(userId);
+        // H2 Fix: Trim only the count we actually delivered (not DEL),
+        // preserving any messages that arrived during the flush window.
+        await _inboxService.AcknowledgeMessagesAsync(userId, messages.Count);
         await base.OnConnectedAsync();
     }
 }
