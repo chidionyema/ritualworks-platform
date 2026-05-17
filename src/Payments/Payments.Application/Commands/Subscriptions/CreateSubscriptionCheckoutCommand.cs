@@ -10,7 +10,8 @@ public sealed record CreateSubscriptionCheckoutCommand(
     string UserId,
     string PriceId,
     decimal Amount,
-    string? RedirectPath) : IRequest<Result<CreateSubscriptionCheckoutResultDto>>;
+    string? RedirectPath,
+    string IdempotencyKey) : IRequest<Result<CreateSubscriptionCheckoutResultDto>>;
 
 internal sealed class CreateSubscriptionCheckoutCommandHandler(
     ISubscriptionService subscriptionService,

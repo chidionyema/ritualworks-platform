@@ -218,6 +218,7 @@ internal sealed class StripeWebhookProcessor : IWebhookProcessor
         var payment = await _paymentRepository.GetByProviderSessionAsync(Provider, session.Id, ct);
         if (payment == null) return WebhookProcessingResult.Skipped("No payment record");
 
+        // outbox handles this — event persisted atomically via MassTransit outbox
         await _eventPublisher.PublishAsync(new CheckoutSessionExpiredEvent
         {
             SessionId = session.Id,

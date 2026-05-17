@@ -7,7 +7,8 @@ namespace Haworks.Payments.Application.Commands.Subscriptions;
 
 public sealed record ResumeSubscriptionCommand(
     string UserId,
-    string SubscriptionId) : IRequest<Result<bool>>;
+    string SubscriptionId,
+    string IdempotencyKey) : IRequest<Result<bool>>;
 
 public sealed class ResumeSubscriptionCommandHandler(
     ISubscriptionManager subscriptionManager,

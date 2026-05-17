@@ -99,6 +99,7 @@ internal sealed class SendNotificationCommandHandler(
             var suppressed = CreateNotification(request, idempotencyKey);
             suppressed.MarkSuppressed("Recipient on suppression list");
             repository.Add(suppressed);
+            // outbox handles this — early return below, no PublishAsync in this branch
             await repository.SaveChangesAsync(ct).ConfigureAwait(false);
 
             logger.LogInformation(

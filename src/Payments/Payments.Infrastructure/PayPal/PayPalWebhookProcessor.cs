@@ -229,6 +229,7 @@ internal sealed class PayPalWebhookProcessor(
 
             if (Guid.TryParse(sagaIdStr, out var sagaId))
             {
+                // outbox handles this — event published via MassTransit outbox, SaveChangesAsync called by idempotency guard
                 await eventPublisher.PublishAsync(new ProviderRefundSucceededEvent
                 {
                     RefundId = sagaId,

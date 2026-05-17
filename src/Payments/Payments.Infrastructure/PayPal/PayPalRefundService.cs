@@ -123,6 +123,7 @@ internal sealed class PayPalRefundService(
 
         if (payment != null && status == RefundStatus.Succeeded)
         {
+            // outbox handles this — event persisted atomically with payment state
             await eventPublisher.PublishAsync(new RefundIssuedEvent
             {
                 PaymentId = payment.Id,

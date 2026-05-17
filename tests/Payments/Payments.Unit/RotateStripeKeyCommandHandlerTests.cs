@@ -59,7 +59,7 @@ public class RotateStripeKeyCommandHandlerTests
     public async Task Returns_202_with_rotation_id()
     {
         var handler = CreateHandler();
-        var command = new RotateStripeKeyCommand { NewSecretKey = "sk_test_abc123" };
+        var command = new RotateStripeKeyCommand { IdempotencyKey = Guid.NewGuid().ToString(), NewSecretKey = "sk_test_abc123" };
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -76,7 +76,7 @@ public class RotateStripeKeyCommandHandlerTests
     public void Rejects_invalid_key_format(string invalidKey)
     {
         var handler = CreateHandler();
-        var command = new RotateStripeKeyCommand { NewSecretKey = invalidKey };
+        var command = new RotateStripeKeyCommand { IdempotencyKey = Guid.NewGuid().ToString(), NewSecretKey = invalidKey };
 
         var act = () => handler.Handle(command, CancellationToken.None);
 
@@ -87,7 +87,7 @@ public class RotateStripeKeyCommandHandlerTests
     public async Task Publishes_StripeKeyRotationStartedEvent()
     {
         var handler = CreateHandler();
-        var command = new RotateStripeKeyCommand { NewSecretKey = "sk_live_abc123" };
+        var command = new RotateStripeKeyCommand { IdempotencyKey = Guid.NewGuid().ToString(), NewSecretKey = "sk_live_abc123" };
 
         await handler.Handle(command, CancellationToken.None);
 
@@ -102,7 +102,7 @@ public class RotateStripeKeyCommandHandlerTests
     public async Task Accepts_sk_live_key()
     {
         var handler = CreateHandler();
-        var command = new RotateStripeKeyCommand { NewSecretKey = "sk_live_production_key_123" };
+        var command = new RotateStripeKeyCommand { IdempotencyKey = Guid.NewGuid().ToString(), NewSecretKey = "sk_live_production_key_123" };
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -113,7 +113,7 @@ public class RotateStripeKeyCommandHandlerTests
     public async Task Accepts_sk_test_key()
     {
         var handler = CreateHandler();
-        var command = new RotateStripeKeyCommand { NewSecretKey = "sk_test_test_key_456" };
+        var command = new RotateStripeKeyCommand { IdempotencyKey = Guid.NewGuid().ToString(), NewSecretKey = "sk_test_test_key_456" };
 
         var result = await handler.Handle(command, CancellationToken.None);
 

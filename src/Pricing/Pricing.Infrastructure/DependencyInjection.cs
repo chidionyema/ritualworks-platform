@@ -89,7 +89,7 @@ public static class DependencyInjection
                 mt.UsingRabbitMq((context, cfg) =>
                 {
                     var rabbitHost = configuration.GetConnectionString("rabbitmq")
-                        ?? "amqp://guest:guest@localhost:5672";
+                        ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is required");
                     cfg.Host(new Uri(rabbitHost));
                     cfg.UseDelayedMessageScheduler();
                     cfg.ConfigureEndpoints(context);

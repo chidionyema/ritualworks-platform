@@ -56,7 +56,7 @@ if (!app.Environment.IsEnvironment("Test"))
     using var scope = app.Services.CreateScope();
     var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
     recurringJobManager.AddOrUpdate<IDisbursementService>("process-payouts", service => service.ProcessEligiblePayoutsAsync(), Cron.Daily);
-    recurringJobManager.AddOrUpdate<IMediator>("mature-funds", mediator => mediator.Send(new MatureFundsCommand(), default), Cron.Hourly);
+    recurringJobManager.AddOrUpdate<IMediator>("mature-funds", mediator => mediator.Send(new MatureFundsCommand(Guid.NewGuid().ToString()), default), Cron.Hourly);
 }
 app.Run();
 public partial class Program { }

@@ -10,10 +10,11 @@ using Microsoft.Extensions.Logging;
 namespace Haworks.Payments.Application.Commands.Refunds;
 
 public sealed record CreateRefundCommand(
-    Guid PaymentId, 
-    decimal Amount, 
-    string Currency, 
-    string? Reason = null, 
+    Guid PaymentId,
+    decimal Amount,
+    string Currency,
+    string IdempotencyKey,
+    string? Reason = null,
     string? RequestedBy = null) : IRequest<Result<Guid>>;
 
 public sealed class CreateRefundCommandHandler(
@@ -54,6 +55,7 @@ public sealed class CreateRefundCommandHandler(
         // Persist state BEFORE publishing the event to prevent double-refund.
         // The Payment entity carries an xmin concurrency token — EF will throw
         // DbUpdateConcurrencyException if another refund raced us.
+        // outbox handles this — SaveChangesAsync + PublishAsync are atomic via the MassTransit outbox.
         try
         {
             await paymentRepository.SaveChangesAsync(ct);

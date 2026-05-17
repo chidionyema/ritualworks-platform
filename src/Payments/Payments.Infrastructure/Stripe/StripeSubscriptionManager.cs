@@ -56,30 +56,30 @@ public sealed class StripeSubscriptionManager(
     }
 
     /// <inheritdoc />
-    public Task<bool> CancelAsync(string subscriptionId, bool immediate = false, CancellationToken ct = default)
+    public async Task<bool> CancelAsync(string subscriptionId, bool immediate = false, CancellationToken ct = default)
     {
-        return _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
+        try
         {
-            try
+            return await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
             {
                 var client = await clientFactory.GetClientAsync(token);
                 var service = new NativeStripeSubService(client);
-                
-                if (immediate) 
+
+                if (immediate)
                 {
                     await service.CancelAsync(subscriptionId, cancellationToken: token);
                 }
-                else 
+                else
                 {
-                    await service.UpdateAsync(subscriptionId, new SubscriptionUpdateOptions 
-                    { 
-                        CancelAtPeriodEnd = true 
+                    await service.UpdateAsync(subscriptionId, new SubscriptionUpdateOptions
+                    {
+                        CancelAtPeriodEnd = true
                     }, cancellationToken: token);
                 }
 
                 // Note: Local DB update and events are handled via webhooks (customer.subscription.deleted/updated)
                 // to maintain single source of truth and handle async completion.
-                
+
                 telemetry.TrackEvent("SubscriptionCancellationRequested", new Dictionary<string, string>
                 {
                     ["Provider"] = PaymentProvider.Stripe.ToString(),
@@ -88,28 +88,28 @@ public sealed class StripeSubscriptionManager(
                 });
 
                 return true;
-            }
-            catch (StripeException ex) when (string.Equals(ex.StripeError?.Code, "resource_missing", StringComparison.Ordinal))
-            {
-                logger.LogWarning("Stripe subscription {SubscriptionId} not found for cancellation", subscriptionId);
-                return false;
-            }
-        }, new Context(), ct);
+            }, new Context(), ct);
+        }
+        catch (StripeException ex) when (string.Equals(ex.StripeError?.Code, "resource_missing", StringComparison.Ordinal))
+        {
+            logger.LogWarning("Stripe subscription {SubscriptionId} not found for cancellation", subscriptionId);
+            return false;
+        }
     }
 
     /// <inheritdoc />
-    public Task<bool> ResumeAsync(string subscriptionId, CancellationToken ct = default)
+    public async Task<bool> ResumeAsync(string subscriptionId, CancellationToken ct = default)
     {
-        return _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
+        try
         {
-            try
+            return await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
             {
                 var client = await clientFactory.GetClientAsync(token);
                 var service = new NativeStripeSubService(client);
-                
-                await service.UpdateAsync(subscriptionId, new SubscriptionUpdateOptions 
-                { 
-                    CancelAtPeriodEnd = false 
+
+                await service.UpdateAsync(subscriptionId, new SubscriptionUpdateOptions
+                {
+                    CancelAtPeriodEnd = false
                 }, cancellationToken: token);
 
                 telemetry.TrackEvent("SubscriptionResumeRequested", new Dictionary<string, string>
@@ -119,13 +119,13 @@ public sealed class StripeSubscriptionManager(
                 });
 
                 return true;
-            }
-            catch (StripeException ex) when (string.Equals(ex.StripeError?.Code, "resource_missing", StringComparison.Ordinal))
-            {
-                logger.LogWarning("Stripe subscription {SubscriptionId} not found for resume", subscriptionId);
-                return false;
-            }
-        }, new Context(), ct);
+            }, new Context(), ct);
+        }
+        catch (StripeException ex) when (string.Equals(ex.StripeError?.Code, "resource_missing", StringComparison.Ordinal))
+        {
+            logger.LogWarning("Stripe subscription {SubscriptionId} not found for resume", subscriptionId);
+            return false;
+        }
     }
 
     /// <inheritdoc />
@@ -155,7 +155,8 @@ public sealed class StripeSubscriptionManager(
                     
                     newSub.UpdateStatus(subscriptionEvent.NewStatus);
                     await paymentRepository.AddSubscriptionAsync(newSub, ct);
-                    
+
+                    // outbox handles this — event persisted atomically with subscription
                     await eventPublisher.PublishAsync(new SubscriptionStartedEvent 
                     { 
                         SubscriptionId = newSub.ProviderSubscriptionId, 

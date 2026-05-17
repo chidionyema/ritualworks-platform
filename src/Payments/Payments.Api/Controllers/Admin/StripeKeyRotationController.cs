@@ -35,7 +35,8 @@ public sealed class StripeKeyRotationController : ControllerBase
     {
         var command = new RotateStripeKeyCommand
         {
-            NewSecretKey = request.NewSecretKey
+            NewSecretKey = request.NewSecretKey,
+            IdempotencyKey = Guid.NewGuid().ToString("N")
         };
 
         var result = await _mediator.Send(command, ct);

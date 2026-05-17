@@ -66,6 +66,7 @@ public sealed class ErasureHealthWatcher : BackgroundService
                 (s.CurrentState == "Processing" || s.CurrentState == "Stalled") &&
                 s.CreatedAt < deadline)
             .Select(s => new { s.CorrelationId, s.UserId, s.CurrentState, s.CreatedAt })
+            .OrderBy(s => s.CreatedAt)
             .Take(100)
             .ToListAsync(ct);
 

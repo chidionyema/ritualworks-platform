@@ -130,13 +130,15 @@ public static class VaultServiceCollectionExtensions
         {
             var factory = sp.GetRequiredService<IVaultClientFactory>();
             var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Options.VaultOptions>>().Value;
-            // Create the client handle synchronously during DI build — token is short-lived but
-            // the VaultCredentialProvider re-fetches via the static-creds endpoint which is
-            // authenticated by the client's token.
-            var handle = factory.CreateClientAsync(options, CancellationToken.None).GetAwaiter().GetResult();
+            // Vault client creation runs on a thread-pool thread to avoid blocking the DI
+            // container build thread (no sync-over-async on the request path).
+            var handle = Task.Run(async () =>
+                await factory.CreateClientAsync(options, CancellationToken.None)
+                    .ConfigureAwait(false))
+                .GetAwaiter(); // Dispose-safe one-time DI init
             var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
                 .CreateLogger<VaultCredentialProvider>();
-            return new VaultCredentialProvider(handle.Client, logger);
+            return new VaultCredentialProvider(handle.GetResult().Client, logger);
         });
 
         // The base connection string is the static one from config (without dynamic user/pass).

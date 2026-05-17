@@ -8,6 +8,7 @@ namespace Haworks.Payments.Application.Commands.Subscriptions;
 public sealed record CancelSubscriptionCommand(
     string UserId,
     string SubscriptionId,
+    string IdempotencyKey,
     bool Immediate = false) : IRequest<Result<bool>>;
 
 public sealed class CancelSubscriptionCommandHandler(

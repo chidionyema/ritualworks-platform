@@ -14,6 +14,7 @@ namespace Haworks.Payments.Application.Commands.Secrets;
 public sealed record RotateStripeKeyCommand : IRequest<RotateStripeKeyResult>
 {
     public required string NewSecretKey { get; init; }
+    public required string IdempotencyKey { get; init; }
 }
 
 public sealed record RotateStripeKeyResult

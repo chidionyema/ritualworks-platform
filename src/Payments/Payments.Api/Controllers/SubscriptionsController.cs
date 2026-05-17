@@ -40,7 +40,8 @@ public sealed class SubscriptionsController(IMediator mediator) : ControllerBase
             userId,
             body.PriceId,
             body.Amount,
-            body.RedirectPath);
+            body.RedirectPath,
+            Guid.NewGuid().ToString("N"));
 
         var result = await mediator.Send(command, ct);
         return result.ToActionResult();
@@ -56,7 +57,7 @@ public sealed class SubscriptionsController(IMediator mediator) : ControllerBase
             return Unauthorized();
         }
 
-        var result = await mediator.Send(new CancelSubscriptionCommand(userId, body.SubscriptionId, body.Immediate), ct);
+        var result = await mediator.Send(new CancelSubscriptionCommand(userId, body.SubscriptionId, Guid.NewGuid().ToString("N"), body.Immediate), ct);
         return result.ToActionResult();
     }
 
@@ -70,7 +71,7 @@ public sealed class SubscriptionsController(IMediator mediator) : ControllerBase
             return Unauthorized();
         }
 
-        var result = await mediator.Send(new ResumeSubscriptionCommand(userId, body.SubscriptionId), ct);
+        var result = await mediator.Send(new ResumeSubscriptionCommand(userId, body.SubscriptionId, Guid.NewGuid().ToString("N")), ct);
         return result.ToActionResult();
     }
 }

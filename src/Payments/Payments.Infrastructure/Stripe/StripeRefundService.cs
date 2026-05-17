@@ -100,6 +100,7 @@ internal sealed class StripeRefundService(
 
         if (payment != null && string.Equals(refund.Status, "succeeded", StringComparison.Ordinal))
         {
+            // outbox handles this — event persisted atomically via MassTransit outbox
             await eventPublisher.PublishAsync(new RefundIssuedEvent
             {
                 PaymentId = payment.Id,

@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Haworks.Payouts.Application.Ledger.Commands.MatureFunds;
 
-public record MatureFundsCommand() : IRequest;
+public record MatureFundsCommand(string IdempotencyKey = "") : IRequest;
 
 public class MatureFundsCommandHandler : IRequestHandler<MatureFundsCommand>
 {
@@ -23,7 +23,7 @@ public class MatureFundsCommandHandler : IRequestHandler<MatureFundsCommand>
     public async Task Handle(MatureFundsCommand request, CancellationToken cancellationToken)
     {
         var pendingAccounts = await _context.LedgerAccounts
-            .FromSqlRaw(@"SELECT * FROM payouts.""LedgerAccounts"" WHERE ""Type"" = {0} AND ""Balance"" > 0 ORDER BY ""Id"" ASC FOR UPDATE SKIP LOCKED LIMIT 500", (int)AccountType.SellerPending)
+            .FromSqlRaw(@"SELECT *, xmin FROM payouts.""LedgerAccounts"" WHERE ""Type"" = {0} AND ""Balance"" > 0 ORDER BY ""Id"" ASC FOR UPDATE SKIP LOCKED LIMIT 500", (int)AccountType.SellerPending)
             .ToListAsync(cancellationToken);
 
         if (pendingAccounts.Count == 0) return;
