@@ -25,7 +25,8 @@ public class GetOnboardingLinkCommandHandler : IRequestHandler<GetOnboardingLink
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
             throw new ArgumentException($"Invalid URL: {paramName}", paramName);
-        if (uri.Scheme is not ("https" or "http"))
+        // M3 Fix: Require HTTPS only (consistent with controller validation)
+        if (!string.Equals(uri.Scheme, "https", StringComparison.Ordinal))
             throw new ArgumentException($"URL must use HTTPS: {paramName}", paramName);
         if (uri.Host is "localhost" or "127.0.0.1" or "0.0.0.0")
             throw new ArgumentException($"URL must not point to internal hosts: {paramName}", paramName);

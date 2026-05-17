@@ -49,11 +49,30 @@ public class SellersController(IMediator mediator) : ControllerBase
         if (string.IsNullOrWhiteSpace(url)) return false;
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
         if (!string.Equals(uri.Scheme, "https", StringComparison.Ordinal)) return false;
-        // Block internal/metadata IPs
-        if (uri.Host.StartsWith("169.254.", StringComparison.Ordinal) || uri.Host.StartsWith("10.", StringComparison.Ordinal) ||
-            uri.Host.StartsWith("172.", StringComparison.Ordinal) || string.Equals(uri.Host, "localhost", StringComparison.Ordinal) ||
-string.Equals(uri.Host, "127.0.0.1", StringComparison.Ordinal) || string.Equals(uri.Host, "[::1]", StringComparison.Ordinal))
+
+        // M2 Fix: Proper RFC 1918 + link-local + loopback checks
+        var host = uri.Host;
+        if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(host, "127.0.0.1", StringComparison.Ordinal) ||
+            string.Equals(host, "[::1]", StringComparison.Ordinal))
             return false;
+
+        if (System.Net.IPAddress.TryParse(host, out var ip))
+        {
+            var bytes = ip.GetAddressBytes();
+            if (bytes.Length == 4)
+            {
+                // 10.0.0.0/8
+                if (bytes[0] == 10) return false;
+                // 172.16.0.0/12 (172.16-31.x.x)
+                if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return false;
+                // 192.168.0.0/16
+                if (bytes[0] == 192 && bytes[1] == 168) return false;
+                // 169.254.0.0/16 (link-local)
+                if (bytes[0] == 169 && bytes[1] == 254) return false;
+            }
+        }
+
         return true;
     }
 }

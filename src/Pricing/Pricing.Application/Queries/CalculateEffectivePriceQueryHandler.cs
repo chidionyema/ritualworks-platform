@@ -97,11 +97,16 @@ public sealed class CalculateEffectivePriceQueryHandler : IRequestHandler<Calcul
             request.CountryCode, request.StateCode, result.Subtotal, result.Currency, ct).ConfigureAwait(false);
 
         // Step 8: Assemble final result with tax
-        var total = Math.Round(result.Subtotal + taxResult.TaxAmount, 4, MidpointRounding.AwayFromZero);
+        // M1 Fix: Round final output to 2dp at the boundary (payment gateways expect 2dp).
+        // Internal intermediates use 4dp to prevent accumulation errors.
+        var subtotal2dp = Math.Round(result.Subtotal, 2, MidpointRounding.AwayFromZero);
+        var taxAmount2dp = Math.Round(taxResult.TaxAmount, 2, MidpointRounding.AwayFromZero);
+        var total = subtotal2dp + taxAmount2dp;
 
         var finalResult = result with
         {
-            TaxAmount = taxResult.TaxAmount,
+            Subtotal = subtotal2dp,
+            TaxAmount = taxAmount2dp,
             TaxRate = taxResult.EffectiveRate,
             Total = total,
         };
