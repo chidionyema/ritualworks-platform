@@ -65,7 +65,7 @@ jobs:
       webhooks: ${{ steps.filter.outputs.webhooks }}
     steps:
       - uses: actions/checkout@v6
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           # `shared` (BuildingBlocks / Contracts / build props) triggers
