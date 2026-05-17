@@ -39,14 +39,19 @@ public class AuditExportWorker : BackgroundService
 
         await foreach (var jobId in _queue.ReadAllAsync(stoppingToken))
         {
-            try
-            {
-                await ProcessJobAsync(jobId, stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to process export job {JobId}", jobId);
-            }
+            await ProcessJobSafeAsync(jobId, stoppingToken);
+        }
+    }
+
+    private async Task ProcessJobSafeAsync(Guid jobId, CancellationToken ct)
+    {
+        try
+        {
+            await ProcessJobAsync(jobId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process export job {JobId}", jobId);
         }
     }
 

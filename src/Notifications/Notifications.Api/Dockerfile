@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# Build context: repo root (ritualworks-platform/).
+# Build context: repo root (haworks-platform/).
 
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src

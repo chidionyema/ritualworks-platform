@@ -15,16 +15,20 @@ public sealed class UploadSweeperWorker(
         var interval = TimeSpan.FromMinutes(_opts.SweeperIntervalMinutes);
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
-            {
-                await SweepAsync(stoppingToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogError(ex, "Upload sweeper iteration failed");
-            }
-
+            await SweepSafeAsync(stoppingToken);
             await Task.Delay(interval, stoppingToken);
+        }
+    }
+
+    private async Task SweepSafeAsync(CancellationToken ct)
+    {
+        try
+        {
+            await SweepAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Upload sweeper iteration failed");
         }
     }
 
