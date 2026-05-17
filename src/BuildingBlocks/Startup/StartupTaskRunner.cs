@@ -28,20 +28,27 @@ public sealed class StartupTaskRunner : BackgroundService
     {
         foreach (var task in _tasks)
         {
-            try
-            {
-                await task(_serviceProvider, stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Startup task failed — retrying in 5s");
-                await Task.Delay(5000, stoppingToken);
-                // Retry once
-                try { await task(_serviceProvider, stoppingToken); }
-                catch (Exception retryEx) { _logger.LogCritical(retryEx, "Startup task failed permanently"); }
-            }
+            await RunWithRetryAsync(task, stoppingToken);
         }
         _isReady = true;
         _logger.LogInformation("All startup tasks completed — service is ready");
+    }
+
+    private async Task RunWithRetryAsync(
+        Func<IServiceProvider, CancellationToken, Task> task,
+        CancellationToken stoppingToken)
+    {
+        try
+        {
+            await task(_serviceProvider, stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Startup task failed — retrying in 5s");
+            await Task.Delay(5000, stoppingToken);
+            // Retry once
+            try { await task(_serviceProvider, stoppingToken); }
+            catch (Exception retryEx) { _logger.LogCritical(retryEx, "Startup task failed permanently"); }
+        }
     }
 }

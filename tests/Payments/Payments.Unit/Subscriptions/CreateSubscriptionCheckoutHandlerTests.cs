@@ -23,7 +23,7 @@ public class CreateSubscriptionCheckoutHandlerTests
     public async Task Handle_ValidRequest_ReturnsSessionInfo()
     {
         // Arrange
-        var command = new CreateSubscriptionCheckoutCommand("user-1", "price-1", 10.0m, "/path");
+        var command = new CreateSubscriptionCheckoutCommand("user-1", "price-1", 10.0m, "/path", Guid.NewGuid().ToString());
         var expectedResult = new CheckoutSessionResult
         {
             SessionId = "sess-123",
@@ -54,7 +54,7 @@ public class CreateSubscriptionCheckoutHandlerTests
     public Task Handle_ServiceThrows_Throws()
     {
         // Arrange
-        var command = new CreateSubscriptionCheckoutCommand("user-1", "price-1", 10.0m, null);
+        var command = new CreateSubscriptionCheckoutCommand("user-1", "price-1", 10.0m, null, Guid.NewGuid().ToString());
         _serviceMock.Setup(x => x.CreateSubscriptionSessionAsync(It.IsAny<CreateSubscriptionSessionRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new Exception("Stripe Error"));
 
@@ -69,7 +69,7 @@ public class CreateSubscriptionCheckoutHandlerTests
     [InlineData("user-1", "price-1", -1.0)]
     public void Validator_InvalidRequest_HasErrors(string userId, string priceId, decimal amount)
     {
-        var command = new CreateSubscriptionCheckoutCommand(userId, priceId, amount, null);
+        var command = new CreateSubscriptionCheckoutCommand(userId, priceId, amount, null, Guid.NewGuid().ToString());
         var result = _validator.TestValidate(command);
         result.ShouldHaveAnyValidationError();
     }

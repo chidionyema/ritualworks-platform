@@ -61,7 +61,7 @@ internal sealed class PayPalCheckoutService(
                             CurrencyCode = currency,
                             Value = FormatAmount(totalCents)
                         },
-                        Description = string.Join(", ", request.LineItems.Take(3).Select(i => i.Name)),
+                        Description = string.Join(", ", request.LineItems.OrderBy(i => i.Name).Take(3).Select(i => i.Name)),
                         CustomId = request.Metadata?.GetValueOrDefault("orderId") ?? string.Empty
                     }
                 },

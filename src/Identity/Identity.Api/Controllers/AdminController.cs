@@ -204,6 +204,7 @@ public sealed class AdminController(
         return Accepted(new { roleName, status = "Rotating", sessionId = resolvedSession });
     }
 
+    // outbox handles this — event published via MassTransit outbox
     private Task PublishStageAsync(Guid sessionId, string stage, int newVersion, string previousVersion) =>
         publisher.PublishAsync(new Haworks.Contracts.Identity.VaultRotationStageEvent
         {

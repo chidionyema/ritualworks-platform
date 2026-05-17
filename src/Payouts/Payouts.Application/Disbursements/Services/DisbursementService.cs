@@ -29,6 +29,7 @@ public class DisbursementService : IDisbursementService
         var eligibleAccounts = await _context.LedgerAccounts
             .AsNoTracking()
             .Where(a => a.Type == AccountType.SellerPayable && a.Balance > 0)
+            .OrderBy(a => a.Id)
             .Take(500)
             .ToListAsync();
 

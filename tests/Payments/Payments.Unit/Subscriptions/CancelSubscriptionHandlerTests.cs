@@ -33,7 +33,7 @@ public class CancelSubscriptionHandlerTests
         _dbMock.Setup(x => x.Subscriptions).Returns(mockDbSet.Object);
 
         var handler = new CancelSubscriptionCommandHandler(_managerMock.Object, _dbMock.Object);
-        var command = new CancelSubscriptionCommand("attacker-user", "sub_123");
+        var command = new CancelSubscriptionCommand("attacker-user", "sub_123", Guid.NewGuid().ToString());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -63,7 +63,7 @@ public class CancelSubscriptionHandlerTests
             .ReturnsAsync(true);
 
         var handler = new CancelSubscriptionCommandHandler(_managerMock.Object, _dbMock.Object);
-        var command = new CancelSubscriptionCommand("owner-user", "sub_123");
+        var command = new CancelSubscriptionCommand("owner-user", "sub_123", Guid.NewGuid().ToString());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);

@@ -47,20 +47,25 @@ public sealed class VaultRotatingConnectionStringProvider : BackgroundService, I
         using var timer = new PeriodicTimer(_pollInterval);
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
         {
-            try
-            {
-                await RefreshCredentialsAsync(stoppingToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex,
-                    "Failed to refresh credentials for role {RoleName}; will retry next cycle",
-                    _roleName);
-            }
+            await RefreshCredentialsSafeAsync(stoppingToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task RefreshCredentialsSafeAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await RefreshCredentialsAsync(stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // shutting down — caller will exit the timer loop
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to refresh credentials for role {RoleName}; will retry next cycle",
+                _roleName);
         }
     }
 

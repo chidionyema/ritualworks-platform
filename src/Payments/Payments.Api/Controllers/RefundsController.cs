@@ -21,6 +21,7 @@ public sealed class RefundsController(IMediator mediator) : ControllerBase
             body.PaymentId,
             body.Amount,
             body.Currency,
+            Guid.NewGuid().ToString("N"),
             body.Reason,
             body.RequestedBy);
 

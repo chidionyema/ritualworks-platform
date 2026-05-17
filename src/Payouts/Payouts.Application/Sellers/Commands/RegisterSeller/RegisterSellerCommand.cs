@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Haworks.Payouts.Application.Sellers.Commands.RegisterSeller;
 
-public record RegisterSellerCommand(Guid SellerId, string Email) : IRequest<Guid>;
+public record RegisterSellerCommand(Guid SellerId, string Email, string IdempotencyKey = "") : IRequest<Guid>;
 
 public class RegisterSellerCommandHandler : IRequestHandler<RegisterSellerCommand, Guid>
 {

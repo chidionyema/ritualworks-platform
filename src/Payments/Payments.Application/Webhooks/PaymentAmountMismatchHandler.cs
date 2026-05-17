@@ -46,9 +46,9 @@ public sealed class PaymentAmountMismatchHandler : IPaymentAmountMismatchHandler
             payment.Id,
             reason);
 
-        // Flag payment in the Payments context.
+        // Flag payment in the Payments context — outbox handles this:
+        // SaveChangesAsync + PublishAsync are atomic via the MassTransit outbox.
         payment.Flag();
-        await _paymentRepository.SaveChangesAsync(ct);
 
         // Publish event for Orders context to handle order status update.
         await _eventPublisher.PublishAsync(new PaymentAmountMismatchEvent
@@ -61,6 +61,8 @@ public sealed class PaymentAmountMismatchHandler : IPaymentAmountMismatchHandler
             Difference = difference,
             Reason = reason
         }, ct);
+
+        await _paymentRepository.SaveChangesAsync(ct);
 
         _telemetry.TrackEvent("PaymentAmountMismatch", new Dictionary<string, string>
         {

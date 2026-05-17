@@ -27,7 +27,7 @@ public sealed class PricingDbContext : DbContext
         modelBuilder.Entity<PriceRule>(e =>
         {
             e.HasKey(x => x.Id);
-            e.Property(x => x.DiscountValue).HasPrecision(18, 4);
+            e.Property(x => x.DiscountValue).HasColumnType("numeric(18,4)");
             e.Property(x => x.SellerTimezone).HasMaxLength(64);
             e.Property(x => x.RowVersion).HasDefaultValueSql("'\\x0000000000000000'::bytea");
             e.Property<uint>("xmin")
@@ -45,7 +45,7 @@ public sealed class PricingDbContext : DbContext
         modelBuilder.Entity<TieredPrice>(e =>
         {
             e.HasKey(x => x.Id);
-            e.Property(x => x.UnitPrice).HasPrecision(18, 4);
+            e.Property(x => x.UnitPrice).HasColumnType("numeric(18,4)");
             e.Property<uint>("xmin")
                 .HasColumnName("xmin")
                 .HasColumnType("xid")
@@ -58,8 +58,8 @@ public sealed class PricingDbContext : DbContext
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Code).HasMaxLength(32);
-            e.Property(x => x.DiscountValue).HasPrecision(18, 4);
-            e.Property(x => x.MinimumOrderAmount).HasPrecision(18, 4);
+            e.Property(x => x.DiscountValue).HasColumnType("numeric(18,4)");
+            e.Property(x => x.MinimumOrderAmount).HasColumnType("numeric(18,4)");
             e.Property(x => x.SellerTimezone).HasMaxLength(64);
             e.Property(x => x.RowVersion).HasDefaultValueSql("'\\x0000000000000000'::bytea");
             e.Property<uint>("xmin")
@@ -77,7 +77,7 @@ public sealed class PricingDbContext : DbContext
         modelBuilder.Entity<PromotionRedemption>(e =>
         {
             e.HasKey(x => x.Id);
-            e.Property(x => x.DiscountAmountApplied).HasPrecision(18, 4);
+            e.Property(x => x.DiscountAmountApplied).HasColumnType("numeric(18,4)");
             e.Property(x => x.UserId).HasMaxLength(256);
             e.HasIndex(x => new { x.PromotionCodeId, x.OrderId }).IsUnique();
             e.HasIndex(x => new { x.PromotionCodeId, x.UserId });
@@ -89,10 +89,10 @@ public sealed class PricingDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.CountryCode).HasMaxLength(2);
             e.Property(x => x.StateCode).HasMaxLength(3);
-            e.Property(x => x.CombinedRate).HasPrecision(8, 6);
-            e.Property(x => x.StateRate).HasPrecision(8, 6);
-            e.Property(x => x.CountyRate).HasPrecision(8, 6);
-            e.Property(x => x.LocalRate).HasPrecision(8, 6);
+            e.Property(x => x.CombinedRate).HasColumnType("numeric(8,6)");
+            e.Property(x => x.StateRate).HasColumnType("numeric(8,6)");
+            e.Property(x => x.CountyRate).HasColumnType("numeric(8,6)");
+            e.Property(x => x.LocalRate).HasColumnType("numeric(8,6)");
             e.Property(x => x.Notes).HasMaxLength(512);
             e.Property<uint>("xmin")
                 .HasColumnName("xmin")
@@ -106,13 +106,13 @@ public sealed class PricingDbContext : DbContext
         modelBuilder.Entity<PriceCalculationLog>(e =>
         {
             e.HasKey(x => x.Id);
-            e.Property(x => x.BaseUnitPrice).HasPrecision(18, 4);
-            e.Property(x => x.EffectiveUnitPrice).HasPrecision(18, 4);
-            e.Property(x => x.Subtotal).HasPrecision(18, 4);
-            e.Property(x => x.TaxAmount).HasPrecision(18, 4);
-            e.Property(x => x.TaxRateApplied).HasPrecision(8, 6);
-            e.Property(x => x.Total).HasPrecision(18, 4);
-            e.Property(x => x.SnapshotProductPrice).HasPrecision(18, 4);
+            e.Property(x => x.BaseUnitPrice).HasColumnType("numeric(18,4)");
+            e.Property(x => x.EffectiveUnitPrice).HasColumnType("numeric(18,4)");
+            e.Property(x => x.Subtotal).HasColumnType("numeric(18,4)");
+            e.Property(x => x.TaxAmount).HasColumnType("numeric(18,4)");
+            e.Property(x => x.TaxRateApplied).HasColumnType("numeric(8,6)");
+            e.Property(x => x.Total).HasColumnType("numeric(18,4)");
+            e.Property(x => x.SnapshotProductPrice).HasColumnType("numeric(18,4)");
             e.Property(x => x.Currency).HasMaxLength(3);
             e.Property(x => x.CountryCode).HasMaxLength(2);
             e.Property(x => x.StateCode).HasMaxLength(3);

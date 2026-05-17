@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Haworks.Pricing.Application.Commands;
 using Haworks.Pricing.Application.Queries;
 using Haworks.Pricing.Domain.Exceptions;
@@ -55,13 +56,13 @@ public sealed class PricingController : ControllerBase
 
             return Ok(result);
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
+        catch (InvalidOperationException)
         {
-            return NotFound(new { error = ex.Message });
+            return NotFound(new { error = "The requested product was not found." });
         }
-        catch (TaxCalculationException ex)
+        catch (TaxCalculationException)
         {
-            return StatusCode(500, new { error = "Tax calculation failed", detail = ex.Message });
+            return StatusCode(500, new { error = "Tax calculation failed. Please try again later." });
         }
     }
 
@@ -76,11 +77,12 @@ public sealed class PricingController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Code) || request.ProductId == Guid.Empty)
             return BadRequest("code and productId are required.");
 
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier); // from JWT
         var result = await _mediator.Send(new ValidatePromotionCodeQuery
         {
             Code = request.Code,
             ProductId = request.ProductId,
-            UserId = request.UserId,
+            UserId = userId,
         }, ct).ConfigureAwait(false);
 
         return Ok(result);
@@ -98,11 +100,12 @@ public sealed class PricingController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Code) || request.OrderId == Guid.Empty)
             return BadRequest("code and orderId are required.");
 
+        var redeemUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!; // from JWT
         var result = await _mediator.Send(new RedeemPromotionCodeCommand
         {
             Code = request.Code,
             OrderId = request.OrderId,
-            UserId = request.UserId,
+            UserId = redeemUserId,
             DiscountAmount = request.DiscountAmount,
             CalculationId = request.CalculationId,
         }, ct).ConfigureAwait(false);

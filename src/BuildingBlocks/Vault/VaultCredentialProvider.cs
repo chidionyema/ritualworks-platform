@@ -8,7 +8,7 @@ namespace Haworks.BuildingBlocks.Vault;
 /// Fetches database credentials from Vault static roles with in-memory caching.
 /// Thread-safe: uses SemaphoreSlim to guard cache updates.
 /// </summary>
-public sealed class VaultCredentialProvider : IVaultCredentialProvider, IDisposable
+public sealed class VaultCredentialProvider : IDisposable, IVaultCredentialProvider
 {
     private readonly IVaultClient _vaultClient;
     private readonly ILogger<VaultCredentialProvider> _logger;

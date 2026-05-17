@@ -64,6 +64,8 @@ public sealed class PricingRequestedConsumer : IConsumer<PricingRequestedEvent>
                 OrderId = msg.OrderId,
                 Reason = ex.Message,
             }, context.CancellationToken).ConfigureAwait(false);
+
+            throw;
         }
     }
 }

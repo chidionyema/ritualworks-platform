@@ -172,7 +172,8 @@ internal sealed class PayPalSubscriptionManager(
                     
                     newSub.UpdateStatus(subscriptionEvent.NewStatus);
                     await paymentRepository.AddSubscriptionAsync(newSub, ct);
-                    
+
+                    // outbox handles this — event persisted atomically with subscription
                     await eventPublisher.PublishAsync(new SubscriptionStartedEvent 
                     { 
                         SubscriptionId = newSub.ProviderSubscriptionId, 
