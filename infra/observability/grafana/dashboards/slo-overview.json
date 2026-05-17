@@ -1,0 +1,187 @@
+{
+  "uid": "slo-overview",
+  "title": "SLO Overview — Error Budgets",
+  "tags": ["slo", "platform"],
+  "timezone": "utc",
+  "refresh": "30s",
+  "panels": [
+    {
+      "title": "Checkout Success Rate (SLO: 99.9%)",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "1 - (sum(rate(http_server_request_duration_seconds_count{service_name=\"checkout\", http_response_status_code=~\"5..\"}[1h])) / sum(rate(http_server_request_duration_seconds_count{service_name=\"checkout\"}[1h])))",
+          "legendFormat": "Success Rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "orange", "value": 0.995 },
+              { "color": "green", "value": 0.999 }
+            ]
+          },
+          "min": 0.99,
+          "max": 1,
+          "unit": "percentunit"
+        }
+      }
+    },
+    {
+      "title": "Payment Success Rate (SLO: 99.5%)",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "1 - (sum(rate(http_server_request_duration_seconds_count{service_name=\"payments\", http_response_status_code=~\"5..\"}[1h])) / sum(rate(http_server_request_duration_seconds_count{service_name=\"payments\"}[1h])))",
+          "legendFormat": "Success Rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "orange", "value": 0.99 },
+              { "color": "green", "value": 0.995 }
+            ]
+          },
+          "min": 0.98,
+          "max": 1,
+          "unit": "percentunit"
+        }
+      }
+    },
+    {
+      "title": "Checkout P99 Latency (SLO: < 30s)",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(saga_duration_seconds_bucket{saga_name=\"checkout\"}[15m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "orange", "value": 20 },
+              { "color": "red", "value": 30 }
+            ]
+          },
+          "max": 60,
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "title": "Kafka Consumer Lag (Search CDC)",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "expr": "kafka_consumer_lag_messages{group=\"search-svc-cdc\"}",
+          "legendFormat": "Lag"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "orange", "value": 1000 },
+              { "color": "red", "value": 5000 }
+            ]
+          },
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "title": "Error Budget Burn Rate (30-day window)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=\"checkout\", http_response_status_code=~\"5..\"}[1h])) / sum(rate(http_server_request_duration_seconds_count{service_name=\"checkout\"}[1h])) / 0.001",
+          "legendFormat": "Checkout burn rate (1=budget pace)"
+        },
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=\"payments\", http_response_status_code=~\"5..\"}[1h])) / sum(rate(http_server_request_duration_seconds_count{service_name=\"payments\"}[1h])) / 0.005",
+          "legendFormat": "Payments burn rate (1=budget pace)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Outbox Pending Messages",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "expr": "masstransit_outbox_pending_count",
+          "legendFormat": "{{ service_name }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "RabbitMQ Error Queues",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "expr": "sum(rabbitmq_queue_messages{queue=~\".*_error\"}) or vector(0)",
+          "legendFormat": "Error Queue Messages"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Fault Rate by Exception Type",
+      "type": "timeseries",
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 14 },
+      "targets": [
+        {
+          "expr": "sum(rate(masstransit_faults_total[5m])) by (exception_type, is_transient)",
+          "legendFormat": "{{ exception_type }} (transient={{ is_transient }})"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38
+}

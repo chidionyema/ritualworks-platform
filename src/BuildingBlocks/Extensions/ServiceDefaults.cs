@@ -289,6 +289,18 @@ public static class ServiceDefaults
             Predicate = r => r.Tags.Contains("live")
         });
 
+        // Graceful shutdown: drain in-flight requests before K8s kills the pod.
+        // MassTransit consumers get their own graceful stop via IHostedService,
+        // but Kestrel needs explicit drain time for HTTP requests mid-flight.
+        var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+        lifetime.ApplicationStopping.Register(() =>
+        {
+            var logger = app.Services.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("GracefulShutdown");
+            logger.LogInformation("Shutdown signal received — draining in-flight requests (5s grace)");
+            Thread.Sleep(5000); // Allow K8s to remove pod from service endpoints
+        });
+
         return app;
     }
 }

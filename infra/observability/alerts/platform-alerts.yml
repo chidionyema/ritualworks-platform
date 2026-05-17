@@ -52,6 +52,19 @@ groups:
           summary: "Loki ingestion rate is high"
           description: "Log ingestion rate exceeds 8 MB/s — risk of drops"
 
+      - alert: CheckoutErrorBudgetBurning
+        expr: |
+          sum(rate(http_server_request_duration_seconds_count{service_name="checkout", http_response_status_code=~"5.."}[1h]))
+          /
+          sum(rate(http_server_request_duration_seconds_count{service_name="checkout"}[1h]))
+          > 0.001 * 14.4
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Checkout SLO burn rate critical (14.4x budget pace)"
+          description: "At this rate, the 30-day error budget will be exhausted in 2 hours"
+
       - alert: DiskPressure
         expr: prometheus_tsdb_head_chunks_storage_size_bytes > 15000000000
         for: 10m
