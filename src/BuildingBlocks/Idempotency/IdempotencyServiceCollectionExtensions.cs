@@ -1,3 +1,4 @@
+using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,6 +7,18 @@ namespace Haworks.BuildingBlocks.Idempotency;
 
 public static class IdempotencyServiceCollectionExtensions
 {
+    /// <summary>
+    /// Registers the idempotency pipeline behavior for MediatR.
+    /// Call this AFTER AddMediatR() in your service's DI setup.
+    /// The behavior intercepts all commands implementing <see cref="IIdempotentCommand"/>
+    /// and enforces at-most-once execution via the IdempotencyJournal table.
+    /// </summary>
+    public static IServiceCollection AddIdempotencyBehavior(this IServiceCollection services)
+    {
+        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(IdempotencyBehavior<,>));
+        return services;
+    }
+
     /// <summary>
     /// Register the Postgres-backed <see cref="IIdempotencyStore"/> against
     /// the given bounded-context DbContext. Each service owns its own

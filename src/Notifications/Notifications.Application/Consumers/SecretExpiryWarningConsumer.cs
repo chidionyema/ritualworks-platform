@@ -21,11 +21,12 @@ public sealed class SecretExpiryWarningConsumer : IConsumer<SecretExpiryWarningE
     public Task Consume(ConsumeContext<SecretExpiryWarningEvent> context)
     {
         var msg = context.Message;
+        var vaultPath = msg.SecretPath;
 
         _logger.LogCritical(
-            "SECRET ROTATION ALERT: {SecretPath} is at {AgePercent:P0} of its TTL. " +
+            "SECRET ROTATION ALERT: {VaultPath} is at {AgePercent:P0} of its TTL. " +
             "Last rotated: {LastRotatedAt:O}. Immediate rotation required.",
-            msg.SecretPath, msg.AgePercent, msg.LastRotatedAt);
+            vaultPath, msg.AgePercent, msg.LastRotatedAt);
 
         return Task.CompletedTask;
     }

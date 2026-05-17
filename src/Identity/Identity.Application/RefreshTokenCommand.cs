@@ -156,7 +156,7 @@ internal sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenC
             await _refreshTokenRepository.RemoveAsync(storedToken, cancellationToken);
 
             var expiry = DateTime.UtcNow.AddMinutes(_authOptions.TokenExpiryMinutes);
-            var newAccessToken = await _jwtTokenService.GenerateTokenAsync(user, expiry);
+            var newAccessToken = await _jwtTokenService.GenerateTokenAsync(user, expiry, cancellationToken);
             var newRefreshToken = await _refreshTokenService.GenerateRefreshTokenAsync(user.Id, cancellationToken);
 
             // 6. Update Secure Cookie

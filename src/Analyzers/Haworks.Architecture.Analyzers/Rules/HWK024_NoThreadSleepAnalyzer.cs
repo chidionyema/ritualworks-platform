@@ -22,6 +22,12 @@ public sealed class HWK024_NoThreadSleepAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
+
+        var filePath = context.Node.SyntaxTree.FilePath ?? "";
+        if (filePath.Contains("/tests/") || filePath.Contains("/Tests/") ||
+            filePath.Contains(".Testing/") || filePath.Contains(".Testing\\"))
+            return;
+
         if (invocation.Expression is not MemberAccessExpressionSyntax ma)
             return;
 

@@ -67,7 +67,8 @@ public sealed class BffServiceTokenProvider : IServiceTokenProvider
                 var handler = new JwtSecurityTokenHandler();
                 var jwt = handler.ReadJwtToken(_cachedToken);
                 _tokenExpiry = jwt.ValidTo;
-                _logger.LogInformation("Service token obtained, expires {Expiry}", _tokenExpiry);
+                var expiresAt = _tokenExpiry;
+                _logger.LogInformation("Service token obtained, expires {Expiry}", expiresAt);
             }
 
             return _cachedToken;

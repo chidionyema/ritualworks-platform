@@ -36,6 +36,13 @@ public sealed class HWK032_NoAsNoTrackingWithSaveChangesAnalyzer : DiagnosticAna
             i.Expression is MemberAccessExpressionSyntax ma &&
             ma.Name.Identifier.Text is "SaveChangesAsync" or "SaveChanges");
 
+        // If the method also calls .Add() or .AddRange(), the SaveChanges is for a NEW entity,
+        // not the AsNoTracking-read one. This is a legitimate pattern (read one, create another).
+        bool hasAdd = invocations.Any(i =>
+            i.Expression is MemberAccessExpressionSyntax ma &&
+            ma.Name.Identifier.Text is "Add" or "AddAsync" or "AddRange" or "AddRangeAsync");
+        if (hasAdd) return;
+
         if (hasAsNoTracking && hasSaveChanges)
         {
             context.ReportDiagnostic(

@@ -105,7 +105,7 @@ internal sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, 
             txScope.Complete();
         }
 
-        var token = await _jwtTokenService.GenerateTokenAsync(user, DateTime.UtcNow.AddMinutes(_jwtOptions.TokenExpiryMinutes));
+        var token = await _jwtTokenService.GenerateTokenAsync(user, DateTime.UtcNow.AddMinutes(_jwtOptions.TokenExpiryMinutes), cancellationToken);
         _jwtTokenService.SetSecureCookie(request.HttpContext, token);
 
         await _auditLogger.LogAsync(new AuditEvent

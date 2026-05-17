@@ -51,7 +51,7 @@ public sealed class HWK054_NoFirstOrDefaultWithoutFilterOnLedgerAnalyzer : Diagn
         var chainText = GetFullChainText(ma);
 
         // Check if this is operating on a ledger/financial table
-        if (!LedgerTableNames.Any(t => chainText.Contains(t, System.StringComparison.Ordinal)))
+        if (!LedgerTableNames.Any(t => chainText.IndexOf(t, System.StringComparison.Ordinal) >= 0))
             return;
 
         // Check if there's a Where clause in the chain with a type/status filter
