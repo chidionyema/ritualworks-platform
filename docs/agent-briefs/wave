@@ -96,7 +96,7 @@ apply_scaffold() {
 # Idempotent — won't double-add if re-run.
 #   1. Aspire Program.cs — declare DB resource + register service with DB+rabbitmq
 #   2. init-postgres.sql — CREATE DATABASE for the new service
-#   3. bootstrap.sh — add ritualworks-<feature> to INTERNAL_APPS
+#   3. bootstrap.sh — add haworks-<feature> to INTERNAL_APPS
 apply_deploy_wiring() {
   local repo_root=$1 PascalFeature=$2 feature=$3
   local apphost="$repo_root/deploy/aspire/Program.cs"
@@ -196,15 +196,15 @@ apply_deploy_wiring() {
     echo "  + added GRANT ALL PRIVILEGES ${feature} to init-postgres.sql"
   fi
 
-  # 3. bootstrap.sh INTERNAL_APPS — add ritualworks-<feature> if not present
-  if [ -f "$bootstrap" ] && ! grep -q "ritualworks-${feature}" "$bootstrap"; then
-    awk -v app="  ritualworks-${feature}" '
+  # 3. bootstrap.sh INTERNAL_APPS — add haworks-<feature> if not present
+  if [ -f "$bootstrap" ] && ! grep -q "haworks-${feature}" "$bootstrap"; then
+    awk -v app="  haworks-${feature}" '
       /^INTERNAL_APPS=\(/ { in_block=1; print; next }
       in_block && /^\)/   { print app; print; in_block=0; next }
       { print }
     ' "$bootstrap" > "$bootstrap.tmp" && mv "$bootstrap.tmp" "$bootstrap"
     chmod +x "$bootstrap"
-    echo "  + added ritualworks-${feature} to deploy/fly/bootstrap.sh INTERNAL_APPS"
+    echo "  + added haworks-${feature} to deploy/fly/bootstrap.sh INTERNAL_APPS"
   fi
 
   # 4. .github/workflows/deploy.yml — four insertions (idempotent):
@@ -738,26 +738,26 @@ A. Top of file: a fenced code block declaring all wave parameters. Use these EXA
 
    For WAVE_MODE=new-service:
    \`\`\`
-   REPO=/Users/chidionyema/Documents/code/ritualworks-platform
-   GH_REPO=chidionyema/ritualworks-platform
+   REPO=/Users/chidionyema/Documents/code/haworks-platform
+   GH_REPO=chidionyema/haworks-platform
    WAVE_MODE=new-service
    BASE_BRANCH=feat/${feature}-service
    BRIEF_FILE=docs/agent-briefs/${feature}/parallel-tracks.md
    TRACK_PREFIX=feat/${feature}-
    TRACKS=(T1 T2 T3 T4)
-   WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/ritualworks-platform
+   WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/haworks-platform
    \`\`\`
 
    For WAVE_MODE=modify:
    \`\`\`
-   REPO=/Users/chidionyema/Documents/code/ritualworks-platform
-   GH_REPO=chidionyema/ritualworks-platform
+   REPO=/Users/chidionyema/Documents/code/haworks-platform
+   GH_REPO=chidionyema/haworks-platform
    WAVE_MODE=modify
    BASE_BRANCH=feat/${feature}
    BRIEF_FILE=docs/agent-briefs/${feature}/parallel-tracks.md
    TRACK_PREFIX=feat/${feature}-
    TRACKS=(T1 T2 T3 T4)
-   WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/ritualworks-platform
+   WORKTREE_PARENT=/Users/chidionyema/.gemini/tmp/haworks-platform
    \`\`\`
    (Note BASE_BRANCH lacks the "-service" suffix in modify mode — these tracks don't stand up a service.)
 

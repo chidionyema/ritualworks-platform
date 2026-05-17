@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# Build context: repo root (ritualworks-platform/).
+# Build context: repo root (haworks-platform/).
 # fly.toml at the repo root references this path via [build].dockerfile.
 
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build

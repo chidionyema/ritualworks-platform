@@ -32,32 +32,37 @@ public class CdcFanOutWorker(
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            await ConsumeOneSafeAsync(stoppingToken);
+        }
+    }
+
+    private async Task ConsumeOneSafeAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            var result = consumer.Consume(stoppingToken);
+            if (result == null) return;
+
+            logger.LogInformation("CDC change detected for Webhook Fan-out: {Topic}", result.Topic);
+
+            await ProcessMessageAsync(result, stoppingToken);
+
             try
             {
-                var result = consumer.Consume(stoppingToken);
-                if (result == null) continue;
-
-                logger.LogInformation("CDC change detected for Webhook Fan-out: {Topic}", result.Topic);
-
-                await ProcessMessageAsync(result, stoppingToken);
-
-                try
-                {
-                    consumer.Commit(result);
-                }
-                catch (Exception commitEx)
-                {
-                    logger.LogWarning(commitEx, "Kafka commit failed for {Topic} offset {Offset}; will re-deliver on restart", result.Topic, result.Offset);
-                }
+                consumer.Commit(result);
             }
-            catch (OperationCanceledException)
+            catch (Exception commitEx)
             {
-                break;
+                logger.LogWarning(commitEx, "Kafka commit failed for {Topic} offset {Offset}; will re-deliver on restart", result.Topic, result.Offset);
             }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error processing CDC webhook fan-out");
-            }
+        }
+        catch (OperationCanceledException)
+        {
+            // shutting down
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error processing CDC webhook fan-out");
         }
     }
 

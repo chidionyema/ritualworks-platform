@@ -46,29 +46,37 @@ public sealed class ErasureStalledWatcher : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Stagger first run so the watcher doesn't fire during cold-start
-        // app initialization (services still registering, MT bus warming up).
-        try { await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken); }
-        catch (OperationCanceledException) { return; }
+        if (!await DelaySafeAsync(TimeSpan.FromSeconds(30), stoppingToken)) return;
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
-            {
-                await TickAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "ErasureStalledWatcher tick failed; will retry next interval");
-            }
-
-            try { await Task.Delay(PollInterval, stoppingToken); }
-            catch (OperationCanceledException) { return; }
+            await TickSafeAsync(stoppingToken);
         }
+    }
+
+    private static async Task<bool> DelaySafeAsync(TimeSpan delay, CancellationToken ct)
+    {
+        try { await Task.Delay(delay, ct); return true; }
+        catch (OperationCanceledException) { return false; }
+    }
+
+    private async Task TickSafeAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await TickAsync(stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // shutting down
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ErasureStalledWatcher tick failed; will retry next interval");
+        }
+
+        try { await Task.Delay(PollInterval, stoppingToken); }
+        catch (OperationCanceledException) { /* shutting down */ }
     }
 
     private async Task TickAsync(CancellationToken ct)
