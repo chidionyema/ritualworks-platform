@@ -119,7 +119,7 @@ public class VaultClientFactory : IVaultClientFactory
                 return _cachedUnwrappedSecretId;
 
             _logger.LogInformation(
-                "[VaultClientFactory] Unwrapping wrapped Vault:SecretId (one-time per process)");
+                "[VaultClientFactory] Unwrapping wrapped AppRole SecretId (one-time per process)");
 
             // The wrapping_token IS the auth — POST it to /v1/sys/wrapping/unwrap
             // and Vault returns the originally-wrapped data.

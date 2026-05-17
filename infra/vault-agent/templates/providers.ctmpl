@@ -1,0 +1,19 @@
+{{- /* Vault Agent template: renders provider credentials as JSON for IConfiguration */ -}}
+{
+{{- with secret "secret/data/payments/stripe" }}
+  "PaymentProviders:Stripe:SecretKey": "{{ .Data.data.secret_key }}",
+  "PaymentProviders:Stripe:PublishableKey": "{{ .Data.data.publishable_key }}",
+  "PaymentProviders:Stripe:WebhookSecret": "{{ .Data.data.webhook_secret }}",
+{{- end }}
+{{- with secret "secret/data/payments/paypal" }}
+  "PaymentProviders:PayPal:ClientId": "{{ .Data.data.client_id }}",
+  "PaymentProviders:PayPal:ClientSecret": "{{ .Data.data.client_secret }}",
+  "PaymentProviders:PayPal:WebhookId": "{{ .Data.data.webhook_id }}",
+{{- end }}
+{{- with secret "secret/data/notifications/ses" }}
+  "Email:Ses:AccessKeyId": "{{ .Data.data.access_key_id }}",
+  "Email:Ses:SecretAccessKey": "{{ .Data.data.secret_access_key }}",
+  "Email:Ses:Region": "{{ .Data.data.region }}",
+{{- end }}
+  "_generated": "{{ timestamp }}"
+}

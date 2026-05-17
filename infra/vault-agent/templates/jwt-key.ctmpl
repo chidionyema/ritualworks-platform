@@ -1,0 +1,5 @@
+{{- /* Vault Agent template: renders JWT signing key from KV */ -}}
+{{- with secret "secret/data/identity/jwt" -}}
+Jwt__SigningKeyPem={{ .Data.data.signing_key_pem }}
+Jwt__KeyId={{ .Data.data.key_id }}
+{{- end -}}

@@ -186,7 +186,7 @@ public class VaultService : IVaultService
             if (_client is not null && DateTime.UtcNow + s_clientRefreshHeadroom < _clientExpiresAtUtc)
                 return _client;
 
-            _logger.LogInformation("Vault AppRole token nearing expiry (expiresAt={ExpiresAt:O}); re-authenticating.", _clientExpiresAtUtc);
+            _logger.LogInformation("Vault AppRole lease nearing expiry (expiresAt={ExpiresAt:O}); re-authenticating.", _clientExpiresAtUtc);
             await BuildClientAsync(ct);
             return _client!;
         }
@@ -202,7 +202,7 @@ public class VaultService : IVaultService
         (_client as IDisposable)?.Dispose();
         _client = handle.Client;
         _clientExpiresAtUtc = handle.CreatedAt + handle.LeaseDuration;
-        _logger.LogInformation("Vault AppRole token issued; lease={LeaseMinutes:F1} min, expiresAt={ExpiresAt:O}",
+        _logger.LogInformation("Vault AppRole lease issued; duration={LeaseMinutes:F1} min, expiresAt={ExpiresAt:O}",
             handle.LeaseDuration.TotalMinutes, _clientExpiresAtUtc);
     }
 

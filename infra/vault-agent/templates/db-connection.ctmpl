@@ -1,0 +1,4 @@
+{{- /* Vault Agent template: renders DB connection string with dynamic credentials */ -}}
+{{- with secret "database/creds/SERVICE_ROLE" -}}
+ConnectionStrings__DefaultConnection=Host={{ env "DB_HOST" }};Port=5432;Database={{ env "DB_NAME" }};Username={{ .Data.username }};Password={{ .Data.password }};SslMode=Require;Minimum Pool Size=5;Maximum Pool Size=50;Connection Idle Lifetime=120
+{{- end -}}
