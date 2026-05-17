@@ -49,31 +49,8 @@ public sealed class SuppressionRepository : ISuppressionRepository
             return;
         }
 
+        // Add to change tracker without saving — the caller's SaveChangesAsync
+        // commits both the suppression and any other pending changes atomically.
         _dbContext.SuppressionList.Add(suppression);
-
-        try
-        {
-            await _dbContext.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (DbUpdateException)
-        {
-            // Lost a race with another writer — re-check; if the row is now
-            // there, the operation is still effectively idempotent. Otherwise
-            // the failure was real and we surface it.
-            var existsNow = await ExistsByPkAsync(suppression).ConfigureAwait(false);
-            if (!existsNow)
-            {
-                throw;
-            }
-
-            // Detach our duplicate so the change tracker doesn't keep retrying.
-            _dbContext.Entry(suppression).State = EntityState.Detached;
-        }
     }
-
-    private Task<bool> ExistsByPkAsync(Haworks.Notifications.Domain.Entities.Suppression suppression) =>
-        _dbContext.SuppressionList
-            .AsNoTracking()
-            .AnyAsync(s => s.RecipientHash == suppression.RecipientHash
-                        && s.Channel == suppression.Channel);
 }

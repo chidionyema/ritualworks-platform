@@ -6,6 +6,11 @@ using Microsoft.Extensions.Logging;
 
 namespace Haworks.Orders.Application.Consumers;
 
+/// <summary>
+/// Idempotency: dual protection via (1) domain guard — RevertToPaid() returns
+/// false if the order is not in a refundable status, and (2) MassTransit inbox
+/// dedup configured in OrdersConsumerDefinition. No IdempotentConsumerBase needed.
+/// </summary>
 public sealed class RefundCancelledConsumer(
     IOrderRepository orderRepository,
     ILogger<RefundCancelledConsumer> logger) : IConsumer<RefundCancelledEvent>

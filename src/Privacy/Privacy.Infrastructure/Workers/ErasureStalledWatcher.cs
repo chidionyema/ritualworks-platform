@@ -108,8 +108,12 @@ public sealed class ErasureStalledWatcher : BackgroundService
 
             try
             {
+                // Deterministic MessageId based on CorrelationId so downstream
+                // consumers see the same MessageId on every re-publish tick, enabling
+                // MassTransit inbox deduplication instead of creating unique messages.
                 await publishEndpoint.Publish(
                     new PrivacyErasureRequested { RequestId = saga.CorrelationId, UserId = saga.UserId },
+                    ctx => { ctx.MessageId = saga.CorrelationId; },
                     ct);
             }
             catch (Exception ex)

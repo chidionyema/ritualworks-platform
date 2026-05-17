@@ -173,33 +173,39 @@ internal sealed class ExternalLoginCallbackCommandHandler
             EmailConfirmed = true // Verified by external provider
         };
 
-        var createResult = await _userManager.CreateAsync(newUser);
-        if (!createResult.Succeeded)
+        // Wrap all Identity writes in a TransactionScope so they commit or roll back atomically.
+        using (var txScope = new System.Transactions.TransactionScope(
+            System.Transactions.TransactionScopeAsyncFlowOption.Enabled))
         {
-            return await HandleCreationFailureAsync(createResult, email, loginInfo, request.HttpContext, cancellationToken);
-        }
+            var createResult = await _userManager.CreateAsync(newUser);
+            if (!createResult.Succeeded)
+            {
+                return await HandleCreationFailureAsync(createResult, email, loginInfo, request.HttpContext, cancellationToken);
+            }
 
-        var linkNewUserResult = await _userManager.AddLoginAsync(newUser, loginInfo);
-        if (!linkNewUserResult.Succeeded)
-        {
-            await _userManager.DeleteAsync(newUser);
-            _logger.LogWarning("Failed to link external login to new user {Email}. User deleted.", email);
-            return Result.Failure<AuthResponseDto>(Error.Auth.LinkFailed);
-        }
+            var linkNewUserResult = await _userManager.AddLoginAsync(newUser, loginInfo);
+            if (!linkNewUserResult.Succeeded)
+            {
+                // TransactionScope disposes without Complete = auto-rollback.
+                _logger.LogWarning("Failed to link external login to new user {Email}. Rolling back.", email);
+                return Result.Failure<AuthResponseDto>(Error.Auth.LinkFailed);
+            }
 
-        // Assign default role and claim
-        var roleResult = await _userManager.AddToRoleAsync(newUser, "ContentUploader");
-        if (!roleResult.Succeeded)
-        {
-            _logger.LogWarning("Failed to assign role to new user {UserId}: {Errors}",
-                newUser.Id, string.Join(", ", roleResult.Errors.Select(e => e.Description)));
-        }
+            var roleResult = await _userManager.AddToRoleAsync(newUser, "ContentUploader");
+            if (!roleResult.Succeeded)
+            {
+                _logger.LogWarning("Failed to assign role to new user {UserId}: {Errors}",
+                    newUser.Id, string.Join(", ", roleResult.Errors.Select(e => e.Description)));
+            }
 
-        var claimResult = await _userManager.AddClaimAsync(newUser, new Claim("permission", "upload_content"));
-        if (!claimResult.Succeeded)
-        {
-            _logger.LogWarning("Failed to assign claim to new user {UserId}: {Errors}",
-                newUser.Id, string.Join(", ", claimResult.Errors.Select(e => e.Description)));
+            var claimResult = await _userManager.AddClaimAsync(newUser, new Claim("permission", "upload_content"));
+            if (!claimResult.Succeeded)
+            {
+                _logger.LogWarning("Failed to assign claim to new user {UserId}: {Errors}",
+                    newUser.Id, string.Join(", ", claimResult.Errors.Select(e => e.Description)));
+            }
+
+            txScope.Complete();
         }
 
         _logger.LogInformation("Created new user {UserId} ({Email}) from external login {Provider}.",
@@ -326,12 +332,37 @@ internal sealed class ExternalLoginCallbackCommandHandler
             }
         }
 
-        // If it was a duplicate username (not email), this is unexpected given our unique name logic
+        // Handle duplicate username race condition — regenerate unique name and retry
         if (hasDuplicateUserName && !hasDuplicateEmail)
         {
             _logger.LogWarning(
-                "Duplicate username collision occurred during external login registration. " +
-                "This indicates a race condition in GetUniqueUserNameAsync.");
+                "Duplicate username collision for email {Email}. Retrying with new unique name.",
+                email);
+
+            var rawUserName = loginInfo.Principal.FindFirstValue(ClaimTypes.Name) ?? email.Split('@')[0];
+            var retryUserName = await GetUniqueUserNameAsync(SanitizeUserName(rawUserName));
+            var retryUser = new User
+            {
+                UserName = retryUserName,
+                Email = email,
+                EmailConfirmed = true
+            };
+
+            var retryCreate = await _userManager.CreateAsync(retryUser);
+            if (retryCreate.Succeeded)
+            {
+                var retryLink = await _userManager.AddLoginAsync(retryUser, loginInfo);
+                if (retryLink.Succeeded)
+                {
+                    _logger.LogInformation(
+                        "Created user {UserId} ({Email}) on username retry via {Provider}.",
+                        retryUser.Id, email, loginInfo.LoginProvider);
+                    return await GenerateAuthResponseAsync(retryUser, httpContext, cancellationToken);
+                }
+
+                await _userManager.DeleteAsync(retryUser);
+                _logger.LogWarning("Failed to link external login after username retry for {Email}.", email);
+            }
         }
 
         return Result.Failure<AuthResponseDto>(Error.Auth.CreateFailed);

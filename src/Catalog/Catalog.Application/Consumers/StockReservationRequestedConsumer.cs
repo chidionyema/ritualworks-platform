@@ -1,5 +1,6 @@
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Haworks.Catalog.Application.Telemetry;
 using Haworks.Contracts.Catalog;
 using Haworks.Contracts.Checkout;
@@ -59,7 +60,8 @@ public sealed class StockReservationRequestedConsumer(
             "Reserving stock for orderId={OrderId}, sagaId={SagaId}, items={ItemCount}",
             evt.OrderId, evt.SagaId, evt.Items.Count);
 
-        // Idempotency: if a reservation already exists for this order, skip processing
+        // Idempotency: if a reservation already exists for this order, skip processing.
+        // This check runs inside the ambient MassTransit EF Outbox transaction.
         var existingReservation = await products.GetStockReservationByOrderIdAsync(evt.OrderId, context.CancellationToken);
         if (existingReservation is not null)
         {
@@ -69,6 +71,22 @@ public sealed class StockReservationRequestedConsumer(
             return;
         }
 
+        try
+        {
+            await ReserveStockCoreAsync(evt, context);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
+        {
+            // Defense-in-depth: concurrent duplicate slipped past the read check above.
+            // The reservation was already persisted by the winner — treat as idempotent success.
+            logger.LogInformation(
+                "Unique constraint on reservation for orderId={OrderId}; concurrent duplicate — idempotent success",
+                evt.OrderId);
+        }
+    }
+
+    private async Task ReserveStockCoreAsync(StockReservationRequestedEvent evt, ConsumeContext<StockReservationRequestedEvent> context)
+    {
         var reserved = new List<StockReservationItem>(evt.Items.Count);
         var failed = new List<FailedReservationItem>();
 

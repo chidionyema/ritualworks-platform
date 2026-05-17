@@ -60,6 +60,13 @@ internal sealed class LogoutCommandHandler : IRequestHandler<LogoutCommand, Resu
 
         if (!string.IsNullOrEmpty(userId))
         {
+            // Known limitation: access token revocation (above) and refresh
+            // token removal are not in a single transaction because they use
+            // separate persistence stores (RevokedToken table via
+            // TokenRevocationService vs RefreshToken table). If this call
+            // fails, the access token is already revoked (safe side) and
+            // refresh tokens remain — the short access-token TTL limits the
+            // exposure window. A retry will clean them up.
             await _refreshTokenRepository.RemoveAllForUserAsync(userId, cancellationToken);
             await _refreshTokenRepository.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Revoked all refresh tokens for user {UserId}", userId);

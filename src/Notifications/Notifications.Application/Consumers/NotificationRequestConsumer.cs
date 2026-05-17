@@ -132,8 +132,21 @@ public sealed class NotificationRequestConsumer(
 
         notification.MarkQueued();
 
+        // Persist Queued status before external call so a re-read after rollback
+        // can detect the attempt. This is a best-effort guard — see limitation below.
+        await repository.SaveChangesAsync(ct);
+
         // Step 4: dispatch via the channel-appropriate gateway. The gateway
         // mutates the aggregate (RecordAttempt + MarkSent or MarkFailed).
+        //
+        // KNOWN LIMITATION: The external send happens inside the outbox transaction.
+        // If send succeeds but the subsequent outbox commit fails, the notification is
+        // delivered but status rolls back to Queued, causing a duplicate on retry.
+        // The Queued status guard above (persisted before send) and the Created status
+        // guard at the top provide partial protection, but the fundamental fix requires
+        // splitting into two consumers: (1) render+persist as Queued+publish SendNotificationCommand,
+        // (2) pick up SendNotificationCommand, do the actual send, update status.
+        // Channel gateways should also be made idempotent (provider-side dedup via ProviderMessageId).
         switch (notification.Channel)
         {
             case NotificationChannel.Email:

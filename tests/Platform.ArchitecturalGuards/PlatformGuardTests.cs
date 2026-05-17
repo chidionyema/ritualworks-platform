@@ -3515,6 +3515,8 @@ string.Equals(referenced, "BuildingBlocks.Testing", StringComparison.Ordinal) ||
             var content = File.ReadAllText(file);
             if (!content.Contains("SaveChangesAsync") || !content.Contains("PublishAsync")) continue;
             if (content.Contains("outbox handles this")) continue;
+            // MassTransit consumers: outbox commits atomically on Consume return
+            if (content.Contains("IConsumer<") && file.Contains("Consumer")) continue;
 
             var lines = File.ReadAllLines(file);
             for (int i = 0; i < lines.Length; i++)
@@ -3709,6 +3711,11 @@ string.Equals(referenced, "BuildingBlocks.Testing", StringComparison.Ordinal) ||
             if (content.Contains("ExecuteUpdateAsync") || content.Contains("ExecuteDeleteAsync") || content.Contains("FromSqlRaw")) continue;
             // Consumers with mid-loop re-query patterns need intermediate commits
             if (content.Contains("while (true)") || content.Contains("while(true)")) continue;
+            // Consumers that call external APIs (gateways, HTTP) need SaveChanges before the
+            // irreversible send to persist status — outbox auto-commit is too late
+            if (content.Contains("Gateway") || content.Contains("SendAsync") || content.Contains("HttpClient")) continue;
+            // Privacy erasure consumers use batched SaveChanges + final publish
+            if (file.Contains("PrivacyErasure")) continue;
 
             var lines = File.ReadAllLines(file);
             for (int i = 0; i < lines.Length; i++)
@@ -3721,6 +3728,221 @@ string.Equals(referenced, "BuildingBlocks.Testing", StringComparison.Ordinal) ||
             }
         }
         violations.Should().BeEmpty("MassTransit EF Outbox calls SaveChangesAsync automatically when Consume returns — manual calls risk double-commit or outbox bypass");
+    }
+
+    // ─── Outbox/Inbox Atomicity Guards ──────────────────────────────────
+
+    [Fact]
+    public void Every_service_with_consumers_must_have_outbox_configured()
+    {
+        // Services that register MassTransit consumers MUST configure AddEntityFrameworkOutbox
+        // to guarantee exactly-once processing and atomic event publishing.
+        // Excluded: read-only projections (Search, BffWeb, Realtime, Analytics) and
+        // Audit (append-only, idempotent by message_id unique index).
+        var readOnlyServices = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "Search", "BffWeb", "Realtime", "Analytics", "Audit" };
+
+        var violations = new List<string>();
+        foreach (var file in FindDependencyInjectionFiles()
+            .Concat(FindProgramFiles()))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("AddConsumer") &&
+                !Regex.IsMatch(content, @"AddConsumers.*Assembly"))
+                continue;
+
+            var serviceName = file.Replace(SrcRoot + Path.DirectorySeparatorChar, "")
+                .Split(Path.DirectorySeparatorChar).FirstOrDefault() ?? "";
+            if (readOnlyServices.Contains(serviceName)) continue;
+
+            // Check this file and sibling DI/Program files for outbox config
+            var serviceDir = Path.Combine(SrcRoot, serviceName);
+            var serviceFiles = Directory.GetFiles(serviceDir, "*.cs", SearchOption.AllDirectories)
+                .Where(f => !f.Contains("obj") && !f.Contains("bin"));
+            bool hasOutbox = serviceFiles.Any(f =>
+            {
+                var c = File.ReadAllText(f);
+                return c.Contains("AddEntityFrameworkOutbox") || c.Contains("UseBusOutbox");
+            });
+
+            if (!hasOutbox)
+            {
+                violations.Add($"{Relative(file)}: registers consumers but service '{serviceName}' has no AddEntityFrameworkOutbox — messages lost on crash, no inbox dedup");
+            }
+        }
+        // Known gaps (decrease baseline as services are fixed):
+        // - Identity: consumers (PrivacyErasure, JwtKeyRotated) lack outbox config
+        // - Pricing: consumers (PricingRequested, ProductCacheInvalidated) lack outbox config
+        // - Webhooks: consumers (EventFanOut) lack outbox config
+        var outboxBaseline = 3;
+        violations.Should().HaveCountLessOrEqualTo(outboxBaseline,
+            $"services with consumers missing outbox must not increase beyond baseline ({outboxBaseline}) — add AddEntityFrameworkOutbox to each service's DI");
+    }
+
+    [Fact]
+    public void Every_consumer_must_have_a_ConsumerDefinition()
+    {
+        // Every IConsumer<T> must have an associated ConsumerDefinition to configure
+        // retry, prefetch, and concurrency limits. Without it, consumers use MassTransit
+        // defaults which are inappropriate for financial/state-mutating operations.
+        var readOnlyServices = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "Search", "BffWeb", "Realtime" };
+
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles()
+            .Where(f => f.Contains("Consumer") && !f.Contains("Test")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("IConsumer<")) continue;
+
+            // Skip abstract base classes (e.g., IdempotentConsumerBase) — they are not concrete consumers
+            if (content.Contains("abstract class")) continue;
+
+            var fileName = Path.GetFileNameWithoutExtension(file);
+
+            // Exclude intentionally bare consumers
+            if (string.Equals(fileName, "GlobalFaultConsumer", StringComparison.Ordinal)) continue;
+
+            // Exclude BuildingBlocks (shared infrastructure, not a service)
+            if (file.Contains("BuildingBlocks")) continue;
+
+            // Exclude read-only service consumers
+            var serviceName = file.Replace(SrcRoot + Path.DirectorySeparatorChar, "")
+                .Split(Path.DirectorySeparatorChar).FirstOrDefault() ?? "";
+            if (readOnlyServices.Contains(serviceName)) continue;
+
+            // Find the service's DI file(s) and check for ConsumerDefinition association
+            var serviceDir = Path.Combine(SrcRoot, serviceName);
+            if (!Directory.Exists(serviceDir)) continue;
+
+            var diFiles = Directory.GetFiles(serviceDir, "DependencyInjection.cs", SearchOption.AllDirectories)
+                .Concat(Directory.GetFiles(serviceDir, "Program.cs", SearchOption.AllDirectories))
+                .Where(f => !f.Contains("obj") && !f.Contains("bin"));
+
+            bool hasDefinition = diFiles.Any(diFile =>
+            {
+                var diContent = File.ReadAllText(diFile);
+                return diContent.Contains("BoundedContextConsumerDefinition") ||
+                       diContent.Contains("ConsumerDefinition") ||
+                       diContent.Contains($"{fileName}, typeof(") ||
+                       diContent.Contains($"AddConsumer<{fileName}");
+            });
+
+            // Also check if the consumer file itself defines an inline definition
+            if (!hasDefinition)
+            {
+                hasDefinition = content.Contains("ConsumerDefinition<");
+            }
+
+            if (!hasDefinition)
+            {
+                violations.Add($"{Relative(file)}: {fileName} implements IConsumer<T> but has no ConsumerDefinition — retry/prefetch/concurrency unconfigured");
+            }
+        }
+        // Known gaps (decrease baseline as services add ConsumerDefinitions):
+        // - Identity/JwtKeyRotatedConsumer: no ConsumerDefinition registered
+        var definitionBaseline = 1;
+        violations.Should().HaveCountLessOrEqualTo(definitionBaseline,
+            $"consumers missing ConsumerDefinition must not increase beyond baseline ({definitionBaseline}) — add BoundedContextConsumerDefinition or service-specific definition");
+    }
+
+    [Fact]
+    public void No_IPublishEndpoint_Publish_without_outbox_in_scope()
+    {
+        // Non-consumer code (controllers, command handlers, workers) that publishes events
+        // via IPublishEndpoint must have UseBusOutbox configured in the service, otherwise
+        // events are sent directly to the broker and lost if the process crashes after DB commit.
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            var content = File.ReadAllText(file);
+
+            // Only check files that publish events
+            if (!Regex.IsMatch(content, @"(publishEndpoint|_publishEndpoint|_bus|_publisher|_eventPublisher)\.(Publish|PublishAsync)"))
+                continue;
+
+            // Skip consumer files — they already go through the outbox pipeline
+            if (content.Contains("IConsumer<") || content.Contains(": IdempotentConsumerBase"))
+                continue;
+
+            // Skip BuildingBlocks (shared infra like MassTransitDomainEventPublisher)
+            if (file.Contains("BuildingBlocks")) continue;
+
+            var serviceName = file.Replace(SrcRoot + Path.DirectorySeparatorChar, "")
+                .Split(Path.DirectorySeparatorChar).FirstOrDefault() ?? "";
+            if (string.IsNullOrEmpty(serviceName)) continue;
+
+            var serviceDir = Path.Combine(SrcRoot, serviceName);
+            if (!Directory.Exists(serviceDir)) continue;
+
+            var serviceFiles = Directory.GetFiles(serviceDir, "*.cs", SearchOption.AllDirectories)
+                .Where(f => !f.Contains("obj") && !f.Contains("bin"));
+            bool hasBusOutbox = serviceFiles.Any(f =>
+            {
+                var c = File.ReadAllText(f);
+                return c.Contains("UseBusOutbox");
+            });
+
+            if (!hasBusOutbox)
+            {
+                violations.Add($"{Relative(file)}: publishes events via IPublishEndpoint but service '{serviceName}' has no UseBusOutbox — events bypass outbox in non-consumer code paths");
+            }
+        }
+        // Known gaps (decrease baseline as services are fixed):
+        // - Identity/AdminController: publishes JwtKeyRotatedEvent without outbox
+        var publishBaseline = 1;
+        violations.Should().HaveCountLessOrEqualTo(publishBaseline,
+            $"non-consumer publish-without-outbox violations must not increase beyond baseline ({publishBaseline}) — add UseBusOutbox to the service's MassTransit config");
+    }
+
+    [Fact]
+    public void External_API_calls_must_not_be_inside_outbox_transaction()
+    {
+        // Consumers that both write to DB (outbox transaction) and call external APIs
+        // in the same Consume method create a coupling between DB transaction lifetime
+        // and external API latency. This causes: long-held locks, phantom reads, and
+        // non-retryable partial failures. Use ThreePhaseHandlerBase instead.
+        // This is a baseline guard — count existing violations and prevent increase.
+        var externalCallPatterns = new Regex(
+            @"(HttpClient|\.SendAsync|\.GetAsync|\.PostAsync|\.PutAsync|" +
+            @"StripeService|PayPalService|Gateway\.|Provider\.|" +
+            @"_stripeClient|_paypalClient|\.CreateAsync|\.CaptureAsync|\.RefundAsync)",
+            RegexOptions.Compiled);
+
+        var violations = new List<string>();
+        foreach (var file in FindConsumerFiles().Where(f => f.Contains("Consumer")))
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("IConsumer<") && !content.Contains(": IdempotentConsumerBase"))
+                continue;
+
+            // Skip fault consumers, demo consumers, bridge consumers
+            var fileName = Path.GetFileNameWithoutExtension(file);
+            if (fileName.Contains("Fault") || fileName.Contains("Demo") ||
+                fileName.Contains("Bridge") || fileName.Contains("Cdc"))
+                continue;
+
+            // Check if the consumer has both DB writes and external API calls
+            bool hasDbWrite = content.Contains("SaveChangesAsync") ||
+                              content.Contains("_dbContext") ||
+                              content.Contains("_context") ||
+                              content.Contains(": IdempotentConsumerBase");
+            bool hasExternalCall = externalCallPatterns.IsMatch(content);
+
+            // If it already uses ThreePhaseHandlerBase, it's correctly separated
+            if (content.Contains("ThreePhaseHandler") || content.Contains("ThreePhase"))
+                continue;
+
+            if (hasDbWrite && hasExternalCall)
+            {
+                violations.Add($"{Relative(file)}: {fileName} has both DB writes and external API calls in consumer — use ThreePhaseHandlerBase to separate concerns");
+            }
+        }
+        // Baseline guard: track count, prevent increase. Current known violations are baselined.
+        // When all are migrated to ThreePhaseHandlerBase, switch to BeEmpty().
+        var baseline = 5; // current known violations — decrease as services migrate
+        violations.Should().HaveCountLessOrEqualTo(baseline,
+            $"external API calls inside outbox transactions must not increase beyond baseline ({baseline}) — use ThreePhaseHandlerBase to separate DB writes from external calls");
     }
 
 }

@@ -26,29 +26,52 @@ public sealed class StartupTaskRunner : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var anyFailed = false;
         foreach (var task in _tasks)
         {
-            await RunWithRetryAsync(task, stoppingToken);
+            if (!await RunWithRetryAsync(task, stoppingToken))
+            {
+                anyFailed = true;
+            }
         }
+
+        if (anyFailed)
+        {
+            _logger.LogCritical("One or more startup tasks failed permanently — service will NOT become ready");
+            throw new InvalidOperationException(
+                "Startup tasks failed permanently. The host process should exit.");
+        }
+
         _isReady = true;
         _logger.LogInformation("All startup tasks completed — service is ready");
     }
 
-    private async Task RunWithRetryAsync(
+    /// <summary>
+    /// Runs a startup task with one retry. Returns true on success, false on permanent failure.
+    /// </summary>
+    private async Task<bool> RunWithRetryAsync(
         Func<IServiceProvider, CancellationToken, Task> task,
         CancellationToken stoppingToken)
     {
         try
         {
             await task(_serviceProvider, stoppingToken);
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Startup task failed — retrying in 5s");
             await Task.Delay(5000, stoppingToken);
-            // Retry once
-            try { await task(_serviceProvider, stoppingToken); }
-            catch (Exception retryEx) { _logger.LogCritical(retryEx, "Startup task failed permanently"); }
+            try
+            {
+                await task(_serviceProvider, stoppingToken);
+                return true;
+            }
+            catch (Exception retryEx)
+            {
+                _logger.LogCritical(retryEx, "Startup task failed permanently");
+                return false;
+            }
         }
     }
 }

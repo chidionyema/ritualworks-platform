@@ -66,6 +66,13 @@ public sealed class CatalogDbContext : DbContext
             // entities that need it (Product for stock reservation).
             entity.Property(c => c.RowVersion).HasDefaultValueSql("'\\x0000000000000000'::bytea");
             entity.HasIndex(c => c.Name).IsUnique().HasDatabaseName("IX_Categories_Name");
+
+            // Optimistic concurrency via Postgres xmin system column
+            entity.Property<uint>("xmin")
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
         });
 
         modelBuilder.Entity<Product>(entity =>
@@ -122,6 +129,13 @@ public sealed class CatalogDbContext : DbContext
 
             entity.HasIndex(r => r.ProductId).HasDatabaseName("IX_ProductReviews_ProductId");
             entity.HasIndex(r => r.UserId).HasDatabaseName("IX_ProductReviews_UserId");
+
+            // Optimistic concurrency via Postgres xmin system column
+            entity.Property<uint>("xmin")
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
         });
 
                 modelBuilder.Entity<ProductMetadata>(entity =>

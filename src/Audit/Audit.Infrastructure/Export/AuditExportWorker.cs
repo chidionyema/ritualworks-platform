@@ -63,14 +63,39 @@ public class AuditExportWorker : BackgroundService
             {
                 using var scope = _serviceProvider.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
-                
+
+                // Reset jobs stuck in Running for > 10 minutes (assumed stalled)
+                var stalledCutoff = DateTimeOffset.UtcNow.AddMinutes(-10);
+                var stalledJobIds = await db.AuditExportJobs
+                    .Where(j => j.Status == AuditExportStatus.Running && j.StartedAt < stalledCutoff)
+                    .OrderBy(j => j.Id)
+                    .Select(j => j.Id)
+                    .Take(100)
+                    .ToListAsync(ct);
+
+                foreach (var id in stalledJobIds)
+                {
+                    var stalledJob = await db.AuditExportJobs.FindAsync(new object[] { id }, ct);
+                    if (stalledJob != null && stalledJob.Status == AuditExportStatus.Running)
+                    {
+                        _logger.LogWarning("Resetting stalled Running export job {JobId} to Queued", id);
+                        stalledJob.Status = AuditExportStatus.Queued;
+                        stalledJob.StartedAt = null;
+                    }
+                }
+
+                if (stalledJobIds.Count > 0)
+                {
+                    await db.SaveChangesAsync(ct);
+                }
+
                 var strandedJobIds = await db.AuditExportJobs
                     .Where(j => j.Status == AuditExportStatus.Queued)
                     .OrderBy(j => j.Id)
                     .Select(j => j.Id)
                     .Take(100)
                     .ToListAsync(ct);
-                    
+
                 foreach (var id in strandedJobIds)
                 {
                     try

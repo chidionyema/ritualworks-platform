@@ -82,22 +82,27 @@ internal sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, 
         _logger.LogInformation("User registration succeeded for user: {Username}, Id: {UserId}",
             user.UserName, user.Id);
 
-        // Add to default role
-        var roleResult = await _userManager.AddToRoleAsync(user, "ContentUploader");
-        if (!roleResult.Succeeded)
+        // Wrap role + claim assignment in a transaction so they are atomic.
+        using (var txScope = new System.Transactions.TransactionScope(
+            System.Transactions.TransactionScopeAsyncFlowOption.Enabled))
         {
-            _logger.LogError("Failed to add user {UserId} to role 'ContentUploader'. Errors: {Errors}",
-                user.Id, string.Join(", ", roleResult.Errors.Select(e => e.Description)));
-            return Result.Failure<AuthResponseDto>(Error.Auth.RoleAssignmentFailed);
-        }
+            var roleResult = await _userManager.AddToRoleAsync(user, "ContentUploader");
+            if (!roleResult.Succeeded)
+            {
+                _logger.LogError("Failed to add user {UserId} to role 'ContentUploader'. Errors: {Errors}",
+                    user.Id, string.Join(", ", roleResult.Errors.Select(e => e.Description)));
+                return Result.Failure<AuthResponseDto>(Error.Auth.RoleAssignmentFailed);
+            }
 
-        // Add permission claim
-        var claimResult = await _userManager.AddClaimAsync(user, new Claim("permission", "upload_content"));
-        if (!claimResult.Succeeded)
-        {
-            _logger.LogError("Failed to add claim 'permission:upload_content' for user {UserId}. Errors: {Errors}",
-                user.Id, string.Join(", ", claimResult.Errors.Select(e => e.Description)));
-            return Result.Failure<AuthResponseDto>(Error.Auth.ClaimAssignmentFailed);
+            var claimResult = await _userManager.AddClaimAsync(user, new Claim("permission", "upload_content"));
+            if (!claimResult.Succeeded)
+            {
+                _logger.LogError("Failed to add claim 'permission:upload_content' for user {UserId}. Errors: {Errors}",
+                    user.Id, string.Join(", ", claimResult.Errors.Select(e => e.Description)));
+                return Result.Failure<AuthResponseDto>(Error.Auth.ClaimAssignmentFailed);
+            }
+
+            txScope.Complete();
         }
 
         var token = await _jwtTokenService.GenerateTokenAsync(user, DateTime.UtcNow.AddMinutes(_jwtOptions.TokenExpiryMinutes));

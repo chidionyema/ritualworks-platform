@@ -127,8 +127,9 @@ public sealed class LeaseWatcherJob
         lease.MarkFailed(reason);
         await _leaseRepo.AddAuditEntryAsync(
             RotationAuditEntry.Record(lease.Id, "fail", success: false, error: reason), ct).ConfigureAwait(false);
-        await _leaseRepo.SaveChangesAsync(ct).ConfigureAwait(false);
 
+        // Publish before SaveChanges — MassTransit EF Outbox writes the
+        // message row in the same transaction as the failure update.
         await _publishEndpoint.Publish(new RotationFailedEvent
         {
             ServiceName = lease.ServiceName,
@@ -136,6 +137,8 @@ public sealed class LeaseWatcherJob
             Reason = reason,
             AttemptCount = 1
         }, ct).ConfigureAwait(false);
+
+        await _leaseRepo.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     private async Task RotateDatabaseCredentialAsync(VaultLease lease, CancellationToken ct)
@@ -151,8 +154,9 @@ public sealed class LeaseWatcherJob
         lease.MarkRotated(newLeaseId, expiresAt);
         await _leaseRepo.AddAuditEntryAsync(
             RotationAuditEntry.Record(lease.Id, "rotate", success: true, newLeaseId: newLeaseId), ct).ConfigureAwait(false);
-        await _leaseRepo.SaveChangesAsync(ct).ConfigureAwait(false);
 
+        // Publish before SaveChanges — MassTransit EF Outbox writes the
+        // message row in the same transaction as the lease update.
         await _publishEndpoint.Publish(new CredentialRotatedEvent
         {
             ServiceName = lease.ServiceName,
@@ -160,6 +164,8 @@ public sealed class LeaseWatcherJob
             LeaseId = newLeaseId,
             ExpiresAt = expiresAt
         }, ct).ConfigureAwait(false);
+
+        await _leaseRepo.SaveChangesAsync(ct).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Database credential rotated for {Service}/{Role}, new lease expires at {ExpiresAt}",
@@ -186,8 +192,9 @@ public sealed class LeaseWatcherJob
         lease.MarkRotated(newLeaseId, expiresAt);
         await _leaseRepo.AddAuditEntryAsync(
             RotationAuditEntry.Record(lease.Id, "rotate", success: true, newLeaseId: newLeaseId), ct).ConfigureAwait(false);
-        await _leaseRepo.SaveChangesAsync(ct).ConfigureAwait(false);
 
+        // Publish before SaveChanges — MassTransit EF Outbox writes the
+        // message row in the same transaction as the lease update.
         await _publishEndpoint.Publish(new CertificateRotatedEvent
         {
             ServiceName = lease.ServiceName,
@@ -195,6 +202,8 @@ public sealed class LeaseWatcherJob
             ExpiresAt = expiresAt,
             SerialNumber = serialNumber
         }, ct).ConfigureAwait(false);
+
+        await _leaseRepo.SaveChangesAsync(ct).ConfigureAwait(false);
 
         _logger.LogInformation(
             "PKI certificate rotated for {Service}/{Role}, serial {Serial}",

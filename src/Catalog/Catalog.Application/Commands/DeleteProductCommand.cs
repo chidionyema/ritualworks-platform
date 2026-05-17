@@ -4,6 +4,7 @@ using Haworks.Catalog.Application.Interfaces;
 using Haworks.Catalog.Domain.Interfaces;
 using Haworks.Contracts.Catalog;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Haworks.Catalog.Application.Commands;
@@ -43,19 +44,27 @@ internal sealed class DeleteProductCommandHandler : IRequestHandler<DeleteProduc
             return Result.Failure(new Error("Products.NotFound", $"Product {request.ProductId} not found"));
         }
 
-        await _repository.DeleteAsync(request.ProductId, cancellationToken);
-
-        // Publish before SaveChanges so the outbox row commits with the
-        // delete; bridge consumer fires only after durable commit.
-        await _eventPublisher.PublishAsync(new ProductCacheInvalidatedEvent
+        try
         {
-            ProductId = request.ProductId,
-            CorrelationId = request.CorrelationId,
-            Reason = "deleted",
-            NewVersion = null,
-        }, cancellationToken);
+            await _repository.DeleteAsync(request.ProductId, cancellationToken);
 
-        await _repository.SaveChangesAsync(cancellationToken);
+            // Publish before SaveChanges so the outbox row commits with the
+            // delete; bridge consumer fires only after durable commit.
+            await _eventPublisher.PublishAsync(new ProductCacheInvalidatedEvent
+            {
+                ProductId = request.ProductId,
+                CorrelationId = request.CorrelationId,
+                Reason = "deleted",
+                NewVersion = null,
+            }, cancellationToken);
+
+            await _repository.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Product was already deleted by another request — treat as success
+            _logger.LogInformation("Product {ProductId} was already deleted (concurrency)", request.ProductId);
+        }
 
         await _productCache.InvalidateAsync(request.ProductId, cancellationToken);
 

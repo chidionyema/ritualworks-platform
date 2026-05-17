@@ -4,6 +4,7 @@ using Haworks.Catalog.Application.DTOs;
 using Haworks.Catalog.Domain.Interfaces;
 using Haworks.Contracts.Catalog;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Haworks.Catalog.Application.Commands;
@@ -55,7 +56,16 @@ internal sealed class UpdateCategoryCommandHandler : IRequestHandler<UpdateCateg
             Name = category.Name,
         }, cancellationToken);
 
-        await _repository.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _repository.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            _logger.LogWarning("Concurrency conflict updating category {CategoryId}", request.CategoryId);
+            return Result.Failure<CategoryDto>(new Error("Categories.ConcurrencyConflict",
+                $"Category {request.CategoryId} was modified by another request. Please retry."));
+        }
 
         _logger.LogInformation("Category updated {CategoryId}", request.CategoryId);
 
