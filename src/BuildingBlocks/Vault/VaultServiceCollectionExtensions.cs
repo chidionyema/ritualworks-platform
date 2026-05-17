@@ -135,7 +135,9 @@ public static class VaultServiceCollectionExtensions
             var handle = Task.Run(async () =>
                 await factory.CreateClientAsync(options, CancellationToken.None)
                     .ConfigureAwait(false))
+#pragma warning disable HWK021 // Sync DI factory — no async overload
                 .GetAwaiter(); // Dispose-safe one-time DI init
+#pragma warning restore HWK021
             var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
                 .CreateLogger<VaultCredentialProvider>();
             return new VaultCredentialProvider(handle.GetResult().Client, logger);
