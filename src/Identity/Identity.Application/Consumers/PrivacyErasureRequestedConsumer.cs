@@ -3,6 +3,7 @@ using Haworks.Identity.Domain;
 using Haworks.Identity.Domain.Interfaces;
 using MassTransit;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Haworks.Identity.Application.Consumers;
@@ -25,6 +26,8 @@ public sealed class PrivacyErasureRequestedConsumer(
             "GDPR erasure requested for UserId={UserId}, RequestId={RequestId}",
             msg.UserId, msg.RequestId);
 
+        // Use FindByIdAsync — UserManager queries bypass EF query filters
+        // when using the store directly. The user may be deactivated.
         var user = await userManager.FindByIdAsync(msg.UserId.ToString());
         if (user is not null)
         {
@@ -39,20 +42,30 @@ public sealed class PrivacyErasureRequestedConsumer(
             user.CheckoutSessionId = null;
             user.IsActive = false;
 
-            var result = await userManager.UpdateAsync(user);
-            if (!result.Succeeded)
+            try
             {
-                var errors = string.Join("; ", result.Errors.Select(e => e.Description));
-                logger.LogError("Failed to anonymise user {UserId}: {Errors}", msg.UserId, errors);
-
-                await context.Publish(new PrivacyErasureFailed
+                var result = await userManager.UpdateAsync(user);
+                if (!result.Succeeded)
                 {
-                    RequestId = msg.RequestId,
-                    UserId = msg.UserId,
-                    ServiceName = "identity-svc",
-                    ErrorMessage = $"UserManager.UpdateAsync failed: {errors}"
-                });
-                return;
+                    var errors = string.Join("; ", result.Errors.Select(e => e.Description));
+                    logger.LogError("Failed to anonymise user {UserId}: {Errors}", msg.UserId, errors);
+
+                    await context.Publish(new PrivacyErasureFailed
+                    {
+                        RequestId = msg.RequestId,
+                        UserId = msg.UserId,
+                        ServiceName = "identity-svc",
+                        ErrorMessage = $"UserManager.UpdateAsync failed: {errors}"
+                    });
+                    return;
+                }
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                // Let MassTransit retry via redelivery on concurrency conflicts
+                logger.LogWarning(ex,
+                    "Concurrency conflict while anonymising user {UserId}, will retry", msg.UserId);
+                throw;
             }
         }
         else

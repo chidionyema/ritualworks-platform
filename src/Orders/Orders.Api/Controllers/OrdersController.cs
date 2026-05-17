@@ -16,14 +16,9 @@ public sealed class OrdersController(IMediator mediator) : ControllerBase
     [Authorize]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
-        var result = await mediator.Send(new GetOrderByIdQuery(id), ct);
-        if (!result.IsSuccess)
-            return result.ToActionResult();
-
         var authenticatedUserId = HttpContext.GetForwardedUserId();
-        if (!string.Equals(result.Value.UserId, authenticatedUserId, StringComparison.Ordinal) && !User.IsInRole("Admin"))
-            return Forbid();
-
+        if (string.IsNullOrEmpty(authenticatedUserId)) return Unauthorized();
+        var result = await mediator.Send(new GetOrderByIdQuery(id, authenticatedUserId), ct);
         return result.ToActionResult();
     }
 

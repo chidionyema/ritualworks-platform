@@ -1,0 +1,74 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  # OTel Collector self-metrics
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8888"]
+
+  # .NET service /metrics endpoints (Kestrel + ASP.NET + CLR)
+  - job_name: haworks-services
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - identity-svc:8080
+        labels:
+          service_name: identity
+      - targets:
+          - catalog-svc-1:8080
+        labels:
+          service_name: catalog
+          instance: catalog-svc-1
+      - targets:
+          - catalog-svc-2:8080
+        labels:
+          service_name: catalog
+          instance: catalog-svc-2
+      - targets:
+          - orders-svc:8080
+        labels:
+          service_name: orders
+      - targets:
+          - payments-svc:8080
+        labels:
+          service_name: payments
+      - targets:
+          - checkout-svc:8080
+        labels:
+          service_name: checkout
+      - targets:
+          - content-svc:8080
+        labels:
+          service_name: content
+      - targets:
+          - search-svc:8080
+        labels:
+          service_name: search
+      - targets:
+          - audit-svc:8080
+        labels:
+          service_name: audit
+      - targets:
+          - webhooks-svc:8080
+        labels:
+          service_name: webhooks
+      - targets:
+          - bff-web:8080
+        labels:
+          service_name: bff-web
+
+  # Prometheus self-monitoring
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

@@ -33,6 +33,16 @@ public sealed class StockReleaseRequestedConsumer(
             "Releasing stock for orderId={OrderId}, sagaId={SagaId}, items={ItemCount}, reason={Reason}",
             evt.OrderId, evt.SagaId, evt.Items.Count, evt.Reason);
 
+        // Idempotency: if the reservation for this order was already released, skip
+        var existingReservation = await products.GetStockReservationByOrderIdAsync(evt.OrderId, context.CancellationToken);
+        if (existingReservation is not null && existingReservation.ReleasedAt.HasValue)
+        {
+            logger.LogInformation(
+                "Stock already released for orderId={OrderId}; idempotent skip",
+                evt.OrderId);
+            return;
+        }
+
         foreach (var item in evt.Items)
         {
             var product = await products.GetByIdTrackedAsync(item.ProductId, context.CancellationToken);

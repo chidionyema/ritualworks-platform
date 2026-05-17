@@ -1,8 +1,13 @@
+using System.Text.Json.Serialization;
+using Haworks.BuildingBlocks.Common;
+using MediatR;
+
 namespace Haworks.Analytics.Api.Application.Commands;
 
 public record TrackEventCommand(
-    string EventName,
-    Guid UserId,
+    [property: JsonRequired] Guid EventId,
+    [property: JsonRequired] string EventName,
+    [property: JsonRequired] Guid UserId,
     string? SessionId,
-    DateTime OccurredAt,
+    [property: JsonRequired] DateTime OccurredAt,
     IDictionary<string, object>? Metadata) : IRequest<Result<bool>>;

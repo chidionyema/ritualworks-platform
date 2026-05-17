@@ -27,6 +27,10 @@ public class MediaFile
     public UploadKind UploadKind { get; private set; }
     public string? S3UploadId { get; private set; }
     public int PartCount { get; private set; }
+    public bool IsDeleted { get; private set; }
+    public DateTimeOffset? DeletedAt { get; private set; }
+    public DateTimeOffset? UpdatedAt { get; private set; }
+    public string? UpdatedBy { get; private set; }
 
     private MediaFile() { }
 
@@ -64,24 +68,41 @@ public class MediaFile
         return string.IsNullOrWhiteSpace(sanitized) ? "unnamed" : sanitized;
     }
 
-    public void MarkAsQuarantined()
+    public void MarkAsQuarantined(TimeProvider? time = null, string? actor = null)
     {
         if (Status != MediaStatus.Pending)
             throw new InvalidOperationException($"Cannot quarantine from {Status}; only Pending files can be quarantined.");
         Status = MediaStatus.Quarantined;
+        StampUpdate(time, actor);
     }
 
-    public void MarkAsActive()
+    public void MarkAsActive(TimeProvider? time = null, string? actor = null)
     {
         if (Status != MediaStatus.Quarantined)
             throw new InvalidOperationException($"Cannot activate from {Status}; only Quarantined (scanned) files can be activated.");
         Status = MediaStatus.Active;
+        StampUpdate(time, actor);
     }
 
-    public void MarkAsRejected()
+    public void MarkAsRejected(TimeProvider? time = null, string? actor = null)
     {
         if (Status != MediaStatus.Quarantined)
             throw new InvalidOperationException($"Cannot reject from {Status}; only Quarantined (scanned) files can be rejected.");
         Status = MediaStatus.Rejected;
+        StampUpdate(time, actor);
+    }
+
+    public void MarkDeleted(TimeProvider time)
+    {
+        IsDeleted = true;
+        DeletedAt = time.GetUtcNow();
+        StampUpdate(time, null);
+    }
+
+    private void StampUpdate(TimeProvider? time, string? actor)
+    {
+        UpdatedAt = (time ?? TimeProvider.System).GetUtcNow();
+        if (actor is not null)
+            UpdatedBy = actor;
     }
 }

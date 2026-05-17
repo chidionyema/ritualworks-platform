@@ -15,7 +15,8 @@ public class AbortUploadValidator : AbstractValidator<AbortUploadCommand>
 public class AbortUploadHandler(
     MediaDbContext context,
     IS3Service s3,
-    ICurrentUserService currentUser) : IRequestHandler<AbortUploadCommand, Result<Unit>>
+    ICurrentUserService currentUser,
+    TimeProvider timeProvider) : IRequestHandler<AbortUploadCommand, Result<Unit>>
 {
     public async Task<Result<Unit>> Handle(AbortUploadCommand request, CancellationToken ct)
     {
@@ -38,7 +39,7 @@ public class AbortUploadHandler(
             await s3.AbortMultipartUploadAsync(mediaFile.Id.ToString(), mediaFile.S3UploadId, ct);
         }
 
-        context.MediaFiles.Remove(mediaFile);
+        mediaFile.MarkDeleted(timeProvider);
         await context.SaveChangesAsync(ct);
 
         return Unit.Value;

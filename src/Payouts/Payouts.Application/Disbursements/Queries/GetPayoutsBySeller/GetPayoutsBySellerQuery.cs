@@ -5,11 +5,23 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Haworks.Payouts.Application.Disbursements.Queries.GetPayoutsBySeller;
 
-public record GetPayoutsBySellerQuery(Guid SellerId) : IRequest<List<Payout>>;
+public record GetPayoutsBySellerQuery(Guid SellerId, int Skip = 0, int Take = 20) : IRequest<List<Payout>>;
 
 public class GetPayoutsBySellerQueryHandler : IRequestHandler<GetPayoutsBySellerQuery, List<Payout>>
 {
     private readonly IPayoutsDbContext _context;
     public GetPayoutsBySellerQueryHandler(IPayoutsDbContext context) { _context = context; }
-    public Task<List<Payout>> Handle(GetPayoutsBySellerQuery request, CancellationToken cancellationToken) => _context.Payouts.Where(p => p.SellerId == request.SellerId).OrderByDescending(p => p.CreatedAt).ToListAsync(cancellationToken);
+
+    public Task<List<Payout>> Handle(GetPayoutsBySellerQuery request, CancellationToken cancellationToken)
+    {
+        var skip = Math.Max(0, request.Skip);
+        var take = Math.Clamp(request.Take, 1, 100);
+
+        return _context.Payouts
+            .Where(p => p.SellerId == request.SellerId)
+            .OrderByDescending(p => p.CreatedAt)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+    }
 }

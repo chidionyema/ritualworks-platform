@@ -6,60 +6,83 @@ namespace Haworks.Realtime.Api.Infrastructure.Persistence;
 
 /// <summary>
 /// Redis-backed inbox using a LIST per user.
-/// StoreMessageAsync uses LPUSH — O(1), atomic by design (single Redis command).
-/// GetAndClearMessagesAsync uses a Lua script that atomically LRANGEs all items
-/// then DELetes the key, preventing lost-update races between concurrent readers.
-/// TTL is reset on every write to keep hot inboxes alive.
+///
+/// Write path: LPUSH + LTRIM (caps at <see cref="InboxConstants.MaxInboxSize"/>).
+/// Read path: LRANGE (non-destructive peek).
+/// Ack path: DEL (only after SignalR confirms delivery).
+///
+/// Each message carries a <see cref="InboxMessage.MessageId"/> (Guid) for client-side deduplication.
 /// </summary>
 public class RedisInboxService : IInboxService
 {
     private const int InboxTtlDays = 7;
-    private const int MaxInboxSize = 200;
-
-    // Atomically fetch all items and delete the list.
-    private static readonly LuaScript GetAndClearScript = LuaScript.Prepare("""
-        local items = redis.call('LRANGE', @key, 0, -1)
-        redis.call('DEL', @key)
-        return items
-        """);
 
     private readonly IConnectionMultiplexer _redis;
+    private readonly ILogger<RedisInboxService> _logger;
 
-    public RedisInboxService(IConnectionMultiplexer redis)
+    public RedisInboxService(IConnectionMultiplexer redis, ILogger<RedisInboxService> logger)
     {
         _redis = redis;
+        _logger = logger;
     }
 
     public async Task StoreMessageAsync(Guid userId, object message, CancellationToken ct = default)
     {
         var db = _redis.GetDatabase();
         var key = InboxKey(userId);
-        var json = JsonSerializer.Serialize(message);
+        var messageId = Guid.NewGuid();
+
+        var envelope = new InboxEnvelope(messageId, message);
+        var json = JsonSerializer.Serialize(envelope);
 
         // LPUSH is atomic; cap the list to avoid unbounded growth.
         await db.ListLeftPushAsync(key, json);
-        await db.ListTrimAsync(key, 0, MaxInboxSize - 1);
+        await db.ListTrimAsync(key, 0, InboxConstants.MaxInboxSize - 1);
         await db.KeyExpireAsync(key, TimeSpan.FromDays(InboxTtlDays));
+
+        _logger.LogInformation(
+            "Inbox message stored. UserId={UserId}, MessageId={MessageId}, MessageType={MessageType}",
+            userId, messageId, message.GetType().Name);
     }
 
-    public async Task<IEnumerable<object>> GetAndClearMessagesAsync(Guid userId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<InboxMessage>> GetMessagesAsync(Guid userId, CancellationToken ct = default)
     {
         var db = _redis.GetDatabase();
         var key = InboxKey(userId);
 
-        var result = (RedisValue[]?) await db.ScriptEvaluateAsync(
-            GetAndClearScript,
-            new { key = (RedisKey) key });
-
-        if (result is null || result.Length == 0)
-            return Enumerable.Empty<object>();
+        var items = await db.ListRangeAsync(key, 0, -1);
+        if (items.Length == 0)
+            return Array.Empty<InboxMessage>();
 
         // Items were pushed left; reverse so oldest is first.
-        return result
-            .Reverse()
-            .Select(v => JsonSerializer.Deserialize<object>((string) v!)!)
-            .ToList();
+        var messages = new List<InboxMessage>(items.Length);
+        for (var i = items.Length - 1; i >= 0; i--)
+        {
+            var envelope = JsonSerializer.Deserialize<InboxEnvelope>((string)items[i]!);
+            if (envelope is not null)
+            {
+                messages.Add(new InboxMessage(
+                    envelope.MessageId,
+                    envelope.Data.GetType().Name,
+                    envelope.Data));
+            }
+        }
+
+        return messages;
+    }
+
+    public async Task AcknowledgeMessagesAsync(Guid userId, CancellationToken ct = default)
+    {
+        var db = _redis.GetDatabase();
+        var key = InboxKey(userId);
+        await db.KeyDeleteAsync(key);
+
+        _logger.LogInformation(
+            "Inbox acknowledged and cleared. UserId={UserId}",
+            userId);
     }
 
     private static string InboxKey(Guid userId) => $"inbox:{userId}";
+
+    private sealed record InboxEnvelope(Guid MessageId, object Data);
 }

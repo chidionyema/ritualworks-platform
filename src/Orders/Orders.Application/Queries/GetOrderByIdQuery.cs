@@ -3,7 +3,7 @@ using Haworks.Orders.Application.DTOs;
 
 namespace Haworks.Orders.Application.Queries;
 
-public sealed record GetOrderByIdQuery(Guid Id) : IRequest<Result<OrderDto>>;
+public sealed record GetOrderByIdQuery(Guid Id, string UserId) : IRequest<Result<OrderDto>>;
 
 internal sealed class GetOrderByIdQueryHandler(IOrderRepository orders)
     : IRequestHandler<GetOrderByIdQuery, Result<OrderDto>>
@@ -15,6 +15,12 @@ internal sealed class GetOrderByIdQueryHandler(IOrderRepository orders)
         {
             return Result.Failure<OrderDto>(Error.Orders.NotFoundWithId(request.Id));
         }
+
+        if (!string.Equals(order.UserId, request.UserId, StringComparison.Ordinal))
+        {
+            return Result.Failure<OrderDto>(Error.Orders.Forbidden);
+        }
+
         return Result.Success(MapToDto(order));
     }
 

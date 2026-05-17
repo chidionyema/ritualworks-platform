@@ -66,6 +66,7 @@ internal sealed class OrderRepository(OrderDbContext db) : IOrderRepository
         return await db.Orders
             .Include(o => o.Items)
             .Where(o => o.Status == OrderStatus.Created && o.CreatedAt < cutoffTime)
+            .OrderBy(o => o.CreatedAt)
             .Take(take)
             .ToListAsync(ct);
     }

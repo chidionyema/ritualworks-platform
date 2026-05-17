@@ -9,7 +9,7 @@ namespace Haworks.Payments.Api.Controllers;
 
 [ApiController]
 [Route("api/refunds")]
-[Authorize] // Ideally restricted to Admin roles
+[Authorize(Roles = "Admin")]
 public sealed class RefundsController(IMediator mediator) : ControllerBase
 {
     [HttpPost]

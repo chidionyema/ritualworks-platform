@@ -36,85 +36,91 @@ internal sealed class StripeRefundService(
             ["Provider"] = PaymentProvider.Stripe.ToString()
         });
 
-        return await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
+        // Only the Stripe API call belongs inside the retry block.
+        // DB reads and event publishing are non-idempotent side-effects
+        // that must happen AFTER Polly exhausts retries.
+        global::Stripe.Refund refund;
+        try
         {
-            var client = await clientFactory.GetClientAsync(token);
-            var service = new RefundService(client);
-            
-            var options = new RefundCreateOptions 
-            { 
-                PaymentIntent = request.TransactionId,
-                Reason = MapRefundReason(request.Reason),
-                Metadata = request.Metadata ?? new Dictionary<string, string>()
-            };
-
-            if (request.AmountCents.HasValue)
+            refund = await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
             {
-                options.Amount = request.AmountCents.Value;
-            }
+                var client = await clientFactory.GetClientAsync(token);
+                var service = new RefundService(client);
 
-            var requestOptions = new RequestOptions();
-            if (!string.IsNullOrEmpty(request.IdempotencyKey))
-            {
-                requestOptions.IdempotencyKey = request.IdempotencyKey;
-            }
-
-            try
-            {
-                logger.LogInformation(
-                    "Creating Stripe refund for PaymentIntent {TransactionId}", 
-                    request.TransactionId);
-
-                var refund = await service.CreateAsync(options, requestOptions, token);
-                
-                logger.LogInformation(
-                    "Stripe refund {RefundId} created with status {Status}", 
-                    refund.Id, 
-                    refund.Status);
-
-                var payment = await paymentRepository.GetByProviderTransactionIdAsync(request.TransactionId, token);
-                
-                if (payment != null && string.Equals(refund.Status, "succeeded", StringComparison.Ordinal))
+                var options = new RefundCreateOptions
                 {
-                    // Publish event for downstream consumers (e.g., Orders)
-                    await eventPublisher.PublishAsync(new RefundIssuedEvent 
-                    { 
-                        PaymentId = payment.Id, 
-                        OrderId = payment.OrderId, 
-                        RefundId = refund.Id, 
-                        AmountCents = refund.Amount, 
-                        Currency = payment.Currency, 
-                        Provider = PaymentProvider.Stripe,
-                        Reason = request.Reason
-                    }, token);
+                    PaymentIntent = request.TransactionId,
+                    Reason = MapRefundReason(request.Reason),
+                    Metadata = request.Metadata ?? new Dictionary<string, string>()
+                };
+
+                if (request.AmountCents.HasValue)
+                {
+                    options.Amount = request.AmountCents.Value;
                 }
 
-                TrackRefundEvent("RefundCreated", refund.Id, request.TransactionId, MapRefundStatus(refund.Status));
-
-                return new RefundResult 
-                { 
-                    RefundId = refund.Id, 
-                    Status = MapRefundStatus(refund.Status), 
-                    AmountCents = refund.Amount,
-                    Provider = PaymentProvider.Stripe 
+                var requestOptions = new RequestOptions
+                {
+                    IdempotencyKey = !string.IsNullOrWhiteSpace(request.IdempotencyKey)
+                        ? request.IdempotencyKey
+                        : Guid.NewGuid().ToString()
                 };
-            }
-            catch (StripeException ex)
-            {
-                logger.LogError(ex, 
-                    "Failed to create Stripe refund for PaymentIntent {TransactionId}", 
+
+                logger.LogInformation(
+                    "Creating Stripe refund for PaymentIntent {TransactionId}",
                     request.TransactionId);
 
-                return new RefundResult 
-                { 
-                    RefundId = string.Empty, 
-                    Status = RefundStatus.Failed, 
-                    AmountCents = request.AmountCents ?? 0,
-                    FailureReason = ex.StripeError?.Message ?? ex.Message,
-                    Provider = PaymentProvider.Stripe 
-                };
-            }
-        }, new Context(), ct);
+                return await service.CreateAsync(options, requestOptions, token);
+            }, new Context(), ct);
+        }
+        catch (StripeException ex) when (IsNonTransientStripeError(ex))
+        {
+            // Non-transient client errors (4xx except 429) — no retry will help
+            logger.LogError(ex,
+                "Non-transient Stripe error creating refund for PaymentIntent {TransactionId}",
+                request.TransactionId);
+
+            return new RefundResult
+            {
+                RefundId = string.Empty,
+                Status = RefundStatus.Failed,
+                AmountCents = request.AmountCents ?? 0,
+                FailureReason = ex.StripeError?.Message ?? ex.Message,
+                Provider = PaymentProvider.Stripe
+            };
+        }
+
+        logger.LogInformation(
+            "Stripe refund {RefundId} created with status {Status}",
+            refund.Id,
+            refund.Status);
+
+        // DB read + event publish happen outside the retry block
+        var payment = await paymentRepository.GetByProviderTransactionIdAsync(request.TransactionId, ct);
+
+        if (payment != null && string.Equals(refund.Status, "succeeded", StringComparison.Ordinal))
+        {
+            await eventPublisher.PublishAsync(new RefundIssuedEvent
+            {
+                PaymentId = payment.Id,
+                OrderId = payment.OrderId,
+                RefundId = refund.Id,
+                AmountCents = refund.Amount,
+                Currency = payment.Currency,
+                Provider = PaymentProvider.Stripe,
+                Reason = request.Reason
+            }, ct);
+        }
+
+        TrackRefundEvent("RefundCreated", refund.Id, request.TransactionId, MapRefundStatus(refund.Status));
+
+        return new RefundResult
+        {
+            RefundId = refund.Id,
+            Status = MapRefundStatus(refund.Status),
+            AmountCents = refund.Amount,
+            Provider = PaymentProvider.Stripe
+        };
     }
 
     /// <inheritdoc />
@@ -173,6 +179,18 @@ internal sealed class StripeRefundService(
             "requested_by_customer" or "customer_request" => "requested_by_customer",
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Returns true for non-transient Stripe errors (4xx except 429 rate-limit).
+    /// These should NOT be retried by Polly.
+    /// </summary>
+    private static bool IsNonTransientStripeError(StripeException ex)
+    {
+        var code = ex.HttpStatusCode;
+        return code >= System.Net.HttpStatusCode.BadRequest
+            && code < System.Net.HttpStatusCode.InternalServerError
+            && code != (System.Net.HttpStatusCode)429;
     }
 
     private void TrackRefundEvent(string eventName, string refundId, string transactionId, RefundStatus status)

@@ -1,0 +1,95 @@
+{
+  "uid": "payment-flows",
+  "title": "Payment Flows",
+  "description": "Payment processing metrics: checkout sessions, refunds, subscriptions, webhook events",
+  "tags": ["haworks", "payments"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Checkout Sessions Created",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=\"checkout\", http_route=~\"/api/checkout.*\", http_request_method=\"POST\"}[5m]))",
+          "legendFormat": "checkout sessions/s"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Payment Success vs Failure",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=\"payments\", http_response_status_code=~\"2..\"}[5m]))",
+          "legendFormat": "success"
+        },
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=\"payments\", http_response_status_code=~\"4..|5..\"}[5m]))",
+          "legendFormat": "failure"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Refund Processing",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "payments_refund_stuck_in_review_total",
+          "legendFormat": "stuck in review"
+        },
+        {
+          "expr": "rate(payments_refund_completed_total[5m])",
+          "legendFormat": "completed/s"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Subscription Dunning",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "increase(payments_subscription_dunning_exhausted_total[1h])",
+          "legendFormat": "dunning exhausted (1h)"
+        },
+        {
+          "expr": "increase(payments_subscription_renewed_total[1h])",
+          "legendFormat": "renewed (1h)"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Webhook Event Processing Latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket{service_name=\"webhooks\"}[5m])) by (le))",
+          "legendFormat": "webhooks p99"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_server_request_duration_seconds_bucket{service_name=\"webhooks\"}[5m])) by (le))",
+          "legendFormat": "webhooks p50"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    }
+  ]
+}

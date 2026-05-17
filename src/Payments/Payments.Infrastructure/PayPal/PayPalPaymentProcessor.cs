@@ -114,25 +114,36 @@ internal sealed class PayPalPaymentProcessor(
         var payment = await paymentRepository.GetByProviderSessionAsync(PaymentProvider.PayPal, sessionId, ct).ConfigureAwait(false);
         if (payment == null || !string.Equals(payment.UserId, userId, StringComparison.Ordinal)) return false;
 
-        return await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
+        // Let transient exceptions (5xx, 429, network) propagate to Polly for retry.
+        try
         {
-            try
+            return await _resiliencePolicy.ExecuteAsync(async (ctx, token) =>
             {
                 var client = await paypalClientFactory.GetAuthenticatedClientAsync(token).ConfigureAwait(false);
                 var response = await client.GetAsync(PayPalEndpoints.GetOrder(sessionId), token).ConfigureAwait(false);
-                
-                if (!response.IsSuccessStatusCode) return false;
+
+                // Non-transient client errors: return false without retry
+                if (!response.IsSuccessStatusCode)
+                {
+                    var code = (int)response.StatusCode;
+                    if (code >= 400 && code < 500 && code != 429)
+                        return false;
+
+                    // Transient server error: throw so Polly retries
+                    response.EnsureSuccessStatusCode();
+                }
 
                 var responseStream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
                 var order = await JsonSerializer.DeserializeAsync<PayPalOrder>(responseStream, PayPalJsonOptions.Default, token).ConfigureAwait(false);
                 return string.Equals(order?.Status, PayPalOrderStatuses.Completed, StringComparison.Ordinal) || string.Equals(order?.Status, PayPalOrderStatuses.Approved, StringComparison.Ordinal);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "PayPal API error validating session {SessionId}", sessionId);
-                return false;
-            }
-        }, new Context(), ct);
+            }, new Context(), ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            // Polly exhausted retries for transient errors
+            logger.LogError(ex, "PayPal API error validating session {SessionId} after retries exhausted", sessionId);
+            return false;
+        }
     }
 
     private void TrackPaymentCompleted(Guid orderId, Payment payment, PaymentSessionEvent sessionEvent)

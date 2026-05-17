@@ -1,6 +1,7 @@
 using Haworks.Contracts.Payments;
 using Haworks.Payouts.Application.Ledger.Services;
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Haworks.Payouts.Infrastructure.Messaging.Consumers;
@@ -26,23 +27,22 @@ public class PaymentCompletedConsumer : IConsumer<PaymentCompletedEvent>
             return;
         }
 
-        // Idempotency: check if this payment was AlreadyProcessed via the ReferenceId (PaymentId)
-        var alreadyCredited = await _ledgerService.HasCreditForReferenceAsync(evt.PaymentId, context.CancellationToken);
-        if (alreadyCredited)
-        {
-            _logger.LogInformation("Payment {PaymentId} already credited — skipping duplicate", evt.PaymentId);
-            return;
-        }
-
         _logger.LogInformation("Processing payment completion for Order: {OrderId}, Seller: {SellerId}, Amount: {Amount}",
             evt.OrderId, evt.SellerId, evt.Amount);
 
-        await _ledgerService.CreditSellerAsync(
-            evt.SellerId,
-            evt.Amount,
-            evt.Currency,
-            evt.PaymentId,
-            $"Payment for Order {evt.OrderId}",
-            context.CancellationToken);
+        try
+        {
+            await _ledgerService.CreditSellerAsync(
+                evt.SellerId,
+                evt.Amount,
+                evt.Currency,
+                evt.PaymentId,
+                $"Payment for Order {evt.OrderId}",
+                context.CancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        {
+            _logger.LogWarning("Duplicate credit for Payment {PaymentId} — idempotent skip", evt.PaymentId);
+        }
     }
 }

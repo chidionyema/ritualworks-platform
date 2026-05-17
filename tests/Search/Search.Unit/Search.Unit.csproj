@@ -18,8 +18,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../../../src/Search/Search.Domain/Search.Domain.csproj" />
     <ProjectReference Include="../../../src/Search/Search.Application/Search.Application.csproj" />
+    <ProjectReference Include="../../../src/Search/Search.Api/Search.Api.csproj" />
     <ProjectReference Include="../../../src/BuildingBlocks.Testing/Haworks.BuildingBlocks.Testing.csproj" />
   </ItemGroup>
 

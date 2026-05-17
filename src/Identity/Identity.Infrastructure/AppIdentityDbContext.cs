@@ -30,6 +30,8 @@ public class AppIdentityDbContext : IdentityDbContext<User>
         _environment = environment;
         _loggerFactory = loggerFactory;
         _currentUserService = currentUserService;
+        ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.TrackAll;
+        ChangeTracker.LazyLoadingEnabled = false;
     }
 
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
@@ -39,9 +41,6 @@ public class AppIdentityDbContext : IdentityDbContext<User>
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);
-        ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.TrackAll;
-        ChangeTracker.LazyLoadingEnabled = false;
-
         optionsBuilder.UseLoggerFactory(_loggerFactory);
 
         // Enable sensitive data logging only in development
@@ -61,6 +60,15 @@ public class AppIdentityDbContext : IdentityDbContext<User>
         // User configuration (extends IdentityUser)
         modelBuilder.Entity<User>(entity =>
         {
+            // Global query filter — inactive users excluded by default.
+            // Use .IgnoreQueryFilters() for admin/erasure scenarios.
+            entity.HasQueryFilter(u => u.IsActive);
+
+            entity.Property(u => u.IsActive)
+                .HasDefaultValue(true);
+
+            entity.Property(u => u.DeactivatedAt);
+
             entity.Property(u => u.CheckoutSessionId)
                 .HasMaxLength(200);
 

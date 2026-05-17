@@ -86,6 +86,26 @@ internal sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenC
             if (user == null)
                 return Result.Failure<AuthResponseDto>(Error.Auth.UserNotFound);
 
+            // Reject deactivated users — invalidate their session
+            if (!user.IsActive)
+            {
+                _logger.LogWarning("Token refresh rejected for deactivated user {UserId}", userId);
+
+                await _auditLogger.LogAsync(new AuditEvent
+                {
+                    Action = AuditActions.TokenRefreshFailed,
+                    UserId = userId,
+                    Resource = $"User:{userId}",
+                    IsSuccess = false,
+                    Details = "Account is deactivated",
+                    IpAddress = ipAddress,
+                    UserAgent = userAgent,
+                    CorrelationId = correlationId
+                }, cancellationToken);
+
+                return Result.Failure<AuthResponseDto>(Error.Auth.AccountDeactivated);
+            }
+
             // 4. Atomic Token Rotation with transaction
             await using var transaction = (IAsyncDisposable)await _refreshTokenRepository.BeginTransactionAsync(cancellationToken);
 

@@ -24,6 +24,7 @@ public sealed class CheckoutSagaEndToEndTests : IClassFixture<CheckoutWebAppFact
     public async Task InitializeAsync()
     {
         await _factory.EnsureSchemaAsync();
+        await _factory.ResetDatabaseAsync();
         var harness = _factory.Services.GetRequiredService<ITestHarness>();
         harness.TestTimeout = TimeSpan.FromSeconds(30);
         harness.TestInactivityTimeout = TimeSpan.FromSeconds(10);

@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Haworks.Privacy.Application.Requests.Sagas;
 using Haworks.Privacy.Infrastructure.Persistence;
+using Haworks.BuildingBlocks.Testing;
 using Haworks.BuildingBlocks.Testing.Authentication;
 using Haworks.BuildingBlocks.Testing.Containers;
 using Microsoft.EntityFrameworkCore;
@@ -24,10 +25,12 @@ namespace Haworks.Privacy.Integration;
 public sealed class PrivacyWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     public string ConnectionString { get; private set; } = string.Empty;
+    private DatabaseResetter? _resetter;
 
     public async Task InitializeAsync()
     {
         ConnectionString = await SharedTestPostgres.CreateDatabaseAsync("privacy");
+        _resetter = new DatabaseResetter(ConnectionString, "privacy");
         JwtTestDefaults.SetTestEnvironmentVariables();
 
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Test");
@@ -70,6 +73,8 @@ public sealed class PrivacyWebAppFactory : WebApplicationFactory<Program>, IAsyn
             services.AddAuthentication(TestAuthenticationHandler.SchemeName).AddTestAuth();
         });
     }
+
+    public Task ResetDatabaseAsync() => _resetter!.ResetAsync();
 
     public async Task EnsureSchemaAsync()
     {

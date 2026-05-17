@@ -25,6 +25,7 @@ public class NotificationsDbContext : DbContext
         _environment = environment;
         _loggerFactory = loggerFactory;
         _currentUserService = currentUserService;
+        ChangeTracker.LazyLoadingEnabled = false;
     }
 
     public DbSet<Notification> Notifications => Set<Notification>();
@@ -36,7 +37,6 @@ public class NotificationsDbContext : DbContext
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);
-        ChangeTracker.LazyLoadingEnabled = false;
         optionsBuilder.UseLoggerFactory(_loggerFactory);
         if (_environment.IsDevelopment()) optionsBuilder.EnableSensitiveDataLogging();
     }
@@ -71,6 +71,9 @@ public class NotificationsDbContext : DbContext
                 a.Property(x => x.ProviderMessageId).HasMaxLength(200);
                 a.Property(x => x.ErrorMessage).HasMaxLength(2000);
             });
+
+            entity.Property(n => n.IsDeleted).HasDefaultValue(false);
+            entity.HasQueryFilter(n => !n.IsDeleted);
 
             entity.HasIndex(n => n.UserId);
             entity.HasIndex(n => n.Recipient);

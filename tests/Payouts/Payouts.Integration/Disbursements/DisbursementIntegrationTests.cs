@@ -25,7 +25,11 @@ public class DisbursementIntegrationTests : IAsyncLifetime
         _context = _scope.ServiceProvider.GetRequiredService<IPayoutsDbContext>();
     }
 
-    public Task InitializeAsync() => _factory.EnsureSchemaAsync();
+    public async Task InitializeAsync()
+    {
+        await _factory.EnsureSchemaAsync();
+        await _factory.ResetDatabaseAsync();
+    }
     public Task DisposeAsync() { _scope.Dispose(); return Task.CompletedTask; }
 
     [Fact]

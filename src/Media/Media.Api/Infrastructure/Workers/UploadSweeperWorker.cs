@@ -33,12 +33,15 @@ public sealed class UploadSweeperWorker(
         await using var scope = scopeFactory.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<MediaDbContext>();
         var s3 = scope.ServiceProvider.GetRequiredService<IS3Service>();
+        var timeProvider = scope.ServiceProvider.GetRequiredService<TimeProvider>();
 
         var cutoff = DateTime.UtcNow.AddHours(-_opts.PendingUploadTtlHours);
 
         // Sweep stale Pending uploads (abandoned) AND Rejected files (malware)
+        // Query filter excludes already-deleted files, so no IgnoreQueryFilters needed here.
         var stale = await context.MediaFiles
             .Where(f => (f.Status == MediaStatus.Pending || f.Status == MediaStatus.Rejected) && f.CreatedAt < cutoff)
+            .OrderBy(f => f.CreatedAt)
             .Take(100)
             .ToListAsync(ct);
 
@@ -56,7 +59,7 @@ public sealed class UploadSweeperWorker(
                     await s3.AbortMultipartUploadAsync(file.Id.ToString(), file.S3UploadId, ct);
                 }
 
-                context.MediaFiles.Remove(file);
+                file.MarkDeleted(timeProvider);
                 await context.SaveChangesAsync(ct);
             }
             catch (Exception ex)

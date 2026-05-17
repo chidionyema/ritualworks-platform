@@ -7,6 +7,15 @@ public class FeatureFlag
     public string Description { get; set; } = string.Empty;
     public bool IsEnabled { get; set; }
     public List<FeatureFlagRule> Rules { get; set; } = new();
+
+    // Concurrency token (PostgreSQL xmin)
+    public uint RowVersion { get; set; }
+
+    // Audit trail
+    public DateTime CreatedAt { get; set; }
+    public string? CreatedBy { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
 }
 
 public class FeatureFlagRule

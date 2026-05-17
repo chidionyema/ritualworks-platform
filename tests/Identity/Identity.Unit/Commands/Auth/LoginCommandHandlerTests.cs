@@ -96,6 +96,23 @@ public class LoginCommandHandlerTests : TestBase
             Times.Once);
     }
 
+    [Fact]
+    public async Task Handle_WithDeactivatedUser_ReturnsAccountDeactivatedError()
+    {
+        var user = CreateTestUser();
+        user.IsActive = false;
+        var httpContext = new DefaultHttpContext();
+        var command = new LoginCommand(UnitTestConstants.Users.DefaultUsername, UnitTestConstants.Auth.ValidPassword, httpContext);
+
+        SetupSuccessfulLogin(user);
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("Auth.AccountDeactivated", result.Error.Code);
+    }
+
     private LoginCommandHandler CreateHandler()
     {
         return new LoginCommandHandler(

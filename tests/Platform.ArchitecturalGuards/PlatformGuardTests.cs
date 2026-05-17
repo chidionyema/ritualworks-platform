@@ -3354,6 +3354,190 @@ string.Equals(referenced, "BuildingBlocks.Testing", StringComparison.Ordinal) ||
         violations.Should().BeEmpty("every external HTTP call must have a timeout or resilience policy");
     }
 
+    // ─── Financial Anti-Pattern Guards ───────────────────────────────
+
+    [Fact]
+    public void No_try_catch_inside_Polly_ExecuteAsync()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            var content = File.ReadAllText(file);
+            if (!content.Contains("ExecuteAsync")) continue;
+
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains("ExecuteAsync")) continue;
+                // Scan forward within the delegate body (up to 50 lines or a closing });)
+                int braceDepth = 0;
+                bool insideDelegate = false;
+                for (int j = i; j < Math.Min(i + 50, lines.Length); j++)
+                {
+                    var line = lines[j];
+                    braceDepth += line.Count(c => c == '{') - line.Count(c => c == '}');
+                    if (line.Contains("{")) insideDelegate = true;
+                    if (insideDelegate && Regex.IsMatch(line, @"\bcatch\b"))
+                    {
+                        violations.Add($"{Relative(file)}:{j + 1}: try/catch inside Polly ExecuteAsync delegate — let Polly handle retries");
+                        break;
+                    }
+                    if (insideDelegate && braceDepth <= 0) break;
+                }
+            }
+        }
+        violations.Should().BeEmpty("catch blocks inside Polly ExecuteAsync swallow the retry logic — remove them");
+    }
+
+    [Fact]
+    public void No_event_publish_without_SaveChanges()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("/Test") || file.Contains(".Testing")) continue;
+            var content = File.ReadAllText(file);
+            if (!content.Contains("PublishAsync(new ")) continue;
+            if (content.Contains("outbox handles this")) continue;
+
+            // Check each method that publishes events also calls SaveChangesAsync
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains("PublishAsync(new ")) continue;
+
+                // Search backward for method boundary (up to 80 lines)
+                int methodStart = Math.Max(0, i - 80);
+                // Search forward for method end (up to 40 lines)
+                int methodEnd = Math.Min(lines.Length - 1, i + 40);
+
+                var methodBlock = string.Join("\n", lines[methodStart..(methodEnd + 1)]);
+                if (!methodBlock.Contains("SaveChangesAsync") && !methodBlock.Contains("outbox"))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: PublishAsync(new ...) without SaveChangesAsync — events may fire without persisted state");
+                }
+            }
+        }
+        violations.Should().BeEmpty("event publishing must be paired with SaveChangesAsync (or use outbox pattern)");
+    }
+
+    [Fact]
+    public void No_FirstOrDefaultAsync_on_LedgerEntries_without_filter()
+    {
+        var violations = new List<string>();
+        var payoutsRoot = Path.Combine(SrcRoot, "Payouts");
+        if (!Directory.Exists(payoutsRoot)) return;
+
+        foreach (var file in Directory.GetFiles(payoutsRoot, "*.cs", SearchOption.AllDirectories)
+                     .Where(f => !f.Contains("obj") && !f.Contains("bin") && !f.Contains("/Migrations/")))
+        {
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains("LedgerEntries") || !lines[i].Contains("FirstOrDefaultAsync")) continue;
+
+                // Check surrounding LINQ chain (current line + 5 lines before) for a filter
+                int start = Math.Max(0, i - 5);
+                var chain = string.Join("\n", lines[start..(i + 1)]);
+                if (!chain.Contains("EntryType") && !chain.Contains("AccountType") &&
+                    !chain.Contains(".Where(") && !chain.Contains("Type =="))
+                {
+                    violations.Add($"{Relative(file)}:{i + 1}: FirstOrDefaultAsync on LedgerEntries without Type filter — wrong entry returned");
+                }
+            }
+        }
+        violations.Should().BeEmpty("LedgerEntries queries must filter by EntryType or AccountType to avoid returning wrong entries");
+    }
+
+    [Fact]
+    public void No_Take_without_OrderBy()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("/Test") || file.Contains(".Testing")) continue;
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!Regex.IsMatch(lines[i], @"\.Take\(\d")) continue;
+                if (lines[i].TrimStart().StartsWith("//")) continue;
+
+                // Search 5 lines before and current line for OrderBy
+                int start = Math.Max(0, i - 5);
+                var chain = string.Join("\n", lines[start..(i + 1)]);
+                if (chain.Contains("OrderBy") || chain.Contains("OrderByDescending") || chain.Contains("ORDER BY"))
+                    continue;
+
+                violations.Add($"{Relative(file)}:{i + 1}: .Take() without OrderBy — non-deterministic results");
+            }
+        }
+        violations.Should().BeEmpty(".Take() must be preceded by OrderBy/OrderByDescending for deterministic results");
+    }
+
+    [Fact]
+    public void All_financial_commands_must_have_IdempotencyKey()
+    {
+        var violations = new List<string>();
+        var financialRoots = new[] { Path.Combine(SrcRoot, "Payments"), Path.Combine(SrcRoot, "Payouts") };
+
+        foreach (var root in financialRoots.Where(Directory.Exists))
+        {
+            foreach (var file in Directory.GetFiles(root, "*Command.cs", SearchOption.AllDirectories)
+                         .Where(f => !f.Contains("obj") && !f.Contains("bin") && !f.Contains("/Test")))
+            {
+                var content = File.ReadAllText(file);
+                // Only check records that implement IRequest (MediatR commands)
+                if (!Regex.IsMatch(content, @"record\s+\w+[^:]*:\s*IRequest", RegexOptions.NonBacktracking)) continue;
+                // Skip query-only commands (no side effects)
+                if (Path.GetFileName(file).StartsWith("Get", StringComparison.Ordinal)) continue;
+
+                if (!content.Contains("IdempotencyKey"))
+                {
+                    violations.Add($"{Relative(file)}: financial command missing IdempotencyKey property — duplicate payments risk");
+                }
+            }
+        }
+        violations.Should().BeEmpty("all financial commands (Payments/Payouts) must include an IdempotencyKey to prevent duplicate processing");
+    }
+
+    [Fact]
+    public void No_SaveChanges_before_publish_without_transaction()
+    {
+        var violations = new List<string>();
+        foreach (var file in FindProductionCsFiles())
+        {
+            if (file.Contains("/Test") || file.Contains(".Testing")) continue;
+            var content = File.ReadAllText(file);
+            if (!content.Contains("SaveChangesAsync") || !content.Contains("PublishAsync")) continue;
+            if (content.Contains("outbox handles this")) continue;
+
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains("SaveChangesAsync")) continue;
+
+                // Look forward up to 15 lines for a PublishAsync call
+                for (int j = i + 1; j < Math.Min(i + 15, lines.Length); j++)
+                {
+                    if (!lines[j].Contains("PublishAsync")) continue;
+
+                    // Check backward from SaveChangesAsync for BeginTransactionAsync (up to 30 lines)
+                    int start = Math.Max(0, i - 30);
+                    var precedingBlock = string.Join("\n", lines[start..i]);
+                    if (!precedingBlock.Contains("BeginTransactionAsync") &&
+                        !precedingBlock.Contains("UseTransaction") &&
+                        !precedingBlock.Contains("ExecutionStrategy") &&
+                        !precedingBlock.Contains("outbox"))
+                    {
+                        violations.Add($"{Relative(file)}:{i + 1}: SaveChangesAsync then PublishAsync without transaction — dual-write bug");
+                    }
+                    break;
+                }
+            }
+        }
+        violations.Should().BeEmpty("SaveChangesAsync followed by PublishAsync must be wrapped in a transaction (or use outbox)");
+    }
+
     // ─── Code Hygiene ─────────────────────────────────────────────────
 
     [Fact]

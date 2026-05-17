@@ -72,3 +72,4 @@ docker-compose.override.yml
 
 # IDE
 *.code-workspace
+.claude/worktrees/

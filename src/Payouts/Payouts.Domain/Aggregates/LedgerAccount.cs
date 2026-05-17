@@ -12,12 +12,18 @@ public sealed class LedgerAccount : AuditableEntity
 
     public void UpdateBalance(decimal amount, EntryType entryType)
     {
+        if (amount < 0) throw new ArgumentException("Amount must be non-negative", nameof(amount));
+
         if (entryType == EntryType.Credit)
+        {
             Balance += amount;
+        }
         else
         {
-            if (Type is AccountType.SellerPending or AccountType.SellerPayable && Balance < amount)
-                throw new InvalidOperationException("Insufficient balance");
+            if (Balance < amount)
+            {
+                throw new InvalidOperationException($"Insufficient balance in ledger account {Id}. Available: {Balance}, Required: {amount}");
+            }
             Balance -= amount;
         }
     }

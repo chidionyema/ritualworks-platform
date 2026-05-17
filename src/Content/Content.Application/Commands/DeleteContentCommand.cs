@@ -1,6 +1,8 @@
 using Haworks.BuildingBlocks.Common;
 using Haworks.Content.Application.Interfaces;
 using Haworks.Content.Domain.Interfaces;
+using Haworks.Contracts.Content;
+using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -11,6 +13,7 @@ public sealed record DeleteContentCommand(Guid ContentId, string OwnerUserId) : 
 internal sealed class DeleteContentCommandHandler(
     IContentStorageService storageService,
     IContentRepository contentRepository,
+    IPublishEndpoint publishEndpoint,
     ILogger<DeleteContentCommandHandler> logger) : IRequestHandler<DeleteContentCommand, Result>
 {
     public async Task<Result> Handle(DeleteContentCommand request, CancellationToken ct)
@@ -31,6 +34,13 @@ internal sealed class DeleteContentCommandHandler(
         // first means /content/{id} immediately starts returning 404 even
         // if the S3 DELETE call hangs.
         content.SoftDelete();
+        await publishEndpoint.Publish(new ContentDeletedEvent
+        {
+            ContentId = content.Id,
+            EntityId = content.EntityId.ToString(),
+            EntityType = content.EntityType,
+            OwnerUserId = content.OwnerUserId
+        }, ct);
         await contentRepository.SaveChangesAsync(ct);
 
         try

@@ -1,4 +1,5 @@
 using Amazon.S3;
+using Haworks.BuildingBlocks.Messaging;
 using Haworks.BuildingBlocks.Resilience;
 using Haworks.BuildingBlocks.Telemetry;
 using Haworks.BuildingBlocks.Vault;
@@ -9,6 +10,7 @@ using Haworks.Content.Infrastructure.BackgroundServices;
 using Haworks.Content.Infrastructure.ExternalServices.Storage;
 using Haworks.Content.Infrastructure.ExternalServices.Validation;
 using Haworks.Content.Infrastructure.Persistence;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,6 +95,35 @@ public static class DependencyInjection
         });
 
         services.TryAddSingleton(TimeProvider.System);
+
+        // MassTransit + EF Core outbox: integration events (ContentAvailableEvent,
+        // ContentDeletedEvent, ContentQuarantinedEvent) are persisted in the same
+        // transaction as the entity state change, then delivered by the bus outbox.
+        if (!env.IsEnvironment("Test"))
+        {
+            services.AddMassTransit(x =>
+            {
+                x.AddEntityFrameworkOutbox<ContentDbContext>(o =>
+                {
+                    o.UsePostgres();
+                    o.UseBusOutbox();
+                });
+
+                x.UsingRabbitMq((context, cfg) =>
+                {
+                    var rabbitMqConfig = configuration.GetSection("RabbitMq");
+                    cfg.Host(rabbitMqConfig["Host"], "/", h =>
+                    {
+                        h.Username(rabbitMqConfig["Username"] ?? throw new InvalidOperationException("RabbitMq:Username is required"));
+                        h.Password(rabbitMqConfig["Password"] ?? throw new InvalidOperationException("RabbitMq:Password is required"));
+                    });
+
+                    cfg.ConfigureStandardRabbitMq(context);
+                });
+            });
+
+            services.AddDomainEventPublisher();
+        }
 
         // Background sweeper for orphaned uploads. Skipped under Test so
         // integration fixtures don't fight the sweep loop.

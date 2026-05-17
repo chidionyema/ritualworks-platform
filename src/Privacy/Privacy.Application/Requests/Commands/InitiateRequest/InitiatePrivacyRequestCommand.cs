@@ -6,6 +6,7 @@ using Haworks.Privacy.Domain.Enums;
 using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Haworks.Privacy.Application.Requests.Commands.InitiateRequest;
 
@@ -42,12 +43,24 @@ public class InitiatePrivacyRequestCommandHandler : IRequestHandler<InitiatePriv
             return existing.Id;
 
         var privacyRequest = PrivacyRequest.Create(request.UserId, request.Type);
-        
+
         _context.PrivacyRequests.Add(privacyRequest);
 
-        // SaveChanges first so the record is durable before the message is
-        // dispatched; the outbox pattern then guarantees at-least-once delivery.
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
+        {
+            // Concurrent insert for the same user — re-query and return existing
+            var concurrentExisting = await _context.PrivacyRequests.FirstOrDefaultAsync(
+                r => r.UserId == request.UserId &&
+                     (r.Status == PrivacyRequestStatus.Pending || r.Status == PrivacyRequestStatus.InProgress),
+                cancellationToken);
+            if (concurrentExisting is not null)
+                return concurrentExisting.Id;
+            throw;
+        }
 
         await _publishEndpoint.Publish(new InitiatePrivacyRequestMessage { RequestId = privacyRequest.Id, UserId = request.UserId }, cancellationToken);
 

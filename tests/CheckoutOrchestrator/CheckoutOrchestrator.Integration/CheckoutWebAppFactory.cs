@@ -9,6 +9,7 @@ using Xunit;
 using Haworks.CheckoutOrchestrator.Application.Sagas;
 using Haworks.CheckoutOrchestrator.Domain;
 using Haworks.CheckoutOrchestrator.Infrastructure;
+using Haworks.BuildingBlocks.Testing;
 using Haworks.BuildingBlocks.Testing.Authentication;
 using Haworks.BuildingBlocks.Testing.Containers;
 
@@ -24,11 +25,13 @@ namespace Haworks.CheckoutOrchestrator.Integration;
 /// </summary>
 public sealed class CheckoutWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    private DatabaseResetter? _resetter;
     public string ConnectionString { get; private set; } = string.Empty;
 
     public async Task InitializeAsync()
     {
         ConnectionString = await SharedTestPostgres.CreateDatabaseAsync("checkout");
+        _resetter = new DatabaseResetter(ConnectionString);
         JwtTestDefaults.SetTestEnvironmentVariables();
 
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Test");
@@ -80,4 +83,6 @@ public sealed class CheckoutWebAppFactory : WebApplicationFactory<Program>, IAsy
         var db = scope.ServiceProvider.GetRequiredService<CheckoutDbContext>();
         await db.Database.MigrateAsync();
     }
+
+    public Task ResetDatabaseAsync() => _resetter!.ResetAsync();
 }

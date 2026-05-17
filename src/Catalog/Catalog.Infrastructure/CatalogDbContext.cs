@@ -25,6 +25,7 @@ public sealed class CatalogDbContext : DbContext
         _environment = environment;
         _loggerFactory = loggerFactory;
         _currentUserService = currentUserService;
+        ChangeTracker.LazyLoadingEnabled = false;
     }
 
     public DbSet<Category> Categories => Set<Category>();
@@ -37,9 +38,6 @@ public sealed class CatalogDbContext : DbContext
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);
-
-        ChangeTracker.LazyLoadingEnabled = false;
-
         optionsBuilder.UseLoggerFactory(_loggerFactory);
 
         if (_environment.IsDevelopment())

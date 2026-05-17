@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Haworks.Localization.Api.Domain;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -28,8 +29,20 @@ public class TranslationConfiguration : IEntityTypeConfiguration<Translation>
     {
         builder.HasKey(t => t.Id);
         builder.HasIndex(t => t.Key).IsUnique();
-        
+
         builder.Property(t => t.Values)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, (JsonSerializerOptions?)null) ?? new())
             .HasColumnType("jsonb");
+
+        builder.Property(t => t.UpdatedBy).HasMaxLength(256);
+        builder.Property(t => t.UpdatedAt);
+
+        // Optimistic concurrency via PostgreSQL xmin system column
+        builder.Property<uint>("xmin")
+            .HasColumnType("xid")
+            .ValueGeneratedOnAddOrUpdate()
+            .IsConcurrencyToken();
     }
 }

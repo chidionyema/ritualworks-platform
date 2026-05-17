@@ -4,6 +4,7 @@ using Haworks.Search.Application.Interfaces;
 using Haworks.Search.Application.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace Haworks.Search.Api.Controllers;
 
@@ -13,10 +14,12 @@ namespace Haworks.Search.Api.Controllers;
 public sealed class SearchController : ControllerBase
 {
     private readonly ISearchIndex _index;
+    private readonly ILogger<SearchController> _logger;
 
-    public SearchController(ISearchIndex index)
+    public SearchController(ISearchIndex index, ILogger<SearchController> logger)
     {
         _index = index;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -34,6 +37,14 @@ public sealed class SearchController : ControllerBase
         {
             return BadRequest(new { error = "q must contain at least one searchable term" });
         }
+
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst("sub")?.Value;
+
+        // Audit trail: structured log for every search query
+        _logger.LogInformation(
+            "SearchQuery executed. UserId={UserId}, Query={Query}, CategoryId={CategoryId}, Page={Page}, PageSize={PageSize}, Timestamp={Timestamp}",
+            userId, sanitized, categoryId, page, pageSize, DateTime.UtcNow);
 
         var page_ = await _index.SearchAsync(new SearchQuery
         {
@@ -76,13 +87,20 @@ public sealed class SearchController : ControllerBase
         [FromBody] SearchQuery query,
         CancellationToken ct = default)
     {
-        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
-            ?? User.FindFirst("sub")?.Value 
-            ?? "anonymous";
+        // IDOR prevention: userId MUST come from authenticated claims, never from request body
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst("sub")?.Value;
+
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized(new { error = "Authenticated user identity required to save a search." });
 
         var id = Guid.NewGuid().ToString("N");
         await _index.RegisterSavedSearchAsync(id, userId, query, ct);
-        
+
+        _logger.LogInformation(
+            "SavedSearch created. UserId={UserId}, SearchId={SearchId}, Query={Query}, Timestamp={Timestamp}",
+            userId, id, query.Query, DateTime.UtcNow);
+
         return Created($"/search/saved/{id}", new { id });
     }
 }

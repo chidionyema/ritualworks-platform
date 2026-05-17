@@ -1,0 +1,79 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    send_batch_size: 8192
+    timeout: 5s
+
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 500
+    spike_limit_mib: 100
+
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: local
+        action: upsert
+
+  transform/redact_logs:
+    log_statements:
+      - context: log
+        statements:
+          - replace_pattern(body, "\"email\":\\s*\"[^\"]+\"", "\"email\": \"[REDACTED]\"")
+          - replace_pattern(body, "\"password\":\\s*\"[^\"]+\"", "\"password\": \"[REDACTED]\"")
+          - replace_pattern(body, "\"credit_card\":\\s*\"[^\"]+\"", "\"credit_card\": \"[REDACTED]\"")
+          - replace_pattern(body, "\"token\":\\s*\"[^\"]+\"", "\"token\": \"[REDACTED]\"")
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+    tls:
+      insecure: true
+
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 30s
+
+  debug:
+    verbosity: basic
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1777
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, pprof, zpages]
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlp/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [prometheusremotewrite]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/redact_logs, batch, resource]
+      exporters: [loki]

@@ -10,6 +10,7 @@ using Haworks.Media.Api.Infrastructure.Processing;
 using Haworks.Media.Api.Infrastructure.Workers;
 using Haworks.Media.Api.Options;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Serilog;
 
@@ -17,6 +18,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 // ── Platform defaults (OTel, service discovery, health, correlation IDs) ──
 builder.AddServiceDefaults();
+
+// ── TimeProvider (soft-delete stamping, testability) ──
+builder.Services.TryAddSingleton(TimeProvider.System);
 
 // ── Serilog ──
 builder.Host.UseSerilog((ctx, cfg) =>

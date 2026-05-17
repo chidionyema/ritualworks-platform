@@ -1,5 +1,12 @@
 # Compose v2+ — version attribute removed (obsolete)
 
+x-otel-env: &otel-env
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_METRICS_EXPORTER: otlp
+  OTEL_LOGS_EXPORTER: otlp
+  OTEL_TRACES_EXPORTER: otlp
+
 services:
   # ===========================================================================
   # INFRASTRUCTURE
@@ -134,10 +141,122 @@ services:
     command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
       - ../../infra/tempo.yaml:/etc/tempo.yaml
+      - tempo-data:/tmp/tempo
     ports:
-      - "3200:3200"   # tempo
+      - "3200:3200"   # tempo query
+
+  # ===========================================================================
+  # OBSERVABILITY STACK
+  # ===========================================================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.101.0
+    container_name: rw-otel-collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ../../infra/observability/otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
       - "4317:4317"   # otlp grpc
       - "4318:4318"   # otlp http
+      - "13133:13133" # health check
+      - "8888:8888"   # prometheus metrics
+      - "55679:55679" # zpages
+    depends_on:
+      tempo:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:13133/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: rw-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-remote-write-receiver"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ../../infra/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../../infra/observability/alerts:/etc/prometheus/alerts:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  loki:
+    image: grafana/loki:2.9.7
+    container_name: rw-loki
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ../../infra/observability/loki/loki-config.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: rw-alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - ../../infra/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "9093:9093"
+    environment:
+      - ALERTMANAGER_PAGERDUTY_KEY=
+      - ALERTMANAGER_SLACK_WEBHOOK=
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9093/-/healthy"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pushgateway:
+    image: prom/pushgateway:v1.8.0
+    container_name: rw-pushgateway
+    ports:
+      - "9091:9091"
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: rw-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ../../infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../../infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   pact-db:
     image: postgres:16-alpine
@@ -248,13 +367,16 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__identity=Host=postgres;Port=5432;Database=identity;Username=postgres;Password=postgres
-      - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=true
-      - Vault__Address=http://vault:8200
-      - Vault__RoleIdPath=/creds/identity/role_id
-      - Vault__SecretIdPath=/creds/identity/secret_id
+      <<: *otel-env
+      OTEL_SERVICE_NAME: identity
+      OTEL_RESOURCE_ATTRIBUTES: service.instance.id=rw-identity-svc
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__identity: Host=postgres;Port=5432;Database=identity;Username=postgres;Password=postgres
+      ConnectionStrings__rabbitmq: amqp://guest:guest@rabbitmq:5672/
+      Vault__Enabled: "true"
+      Vault__Address: http://vault:8200
+      Vault__RoleIdPath: /creds/identity/role_id
+      Vault__SecretIdPath: /creds/identity/secret_id
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -271,16 +393,19 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__catalog=Host=postgres;Port=5432;Database=catalog;Username=postgres;Password=postgres
-      - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=true
-      - Vault__Address=http://vault:8200
-      - Vault__RoleIdPath=/creds/catalog/role_id
-      - Vault__SecretIdPath=/creds/catalog/secret_id
-      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
-      - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=haworks-dev
+      <<: *otel-env
+      OTEL_SERVICE_NAME: catalog
+      OTEL_RESOURCE_ATTRIBUTES: service.instance.id=rw-catalog-svc-1
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__catalog: Host=postgres;Port=5432;Database=catalog;Username=postgres;Password=postgres
+      ConnectionStrings__rabbitmq: amqp://guest:guest@rabbitmq:5672/
+      Vault__Enabled: "true"
+      Vault__Address: http://vault:8200
+      Vault__RoleIdPath: /creds/catalog/role_id
+      Vault__SecretIdPath: /creds/catalog/secret_id
+      Authentication__Jwks__JwksUri: http://identity-svc:8080/.well-known/jwks.json
+      Authentication__Jwks__Issuer: http://localhost
+      Authentication__Jwks__Audience: haworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -297,16 +422,19 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__catalog=Host=postgres;Port=5432;Database=catalog;Username=postgres;Password=postgres
-      - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=true
-      - Vault__Address=http://vault:8200
-      - Vault__RoleIdPath=/creds/catalog/role_id
-      - Vault__SecretIdPath=/creds/catalog/secret_id
-      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
-      - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=haworks-dev
+      <<: *otel-env
+      OTEL_SERVICE_NAME: catalog
+      OTEL_RESOURCE_ATTRIBUTES: service.instance.id=rw-catalog-svc-2
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__catalog: Host=postgres;Port=5432;Database=catalog;Username=postgres;Password=postgres
+      ConnectionStrings__rabbitmq: amqp://guest:guest@rabbitmq:5672/
+      Vault__Enabled: "true"
+      Vault__Address: http://vault:8200
+      Vault__RoleIdPath: /creds/catalog/role_id
+      Vault__SecretIdPath: /creds/catalog/secret_id
+      Authentication__Jwks__JwksUri: http://identity-svc:8080/.well-known/jwks.json
+      Authentication__Jwks__Issuer: http://localhost
+      Authentication__Jwks__Audience: haworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -323,16 +451,19 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__orders=Host=postgres;Port=5432;Database=orders;Username=postgres;Password=postgres
-      - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=true
-      - Vault__Address=http://vault:8200
-      - Vault__RoleIdPath=/creds/orders/role_id
-      - Vault__SecretIdPath=/creds/orders/secret_id
-      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
-      - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=haworks-dev
+      <<: *otel-env
+      OTEL_SERVICE_NAME: orders
+      OTEL_RESOURCE_ATTRIBUTES: service.instance.id=rw-orders-svc
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__orders: Host=postgres;Port=5432;Database=orders;Username=postgres;Password=postgres
+      ConnectionStrings__rabbitmq: amqp://guest:guest@rabbitmq:5672/
+      Vault__Enabled: "true"
+      Vault__Address: http://vault:8200
+      Vault__RoleIdPath: /creds/orders/role_id
+      Vault__SecretIdPath: /creds/orders/secret_id
+      Authentication__Jwks__JwksUri: http://identity-svc:8080/.well-known/jwks.json
+      Authentication__Jwks__Issuer: http://localhost
+      Authentication__Jwks__Audience: haworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -349,16 +480,19 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__payments=Host=postgres;Port=5432;Database=payments;Username=postgres;Password=postgres
-      - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=true
-      - Vault__Address=http://vault:8200
-      - Vault__RoleIdPath=/creds/payments/role_id
-      - Vault__SecretIdPath=/creds/payments/secret_id
-      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
-      - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=haworks-dev
+      <<: *otel-env
+      OTEL_SERVICE_NAME: payments
+      OTEL_RESOURCE_ATTRIBUTES: service.instance.id=rw-payments-svc
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__payments: Host=postgres;Port=5432;Database=payments;Username=postgres;Password=postgres
+      ConnectionStrings__rabbitmq: amqp://guest:guest@rabbitmq:5672/
+      Vault__Enabled: "true"
+      Vault__Address: http://vault:8200
+      Vault__RoleIdPath: /creds/payments/role_id
+      Vault__SecretIdPath: /creds/payments/secret_id
+      Authentication__Jwks__JwksUri: http://identity-svc:8080/.well-known/jwks.json
+      Authentication__Jwks__Issuer: http://localhost
+      Authentication__Jwks__Audience: haworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -375,20 +509,23 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__checkout=Host=postgres;Port=5432;Database=checkout;Username=postgres;Password=postgres
-      - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=true
-      - Vault__Address=http://vault:8200
-      - Vault__RoleIdPath=/creds/checkout-orchestrator/role_id
-      - Vault__SecretIdPath=/creds/checkout-orchestrator/secret_id
-      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
-      - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=haworks-dev
+      <<: *otel-env
+      OTEL_SERVICE_NAME: checkout
+      OTEL_RESOURCE_ATTRIBUTES: service.instance.id=rw-checkout-svc
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__checkout: Host=postgres;Port=5432;Database=checkout;Username=postgres;Password=postgres
+      ConnectionStrings__rabbitmq: amqp://guest:guest@rabbitmq:5672/
+      Vault__Enabled: "true"
+      Vault__Address: http://vault:8200
+      Vault__RoleIdPath: /creds/checkout-orchestrator/role_id
+      Vault__SecretIdPath: /creds/checkout-orchestrator/secret_id
+      Authentication__Jwks__JwksUri: http://identity-svc:8080/.well-known/jwks.json
+      Authentication__Jwks__Issuer: http://localhost
+      Authentication__Jwks__Audience: haworks-dev
       # CheckoutOptions has [Required] DataAnnotations on these; ValidateOnStart
       # blocks host boot without them. Dev-only placeholders pointing at the BFF.
-      - Checkout__SuccessUrl=http://localhost:5050/checkout/success
-      - Checkout__CancelUrl=http://localhost:5050/checkout/cancel
+      Checkout__SuccessUrl: http://localhost:5050/checkout/success
+      Checkout__CancelUrl: http://localhost:5050/checkout/cancel
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -415,24 +552,26 @@ services:
       localstack-init:
         condition: service_completed_successfully
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__content=Host=postgres;Port=5432;Database=content;Username=postgres;Password=postgres
-      - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=true
-      - Vault__Address=http://vault:8200
-      - Vault__RoleIdPath=/creds/content/role_id
-      - Vault__SecretIdPath=/creds/content/secret_id
-      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
-      - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=haworks-dev
+      <<: *otel-env
+      OTEL_SERVICE_NAME: content
+      OTEL_RESOURCE_ATTRIBUTES: service.instance.id=rw-content-svc
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__content: Host=postgres;Port=5432;Database=content;Username=postgres;Password=postgres
+      ConnectionStrings__rabbitmq: amqp://guest:guest@rabbitmq:5672/
+      Vault__Enabled: "true"
+      Vault__Address: http://vault:8200
+      Vault__RoleIdPath: /creds/content/role_id
+      Vault__SecretIdPath: /creds/content/secret_id
+      Authentication__Jwks__JwksUri: http://identity-svc:8080/.well-known/jwks.json
+      Authentication__Jwks__Issuer: http://localhost
+      Authentication__Jwks__Audience: haworks-dev
       # S3-compatible storage. LocalStack here in compose; Tigris in Fly.
-      # Shape matches StorageOptions in feat/content/s3-presigned-storage.
-      - Storage__ServiceUrl=http://localstack:4566
-      - Storage__AccessKey=test
-      - Storage__SecretKey=test
-      - Storage__BucketName=content-dev
-      - Storage__Region=us-east-1
-      - Storage__ForcePathStyle=true
+      Storage__ServiceUrl: http://localstack:4566
+      Storage__AccessKey: test
+      Storage__SecretKey: test
+      Storage__BucketName: content-dev
+      Storage__Region: us-east-1
+      Storage__ForcePathStyle: "true"
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -451,17 +590,20 @@ services:
       kafka:
         condition: service_healthy
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=false
-      - Elasticsearch__Url=http://elasticsearch:9200
-      - Elasticsearch__IndexName=products
-      - Catalog__BaseAddress=http://catalog-svc-1:8080
-      - Kafka__BootstrapServers=kafka:9092
-      - Kafka__GroupId=search-svc-cdc
-      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
-      - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=haworks-dev
+      <<: *otel-env
+      OTEL_SERVICE_NAME: search
+      OTEL_RESOURCE_ATTRIBUTES: service.instance.id=rw-search-svc
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__rabbitmq: amqp://guest:guest@rabbitmq:5672/
+      Vault__Enabled: "false"
+      Elasticsearch__Url: http://elasticsearch:9200
+      Elasticsearch__IndexName: products
+      Catalog__BaseAddress: http://catalog-svc-1:8080
+      Kafka__BootstrapServers: kafka:9092
+      Kafka__GroupId: search-svc-cdc
+      Authentication__Jwks__JwksUri: http://identity-svc:8080/.well-known/jwks.json
+      Authentication__Jwks__Issuer: http://localhost
+      Authentication__Jwks__Audience: haworks-dev
 
   audit-svc:
     build:
@@ -476,16 +618,16 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__audit=Host=postgres;Port=5432;Database=audit;Username=postgres;Password=postgres
-      - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      # audit-svc has no Vault-backed secrets at L0 — pure listener.
-      # If L1.D's S3 export needs credentials, switch Vault__Enabled to
-      # true and follow the orders-svc pattern.
-      - Vault__Enabled=false
-      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
-      - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=haworks-dev
+      <<: *otel-env
+      OTEL_SERVICE_NAME: audit
+      OTEL_RESOURCE_ATTRIBUTES: service.instance.id=rw-audit-svc
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__audit: Host=postgres;Port=5432;Database=audit;Username=postgres;Password=postgres
+      ConnectionStrings__rabbitmq: amqp://guest:guest@rabbitmq:5672/
+      Vault__Enabled: "false"
+      Authentication__Jwks__JwksUri: http://identity-svc:8080/.well-known/jwks.json
+      Authentication__Jwks__Issuer: http://localhost
+      Authentication__Jwks__Audience: haworks-dev
 
   # ===========================================================================
   # CDC PIPELINE (Kafka + Debezium)
@@ -572,15 +714,18 @@ services:
       kafka:
         condition: service_healthy
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__webhooks=Host=postgres;Port=5432;Database=webhooks;Username=postgres;Password=postgres
-      - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Vault__Enabled=false
-      - Kafka__BootstrapServers=kafka:9092
-      - Kafka__GroupId=webhooks-svc-cdc
-      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
-      - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=haworks-dev
+      <<: *otel-env
+      OTEL_SERVICE_NAME: webhooks
+      OTEL_RESOURCE_ATTRIBUTES: service.instance.id=rw-webhooks-svc
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__webhooks: Host=postgres;Port=5432;Database=webhooks;Username=postgres;Password=postgres
+      ConnectionStrings__rabbitmq: amqp://guest:guest@rabbitmq:5672/
+      Vault__Enabled: "false"
+      Kafka__BootstrapServers: kafka:9092
+      Kafka__GroupId: webhooks-svc-cdc
+      Authentication__Jwks__JwksUri: http://identity-svc:8080/.well-known/jwks.json
+      Authentication__Jwks__Issuer: http://localhost
+      Authentication__Jwks__Audience: haworks-dev
 
   bff-web:
     build:
@@ -599,26 +744,29 @@ services:
       - content-svc
       - search-svc
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__rabbitmq=amqp://guest:guest@rabbitmq:5672/
-      - Services__identity-svc__http__0=http://identity-svc:8080
-      - Services__catalog-svc__http__0=http://catalog-svc-1:8080
-      - Services__catalog-svc__http__1=http://catalog-svc-2:8080
-      - Services__orders-svc__http__0=http://orders-svc:8080
-      - Services__payments-svc__http__0=http://payments-svc:8080
-      - Services__checkout-svc__http__0=http://checkout-svc:8080
-      - Services__content-svc__http__0=http://content-svc:8080
-      - Services__search-svc__http__0=http://search-svc:8080
-      - Services__webhooks-svc__http__0=http://webhooks-svc:8080
-      - Kafka__BootstrapServers=kafka:9092
-      - Kafka__GroupId=bff-web-cdc
-      - Vault__Enabled=true
-      - Vault__Address=http://vault:8200
-      - Vault__RoleIdPath=/creds/bff-web/role_id
-      - Vault__SecretIdPath=/creds/bff-web/secret_id
-      - Authentication__Jwks__JwksUri=http://identity-svc:8080/.well-known/jwks.json
-      - Authentication__Jwks__Issuer=http://localhost
-      - Authentication__Jwks__Audience=haworks-dev
+      <<: *otel-env
+      OTEL_SERVICE_NAME: bff-web
+      OTEL_RESOURCE_ATTRIBUTES: service.instance.id=rw-bff-web
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__rabbitmq: amqp://guest:guest@rabbitmq:5672/
+      Services__identity-svc__http__0: http://identity-svc:8080
+      Services__catalog-svc__http__0: http://catalog-svc-1:8080
+      Services__catalog-svc__http__1: http://catalog-svc-2:8080
+      Services__orders-svc__http__0: http://orders-svc:8080
+      Services__payments-svc__http__0: http://payments-svc:8080
+      Services__checkout-svc__http__0: http://checkout-svc:8080
+      Services__content-svc__http__0: http://content-svc:8080
+      Services__search-svc__http__0: http://search-svc:8080
+      Services__webhooks-svc__http__0: http://webhooks-svc:8080
+      Kafka__BootstrapServers: kafka:9092
+      Kafka__GroupId: bff-web-cdc
+      Vault__Enabled: "true"
+      Vault__Address: http://vault:8200
+      Vault__RoleIdPath: /creds/bff-web/role_id
+      Vault__SecretIdPath: /creds/bff-web/secret_id
+      Authentication__Jwks__JwksUri: http://identity-svc:8080/.well-known/jwks.json
+      Authentication__Jwks__Issuer: http://localhost
+      Authentication__Jwks__Audience: haworks-dev
     volumes:
       - ./vault-creds:/creds:ro
 
@@ -630,3 +778,8 @@ volumes:
   pact-db-data:
   elasticsearch-data:
   kafka-data:
+  tempo-data:
+  prometheus-data:
+  loki-data:
+  alertmanager-data:
+  grafana-data:

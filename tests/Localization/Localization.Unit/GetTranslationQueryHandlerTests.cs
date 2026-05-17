@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Haworks.Contracts.Localization;
 using Haworks.Localization.Api.Application;
 using Haworks.Localization.Api.Domain;
 using Haworks.Localization.Api.Infrastructure;

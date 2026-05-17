@@ -70,6 +70,7 @@ public sealed class ExternalAuthenticationController : ControllerBase
     }
 
     [HttpGet("callback")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Callback(CancellationToken ct)
     {
         var result = await _mediator.Send(new ExternalLoginCallbackCommand(HttpContext), ct);
@@ -123,6 +124,7 @@ public sealed class ExternalAuthenticationController : ControllerBase
     }
 
     [HttpGet("link-callback")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> LinkCallback(CancellationToken ct)
     {
         var info = await _signInManager.GetExternalLoginInfoAsync();
@@ -168,7 +170,10 @@ public sealed class ExternalAuthenticationController : ControllerBase
         if (!Uri.TryCreate(url, UriKind.RelativeOrAbsolute, out var uri))
             return false;
         if (!uri.IsAbsoluteUri)
-            return url.StartsWith('/') && !url.Contains("..", StringComparison.Ordinal);
+        {
+            // Must start with / and not be schema-relative (//) and not contain ..
+            return url.StartsWith('/') && !url.StartsWith("//", StringComparison.Ordinal) && !url.Contains("..", StringComparison.Ordinal);
+        }
 
         var currentHost = HttpContext.Request.Host.Host;
         return _securityOptions.AllowedRedirectHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase)

@@ -1,3 +1,4 @@
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -27,6 +28,8 @@ public class ContentDbContext : DbContext
         _environment = environment;
         _loggerFactory = loggerFactory;
         _currentUserService = currentUserService;
+        ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.TrackAll;
+        ChangeTracker.LazyLoadingEnabled = false;
     }
 
     public DbSet<ContentEntity> Contents => Set<ContentEntity>();
@@ -36,10 +39,6 @@ public class ContentDbContext : DbContext
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);
-
-        ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.TrackAll;
-        ChangeTracker.LazyLoadingEnabled = false;
-
         optionsBuilder.UseLoggerFactory(_loggerFactory);
 
         // Enable sensitive data logging only in development
@@ -188,6 +187,11 @@ public class ContentDbContext : DbContext
             entity.HasIndex(v => v.ContentId)
                 .HasDatabaseName("IX_ContentVersions_ContentId");
         });
+
+        // MassTransit EF Core outbox entities (transactional outbox pattern).
+        modelBuilder.AddInboxStateEntity();
+        modelBuilder.AddOutboxStateEntity();
+        modelBuilder.AddOutboxMessageEntity();
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

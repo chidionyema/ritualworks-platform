@@ -25,6 +25,7 @@ public class CheckoutDbContext : DbContext, ICheckoutDbContext
     {
         _environment = environment;
         _loggerFactory = loggerFactory;
+        ChangeTracker.LazyLoadingEnabled = false;
     }
 
     public DbSet<CheckoutSagaState> CheckoutSagas => Set<CheckoutSagaState>();
@@ -34,7 +35,6 @@ public class CheckoutDbContext : DbContext, ICheckoutDbContext
         base.OnConfiguring(optionsBuilder);
         optionsBuilder.UseLoggerFactory(_loggerFactory);
         if (_environment.IsDevelopment()) optionsBuilder.EnableSensitiveDataLogging();
-        ChangeTracker.LazyLoadingEnabled = false;
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

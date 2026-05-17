@@ -10,6 +10,7 @@ using Haworks.Notifications.Application.Channels;
 using Haworks.Notifications.Application.Suppression;
 using Haworks.Notifications.Domain.Enums;
 using Haworks.Notifications.Infrastructure.Persistence;
+using Haworks.BuildingBlocks.Testing;
 
 namespace Haworks.Notifications.Integration;
 
@@ -53,7 +54,11 @@ public sealed class NotificationsApiTests : IAsyncLifetime
         // (see file-level TODO). Each [Fact] lazily creates the client.
     }
 
-    public Task InitializeAsync() => Task.CompletedTask;
+    public async Task InitializeAsync()
+    {
+        await _factory.EnsureSchemaAsync();
+        await _factory.ResetDatabaseAsync();
+    }
 
     public Task DisposeAsync() => Task.CompletedTask;
 

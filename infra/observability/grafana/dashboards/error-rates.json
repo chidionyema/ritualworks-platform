@@ -1,0 +1,93 @@
+{
+  "uid": "error-rates",
+  "title": "Error Rates",
+  "description": "Per-service error rates, exception breakdowns, and log-level analysis",
+  "tags": ["haworks", "errors"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(up{job=\"haworks-services\"}, service_name)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "5xx Error Rate by Service",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~\"5..\", service_name=~\"$service\"}[5m])) by (service_name)",
+          "legendFormat": "{{ service_name }}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 2,
+      "title": "4xx Client Error Rate by Service",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~\"4..\", service_name=~\"$service\"}[5m])) by (service_name)",
+          "legendFormat": "{{ service_name }}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 3,
+      "title": "Error Rate Heatmap by Route",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "topk(10, sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~\"5..\", service_name=~\"$service\"}[5m])) by (http_route, service_name))",
+          "legendFormat": "{{ service_name }} {{ http_route }}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Error Logs (Loki)",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "{service_name=~\"$service\"} |= \"Error\" | json | level = \"Error\" or level = \"Fatal\"",
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Exception Count by Service (from logs)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 26 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum(count_over_time({service_name=~\"$service\"} |= \"Exception\" [5m])) by (service_name)",
+          "legendFormat": "{{ service_name }}"
+        }
+      ]
+    }
+  ]
+}
