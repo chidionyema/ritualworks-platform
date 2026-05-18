@@ -24,6 +24,10 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Fast local builds: skip analyzers on CLI builds unless HAWORKS_ANALYZERS=true.
+         IDE (VS/Rider/OmniSharp) always runs analyzers via the language server.
+         CI sets HAWORKS_ANALYZERS=true to enforce. -->
+    <RunAnalyzers Condition="'$(HAWORKS_ANALYZERS)' != 'true' AND '$(BuildingInsideVisualStudio)' != 'true' AND '$(DesignTimeBuild)' != 'true'">false</RunAnalyzers>
     <NoWarn>
       $(NoWarn);
       CS1591;  <!-- Missing XML doc — too noisy at this scale -->

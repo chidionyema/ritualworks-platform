@@ -1,4 +1,4 @@
-.PHONY: help setup dev test k8s-up k8s-down k8s-smoke local-smoke refresh-images
+.PHONY: help setup dev test build build-full lint k8s-up k8s-down k8s-smoke local-smoke refresh-images
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -6,6 +6,15 @@ help: ## Show this help
 setup: ## First-time setup: install git hooks + restore packages
 	./scripts/install-git-hooks.sh
 	dotnet restore HaworksPlatform.sln
+
+build: ## Fast build (no analyzers): make build or make build svc=identity
+	$(if $(svc),dotnet build filters/$(shell echo $(svc) | sed 's/.*/\u&/').slnf,dotnet build HaworksPlatform.sln)
+
+build-full: ## Full build with all analyzers (same as CI)
+	HAWORKS_ANALYZERS=true dotnet build HaworksPlatform.sln
+
+lint: ## Run analyzers only (without full rebuild)
+	HAWORKS_ANALYZERS=true dotnet build HaworksPlatform.sln -m
 
 test: ## Run tests for one service: make test svc=identity [mode=unit|integration]
 	./scripts/test.sh $(svc) $(or $(mode),all)
