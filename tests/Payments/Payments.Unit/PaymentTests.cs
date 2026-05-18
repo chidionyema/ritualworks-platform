@@ -10,15 +10,15 @@ namespace Haworks.Payments.Unit;
 /// </summary>
 public sealed class PaymentTests
 {
-    private static Payment NewPayment(decimal amount = 100m) =>
+    private static Payment NewPayment(long amountCents = 10000L) =>
         Payment.Create(Guid.NewGuid(), "user-1", amount, tax: 0m, "USD",
             PaymentProvider.Stripe, sagaId: Guid.NewGuid());
 
     [Fact]
     public void Create_with_zero_amount_is_allowed()
     {
-        var p = NewPayment(0m);
-        p.Amount.Should().Be(0m);
+        var p = NewPayment(0L);
+        p.AmountCents.Should().Be(0m);
         p.Status.Should().Be(PaymentStatus.Pending);
         p.IsComplete.Should().BeFalse();
     }
@@ -26,7 +26,7 @@ public sealed class PaymentTests
     [Fact]
     public void Create_with_negative_amount_throws()
     {
-        Action act = () => Payment.Create(Guid.NewGuid(), "u", -1m, 0m, "USD",
+        Action act = () => Payment.Create(Guid.NewGuid(), "u", -1L, 0L, "USD",
             PaymentProvider.Stripe, Guid.NewGuid());
         act.Should().Throw<ArgumentException>();
     }
@@ -34,7 +34,7 @@ public sealed class PaymentTests
     [Fact]
     public void Create_with_negative_tax_throws()
     {
-        Action act = () => Payment.Create(Guid.NewGuid(), "u", 1m, -1m, "USD",
+        Action act = () => Payment.Create(Guid.NewGuid(), "u", 1L, -1L, "USD",
             PaymentProvider.Stripe, Guid.NewGuid());
         act.Should().Throw<ArgumentException>();
     }
@@ -42,7 +42,7 @@ public sealed class PaymentTests
     [Fact]
     public void Create_with_empty_userId_throws()
     {
-        Action act = () => Payment.Create(Guid.NewGuid(), "", 1m, 0m, "USD",
+        Action act = () => Payment.Create(Guid.NewGuid(), "", 1L, 0L, "USD",
             PaymentProvider.Stripe, Guid.NewGuid());
         act.Should().Throw<ArgumentException>();
     }
@@ -50,7 +50,7 @@ public sealed class PaymentTests
     [Fact]
     public void Create_with_provider_None_throws()
     {
-        Action act = () => Payment.Create(Guid.NewGuid(), "u", 1m, 0m, "USD",
+        Action act = () => Payment.Create(Guid.NewGuid(), "u", 1L, 0L, "USD",
             PaymentProvider.None, Guid.NewGuid());
         act.Should().Throw<ArgumentException>();
     }
@@ -58,7 +58,7 @@ public sealed class PaymentTests
     [Fact]
     public void Create_with_empty_orderId_throws()
     {
-        Action act = () => Payment.Create(Guid.Empty, "u", 1m, 0m, "USD",
+        Action act = () => Payment.Create(Guid.Empty, "u", 1L, 0L, "USD",
             PaymentProvider.Stripe, Guid.NewGuid());
         act.Should().Throw<ArgumentException>();
     }
@@ -66,7 +66,7 @@ public sealed class PaymentTests
     [Fact]
     public void Create_with_empty_sagaId_throws()
     {
-        Action act = () => Payment.Create(Guid.NewGuid(), "u", 1m, 0m, "USD",
+        Action act = () => Payment.Create(Guid.NewGuid(), "u", 1L, 0L, "USD",
             PaymentProvider.Stripe, Guid.Empty);
         act.Should().Throw<ArgumentException>();
     }

@@ -38,7 +38,7 @@ public class RefundEdgeCaseTests : IAsyncLifetime
         var db = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
 
         var payment = Payment.Create(
-            Guid.NewGuid(), "user_edge", amount, 0, "USD",
+            Guid.NewGuid(), "user_edge", amountCents: (long)(amount * 100), taxCents: 0L, currency: "USD",
             PaymentProvider.Stripe, Guid.NewGuid());
 
         if (complete)
@@ -58,7 +58,7 @@ public class RefundEdgeCaseTests : IAsyncLifetime
         var db = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
 
         var payment = Payment.Create(
-            Guid.NewGuid(), "user_edge", 100m, 0, "USD",
+            Guid.NewGuid(), "user_edge", amountCents: 10000L, taxCents: 0L, currency: "USD",
             PaymentProvider.Stripe, Guid.NewGuid());
         payment.MarkFailed();
         db.Payments.Add(payment);
