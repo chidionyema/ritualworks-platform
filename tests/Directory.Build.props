@@ -14,4 +14,12 @@
       CS0105; <!-- Duplicate using -->
     </NoWarn>
   </PropertyGroup>
+
+  <!-- Coverlet for code coverage collection across all test projects -->
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
 </Project>

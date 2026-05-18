@@ -353,6 +353,30 @@ jobs:
           echo "Run: flyctl releases rollback -a haworks-${{ matrix.svc }}"
           exit 1
 
+  container-scan:
+    name: Container scan (Trivy)
+    needs: [plan, deploy-backends]
+    if: ${{ always() && needs.plan.result == 'success' && needs.deploy-backends.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        svc: ${{ fromJSON(needs.plan.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build image locally for scanning
+        run: docker build -t haworks-${{ matrix.svc }}:scan -f src/$(echo ${{ matrix.svc }} | sed 's/.*/\u&/')/${{ matrix.svc }}.Api/Dockerfile . 2>/dev/null || echo "::warning::Could not build image for ${{ matrix.svc }}"
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: haworks-${{ matrix.svc }}:scan
+          format: table
+          exit-code: 0
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+        continue-on-error: true
+
   deploy-bff:
     name: Deploy bffweb (canary)
     needs: [plan, deploy-backends]

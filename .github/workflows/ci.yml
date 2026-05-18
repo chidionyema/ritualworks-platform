@@ -56,27 +56,56 @@ jobs:
       - name: Build (no restore)
         run: dotnet build HaworksPlatform.sln --no-restore --configuration Release
 
-      - name: Unit + Architecture + Contract tests (parallel)
+      - name: Secret scanning (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Unit + Architecture + Contract tests with coverage
         run: |
-          # Run all non-integration tests from the solution in one shot.
-          # dotnet test on the .sln runs all test assemblies in parallel;
-          # xUnit parallelises within each assembly. ~2x faster than the
-          # old sequential per-project loop.
-          #
-          # --filter excludes integration tests (they need Docker and run
-          # in the separate matrix job below).
           dotnet test HaworksPlatform.sln \
             --no-build --configuration Release \
             --filter "FullyQualifiedName!~Integration" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory TestResults \
             --logger "trx;LogFileName=test-results.trx" \
-            --logger "console;verbosity=minimal"
+            --logger "console;verbosity=minimal" \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+
+      - name: Generate coverage report
+        if: always()
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool 2>/dev/null || true
+          reportgenerator \
+            -reports:"TestResults/**/coverage.cobertura.xml" \
+            -targetdir:TestResults/CoverageReport \
+            -reporttypes:"Cobertura;TextSummary"
+          echo "### Test Coverage" >> $GITHUB_STEP_SUMMARY
+          cat TestResults/CoverageReport/Summary.txt >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: TestResults/**/coverage.cobertura.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: SonarCloud scan
+        if: env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: fast-test-results
-          path: '**/TestResults/*.trx'
+          path: |
+            **/TestResults/*.trx
+            TestResults/CoverageReport/
           retention-days: 7
 
   # ── Mutation testing (Stryker) — only on PRs touching critical domain code ──
