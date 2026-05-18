@@ -368,7 +368,7 @@ jobs:
       - name: Build image locally for scanning
         run: docker build -t haworks-${{ matrix.svc }}:scan -f src/$(echo ${{ matrix.svc }} | sed 's/.*/\u&/')/${{ matrix.svc }}.Api/Dockerfile . 2>/dev/null || echo "::warning::Could not build image for ${{ matrix.svc }}"
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@0.31.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: haworks-${{ matrix.svc }}:scan
           format: table
