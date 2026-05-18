@@ -32,7 +32,7 @@ public class RegisterSellerCommandHandler : IRequestHandler<RegisterSellerComman
         }
 
         _logger.LogInformation("Registering new seller {SellerId} with Stripe Connect", request.SellerId);
-        var externalId = await _payoutGateway.CreateConnectedAccountAsync(request.SellerId, request.Email);
+        var externalId = await _payoutGateway.CreateConnectedAccountAsync(request.SellerId, request.Email, cancellationToken);
 
         var profile = SellerProfile.Create(request.SellerId);
         profile.ExternalProviderId = externalId;
@@ -50,7 +50,7 @@ public class RegisterSellerCommandHandler : IRequestHandler<RegisterSellerComman
             _logger.LogWarning(
                 "Race condition on seller registration {SellerId} — cleaning up orphaned Stripe account {StripeId}",
                 request.SellerId, externalId);
-            await _payoutGateway.DeleteConnectedAccountAsync(externalId);
+            await _payoutGateway.DeleteConnectedAccountAsync(externalId, cancellationToken);
 
             var raceWinner = await _context.SellerProfiles
                 .FirstOrDefaultAsync(p => p.SellerId == request.SellerId, cancellationToken);

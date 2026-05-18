@@ -43,11 +43,37 @@ public sealed class HWK032_NoAsNoTrackingWithSaveChangesAnalyzer : DiagnosticAna
             ma.Name.Identifier.Text is "Add" or "AddAsync" or "AddRange" or "AddRangeAsync");
         if (hasAdd) return;
 
+        // If the method also does a tracked query (FirstOrDefaultAsync without AsNoTracking),
+        // the SaveChanges is for the tracked entity — the AsNoTracking is a separate read.
+        // This is a legitimate pattern: tracked write + untracked read-after-write.
+        bool hasTrackedQuery = invocations.Any(i =>
+            i.Expression is MemberAccessExpressionSyntax ma &&
+            ma.Name.Identifier.Text is "FirstOrDefaultAsync" or "FirstAsync" or "SingleOrDefaultAsync" or "SingleAsync"
+            && !IsChainedAfterAsNoTracking(i));
+        if (hasTrackedQuery) return;
+
         if (hasAsNoTracking && hasSaveChanges)
         {
             context.ReportDiagnostic(
                 Diagnostic.Create(Diagnostics.NoAsNoTrackingWithSaveChanges,
                     method.Identifier.GetLocation(), method.Identifier.Text));
         }
+    }
+
+    private static bool IsChainedAfterAsNoTracking(InvocationExpressionSyntax invocation)
+    {
+        // Walk up the fluent chain to see if AsNoTracking appears
+        var current = invocation.Expression;
+        while (current is MemberAccessExpressionSyntax ma)
+        {
+            if (ma.Expression is InvocationExpressionSyntax parent &&
+                parent.Expression is MemberAccessExpressionSyntax parentMa &&
+                parentMa.Name.Identifier.Text is "AsNoTracking" or "AsNoTrackingWithIdentityResolution")
+            {
+                return true;
+            }
+            current = ma.Expression;
+        }
+        return false;
     }
 }

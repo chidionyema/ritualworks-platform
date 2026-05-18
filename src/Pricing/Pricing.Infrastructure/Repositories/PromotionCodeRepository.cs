@@ -2,6 +2,7 @@ using Haworks.Pricing.Application.Interfaces;
 using Haworks.Pricing.Domain.Entities;
 using Haworks.Pricing.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Haworks.Pricing.Infrastructure.Repositories;
 
@@ -11,10 +12,12 @@ namespace Haworks.Pricing.Infrastructure.Repositories;
 public sealed class PromotionCodeRepository : IPromotionCodeRepository
 {
     private readonly PricingDbContext _context;
+    private readonly ILogger<PromotionCodeRepository> _logger;
 
-    public PromotionCodeRepository(PricingDbContext context)
+    public PromotionCodeRepository(PricingDbContext context, ILogger<PromotionCodeRepository> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     // L4 Fix: Use default query filters for redemption/validation flows.
@@ -116,8 +119,9 @@ public sealed class PromotionCodeRepository : IPromotionCodeRepository
             await transaction.CommitAsync(ct).ConfigureAwait(false);
             return true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Promotion redemption failed — rolling back");
             await transaction.RollbackAsync(ct).ConfigureAwait(false);
             return false;
         }

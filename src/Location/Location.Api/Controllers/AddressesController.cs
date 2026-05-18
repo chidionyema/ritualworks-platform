@@ -3,6 +3,7 @@ using Haworks.Location.Application.Commands;
 using Haworks.Location.Application.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.Location.Api.Controllers;
@@ -13,23 +14,24 @@ namespace Haworks.Location.Api.Controllers;
 public class AddressesController(IMediator mediator) : ControllerBase
 {
     [HttpPost]
-    public async Task<IActionResult> Create(CreateAddressCommand command)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Create(CreateAddressCommand command, CancellationToken ct = default)
     {
-        var result = await mediator.Send(command);
+        var result = await mediator.Send(command, ct);
         return result.ToActionResult();
     }
 
-    /// <summary>
-    /// Search for addresses within a given radius using PostGIS.
-    /// Used for verification of spatial indexing.
-    /// </summary>
     [HttpGet("nearby")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetNearby(
         [FromQuery] double lat,
         [FromQuery] double lon,
-        [FromQuery] double radiusMeters = 5000)
+        [FromQuery] double radiusMeters = 5000,
+        CancellationToken ct = default)
     {
-        var result = await mediator.Send(new GetNearbyAddressesQuery(lat, lon, radiusMeters));
+        var result = await mediator.Send(new GetNearbyAddressesQuery(lat, lon, radiusMeters), ct);
         return result.ToActionResult();
     }
 }
