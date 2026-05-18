@@ -119,4 +119,29 @@ public sealed class AgentFilePasswordProviderTests : IDisposable
         result.Value.Password.Should().Be("secret");
         result.Value.Error.Should().BeNull();
     }
+
+    [Fact]
+    public async Task EmptyFile_ReturnsErrorResult()
+    {
+        var file = Path.Combine(_tempDir, "db-empty.json");
+        await File.WriteAllTextAsync(file, "");
+
+        var result = await VaultServiceCollectionExtensions.ReadAgentCredentialFileAsync(file);
+
+        result.Should().NotBeNull();
+        result!.Value.Error.Should().NotBeNull();
+        result.Value.Error!.Message.Should().Contain("empty");
+    }
+
+    [Fact]
+    public async Task WhitespaceOnlyFile_ReturnsErrorResult()
+    {
+        var file = Path.Combine(_tempDir, "db-ws.json");
+        await File.WriteAllTextAsync(file, "   \n  ");
+
+        var result = await VaultServiceCollectionExtensions.ReadAgentCredentialFileAsync(file);
+
+        result.Should().NotBeNull();
+        result!.Value.Error.Should().NotBeNull();
+    }
 }

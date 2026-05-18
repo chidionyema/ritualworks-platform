@@ -19,14 +19,14 @@
 |----|----------|---------|------|-----|--------|
 | N-01 | HIGH | HttpClient leak on VaultClient rebuild. Each token re-auth (~1h) creates a new HttpClient that is never disposed. VaultSharp's VaultClient doesn't implement IDisposable. | `VaultClientFactory.cs:85` | Make VaultClientHandle implement IDisposable, store the HttpClient, dispose the old handle in VaultService.BuildClientAsync before creating new one. | S |
 | N-03 | MEDIUM | Vault Agent db-creds.ctmpl uses literal SERVICE_ROLE placeholder requiring manual substitution per service. Error-prone for K8s operators. | `infra/vault-agent/templates/db-creds.ctmpl:4` | Use Consul Template `env` function: `{{ env "VAULT_DB_ROLE" }}`. Set VAULT_DB_ROLE in K8s pod spec or agent config per service. | S |
-| N-06 | MEDIUM | flyio/postgres-flex init scripts only run on empty data directory (first boot). Adding new service roles to init.sql won't take effect on existing deployments. | `deploy/vault-pg/Dockerfile:2` | Document migration path: new roles on existing deployments require manual `psql` or a separate migration script. Add to ops runbook. | S |
+| ~~N-06~~ | ~~MEDIUM~~ | ~~flyio/postgres-flex init scripts only run on empty data directory (first boot). Adding new service roles to init.sql won't take effect on existing deployments.~~ | ~~`deploy/vault-pg/Dockerfile:2`~~ | ~~Document migration path: new roles on existing deployments require manual `psql` or a separate migration script. Add to ops runbook.~~ | ~~S~~ |
 
 #### SHOULD FIX (improves score)
 
 | ID | Severity | Finding | File | Fix | Effort |
 |----|----------|---------|------|-----|--------|
-| N-02 | LOW | init.sql ALTER DEFAULT PRIVILEGES only affects future tables. Missing GRANT ALL ON existing tables. | `deploy/vault-pg/init.sql:51` | Add `GRANT ALL ON ALL TABLES IN SCHEMA public TO ...;` after ALTER DEFAULT lines. Low risk since init.sql runs before any tables exist. | S |
-| N-04 | LOW | VaultClientFactory SemaphoreSlim (_unwrapGate) never disposed. Singleton lifetime so only leaks on shutdown. | `VaultClientFactory.cs:34` | Implement IDisposable and dispose _unwrapGate. | S |
+| ~~N-02~~ | ~~LOW~~ | ~~init.sql ALTER DEFAULT PRIVILEGES only affects future tables. Missing GRANT ALL ON existing tables.~~ | ~~`deploy/vault-pg/init.sql:51`~~ | ~~Add `GRANT ALL ON ALL TABLES IN SCHEMA public TO ...;` after ALTER DEFAULT lines.~~ | ~~S~~ |
+| ~~N-04~~ | ~~LOW~~ | ~~VaultClientFactory SemaphoreSlim (_unwrapGate) never disposed. Singleton lifetime so only leaks on shutdown.~~ | ~~`VaultClientFactory.cs:34`~~ | ~~Implement IDisposable and dispose _unwrapGate.~~ | ~~S~~ |
 | N-05 | LOW | Empty agent credential file (0 bytes during atomic rename) produces cryptic JsonException instead of clear message. | `VaultServiceCollectionExtensions.cs:192` | Add `if (string.IsNullOrWhiteSpace(json)) return error("file is empty")` before JsonDocument.Parse. | S |
 
 ---
@@ -90,3 +90,6 @@
 |----|------|----|
 | F-01 through F-12 | 2026-05-18 | #221 |
 | Phase 1-6 | 2026-05-18 | #221 |
+| N-02 | 2026-05-18 | — |
+| N-04 | 2026-05-18 | — |
+| N-06 | 2026-05-18 | — |

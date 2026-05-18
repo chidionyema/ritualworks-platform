@@ -19,7 +19,7 @@ namespace Haworks.BuildingBlocks.Vault;
 /// rewrites token-bearing requests in a way Vault rejects with permission
 /// denied for KV reads (see <see cref="VaultAppRoleAuthenticator"/>).
 /// </summary>
-public class VaultClientFactory : IVaultClientFactory
+public sealed class VaultClientFactory : IVaultClientFactory, IDisposable
 {
     private readonly ISecretFileReader _fileReader;
     private readonly ICertificateValidator _certValidator;
@@ -158,5 +158,11 @@ public class VaultClientFactory : IVaultClientFactory
                 _certValidator.ValidateServerCertificate(cert as X509Certificate2, chain, errors, options)
         };
         return handler;
+    }
+
+    public void Dispose()
+    {
+        _unwrapGate.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

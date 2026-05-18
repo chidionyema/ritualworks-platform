@@ -1,3 +1,10 @@
+-- IMPORTANT: This script only runs on FIRST BOOT (empty data directory).
+-- To add new roles to an existing deployment:
+--   1. Connect to vault-pg: flyctl postgres connect -a haworks-vault-pg
+--   2. Run the CREATE ROLE + GRANT statements manually
+--   3. Add the role to infra/vault/database/roles.json
+--   4. Redeploy vault to run seed.sh: flyctl deploy -c fly.vault.toml
+--
 -- Init SQL for haworks-vault-pg
 -- Creates the bounded-context owner roles that Vault's static database
 -- roles will manage. Vault rotates only the password; the username is fixed.
@@ -50,3 +57,7 @@ GRANT CREATE ON SCHEMA public TO identity_owner, catalog_owner, orders_owner, pa
 -- Allow each owner full DML on all current and future tables in public.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO identity_owner, catalog_owner, orders_owner, payments_owner, checkout_owner, notifications_owner;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO identity_owner, catalog_owner, orders_owner, payments_owner, checkout_owner, notifications_owner;
+
+-- Retroactive grants for any tables created before this script ran (e.g., redeployment)
+GRANT ALL ON ALL TABLES IN SCHEMA public TO identity_owner, catalog_owner, orders_owner, payments_owner, checkout_owner, notifications_owner;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO identity_owner, catalog_owner, orders_owner, payments_owner, checkout_owner, notifications_owner;

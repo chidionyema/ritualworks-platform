@@ -438,6 +438,127 @@ public class VaultServiceTests
         return act.Should().ThrowAsync<ObjectDisposedException>();
     }
 
+    // ── Renewal loop tests (QA-01) ──
+
+    [Fact]
+    public async Task StartCredentialRenewalAsync_RefreshesAllCachedRoles()
+    {
+        var mockClient = CreateMockVaultClient(leaseDurationSeconds: 1); // short TTL forces refresh
+        SetupFactoryWithClient(mockClient);
+        using var svc = CreateService();
+
+        // Prime cache for two roles
+        await svc.GetDatabaseCredentialsAsync("haworks-catalog");
+        await svc.GetDatabaseCredentialsAsync("haworks-orders");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        try { await svc.StartCredentialRenewalAsync(cts.Token); }
+        catch (OperationCanceledException) { /* expected */ }
+
+        var mockDb = Mock.Get(mockClient.Object.V1.Secrets.Database);
+        // At least 2 init calls + renewal calls for both roles
+        mockDb.Verify(
+            d => d.GetStaticCredentialsAsync("haworks-catalog", It.IsAny<string>(), It.IsAny<string>()),
+            Times.AtLeast(2));
+        mockDb.Verify(
+            d => d.GetStaticCredentialsAsync("haworks-orders", It.IsAny<string>(), It.IsAny<string>()),
+            Times.AtLeast(2));
+    }
+
+    [Fact]
+    public async Task StartCredentialRenewalAsync_HandlesErrorWithoutDying()
+    {
+        var mockClient = CreateMockVaultClient(leaseDurationSeconds: 1);
+        SetupFactoryWithClient(mockClient);
+
+        var mockDb = Mock.Get(mockClient.Object.V1.Secrets.Database);
+        var callCount = 0;
+        mockDb
+            .Setup(d => d.GetStaticCredentialsAsync("haworks-catalog", It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                if (callCount == 2) throw new HttpRequestException("Vault down");
+                return new VaultSharp.V1.Commons.Secret<StaticCredentials>
+                {
+                    Data = new StaticCredentials { Username = "u", Password = "p" },
+                    LeaseDurationSeconds = 1
+                };
+            });
+
+        using var svc = CreateService();
+        await svc.GetDatabaseCredentialsAsync("haworks-catalog");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        try { await svc.StartCredentialRenewalAsync(cts.Token); }
+        catch (OperationCanceledException) { /* expected */ }
+
+        // Loop survived the error — called more than twice
+        callCount.Should().BeGreaterThan(2);
+    }
+
+    // ── Connection string tests (QA-05) ──
+
+    [Fact]
+    public async Task GetDatabaseConnectionStringAsync_BuildsCorrectConnectionString()
+    {
+        _dbOptions.Host = "db.example.com";
+        _dbOptions.Database = "mydb";
+        _dbOptions.Port = 5432;
+        _dbOptions.SslMode = "Require";
+
+        var mockClient = CreateMockVaultClient(username: "user1", password: "pass1");
+        SetupFactoryWithClient(mockClient);
+        using var svc = CreateService();
+
+        var connStr = await svc.GetDatabaseConnectionStringAsync("haworks-catalog");
+
+        var parsed = new Npgsql.NpgsqlConnectionStringBuilder(connStr);
+        parsed.Host.Should().Be("db.example.com");
+        parsed.Database.Should().Be("mydb");
+        parsed.Port.Should().Be(5432);
+        parsed.Username.Should().Be("user1");
+        parsed.Password.Should().Be("pass1");
+        parsed.SslMode.Should().Be(Npgsql.SslMode.Require);
+    }
+
+    [Fact]
+    public async Task GetDatabaseConnectionStringAsync_ThrowsWhenHostEmpty()
+    {
+        _dbOptions.Host = "";
+        var mockClient = CreateMockVaultClient();
+        SetupFactoryWithClient(mockClient);
+        using var svc = CreateService();
+
+        var act = () => svc.GetDatabaseConnectionStringAsync("haworks-catalog");
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Database:Host*");
+    }
+
+    // ── Role validation tests (QA-09) ──
+
+    [Fact]
+    public async Task GetDatabaseCredentialsAsync_EmptyRoleName_ThrowsArgumentException()
+    {
+        var mockClient = CreateMockVaultClient();
+        SetupFactoryWithClient(mockClient);
+        using var svc = CreateService();
+
+        var act = () => svc.GetDatabaseCredentialsAsync("");
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task GetDatabaseCredentialsAsync_NullRoleName_ThrowsArgumentException()
+    {
+        var mockClient = CreateMockVaultClient();
+        SetupFactoryWithClient(mockClient);
+        using var svc = CreateService();
+
+        var act = () => svc.GetDatabaseCredentialsAsync(null!);
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
     private VaultService CreateService()
     {
         return new VaultService(
