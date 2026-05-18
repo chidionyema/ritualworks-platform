@@ -119,7 +119,7 @@ public sealed class SagaCompensationChaosTests : IClassFixture<SagaCompensationF
             OrderLineItems = new[] { new CheckoutItemData
             {
                 ProductId = productId, ProductName = "Widget",
-                Quantity = reservedQuantity, UnitPrice = 10m,
+                Quantity = reservedQuantity, UnitPriceCents = 1000L,
             }},
         });
         await PollUntilAsync(() => string.Equals(SagaStateOrNull(sagaId), "StockReservedState", StringComparison.Ordinal), TimeSpan.FromSeconds(15));

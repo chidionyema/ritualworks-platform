@@ -125,7 +125,7 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
         {
             RefundId = refundId,
             ProviderRefundId = "re_provider_001",
-            AmountRefunded = 50.00m,
+            AmountRefundedCents = 5000L,
             CompletedAt = DateTime.UtcNow,
         });
         await PollUntilAsync(
@@ -348,7 +348,7 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
         {
             RefundId = refundId,
             ProviderRefundId = "re_provider_005",
-            AmountRefunded = 50.00m,
+            AmountRefundedCents = 5000L,
             CompletedAt = DateTime.UtcNow,
         });
         await PollUntilAsync(
@@ -364,7 +364,7 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
         {
             RefundId = refundId,
             ProviderRefundId = "re_provider_005",
-            AmountRefunded = 50.00m,
+            AmountRefundedCents = 5000L,
             CompletedAt = DateTime.UtcNow,
         });
 
@@ -421,7 +421,7 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
         {
             RefundId = refundId,
             ProviderRefundId = "re_provider_006",
-            AmountRefunded = 50.00m,
+            AmountRefundedCents = 5000L,
             CompletedAt = DateTime.UtcNow,
         });
         await PollUntilAsync(

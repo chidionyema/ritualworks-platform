@@ -230,8 +230,8 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
         await PublishAsync(new PaymentAmountMismatchEvent
         {
             PaymentId = paymentId, OrderId = orderId,
-            Provider = "Stripe", ActualPaid = 75m, ExpectedTotal = 25.50m,
-            Difference = 49.50m, Reason = "captured 75; expected 25.50",
+            Provider = "Stripe", ActualPaidCents = 75m, ExpectedTotalCents = 2550L,
+            DifferenceCents = 4950L, Reason = "captured 75; expected 25.50",
         });
         await PollUntilAsync(() => string.Equals(SagaStateOrNull(sagaId), "RequiresReview", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
