@@ -13,13 +13,13 @@ namespace Haworks.Audit.Application;
 /// </summary>
 public static class AuditCaptureRegistration
 {
-    public static IServiceCollection AddAuditCapture(this IServiceCollection services, ILogger? _logger = null)
+    public static IServiceCollection AddAuditCapture(this IServiceCollection services, ILogger? bootstrapLogger = null)
     {
         // Force-load Audit.Infrastructure so the assembly is present in the
         // AppDomain before we scan for AuditWriter.  Without this, the scan
         // can silently return null when the assembly hasn't been JIT-loaded yet
         // (e.g. during WebApplicationFactory startup in integration tests).
-        EnsureInfrastructureAssemblyLoaded(_logger);
+        EnsureInfrastructureAssemblyLoaded(bootstrapLogger);
 
         // To avoid a hard project reference from Application → Infrastructure
         // (which would create a circular dependency), we locate AuditWriter via
@@ -37,7 +37,7 @@ public static class AuditCaptureRegistration
         return services;
     }
 
-    private static void EnsureInfrastructureAssemblyLoaded(ILogger? _logger = null)
+    private static void EnsureInfrastructureAssemblyLoaded(ILogger? bootstrapLogger = null)
     {
         // Walk every assembly already loaded and look for "Audit.Infrastructure"
         // by name.  If not found, attempt to load it by convention so the
@@ -60,9 +60,9 @@ public static class AuditCaptureRegistration
                 // that only references Application), we tolerate the failure —
                 // IAuditWriter simply won't be auto-registered and must be
                 // provided by the host (e.g. ConfigureTestServices in tests).
-                if (_logger != null)
+                if (bootstrapLogger != null)
                 {
-                    _logger.LogWarning(ex, "Failed to load Haworks.Audit.Infrastructure assembly");
+                    bootstrapLogger.LogWarning(ex, "Failed to load Haworks.Audit.Infrastructure assembly");
                 }
             }
         }

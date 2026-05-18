@@ -42,7 +42,8 @@ public sealed class HWK040_AsyncMethodMustAcceptCancellationTokenAnalyzer : Diag
 
         // Skip if method name is a well-known entry point (Main, Consume, Handle)
         var name = method.Identifier.Text;
-        if (name is "Main" or "Consume" or "Handle" or "InvokeAsync" or "ExecuteAsync")
+        if (name is "Main" or "Consume" or "Handle" or "InvokeAsync" or "ExecuteAsync"
+            or "DisposeAsync" or "StartAsync" or "StopAsync")
             return;
 
         // Check if any parameter is CancellationToken

@@ -46,8 +46,13 @@ public sealed class HWK037_CacheMustHaveExpirationAnalyzer : DiagnosticAnalyzer
         foreach (var arg in invocation.ArgumentList.Arguments)
         {
             var argType = context.SemanticModel.GetTypeInfo(arg.Expression, context.CancellationToken).Type;
-            if (argType?.Name.Contains("CacheEntryOptions") == true ||
-                argType?.Name.Contains("HybridCacheEntryOptions") == true)
+            var typeName = argType?.Name ?? "";
+            // Recognize all cache options types:
+            // - DistributedCacheEntryOptions (IDistributedCache)
+            // - HybridCacheEntryOptions (HybridCache)
+            // - HybridCacheOptions (HybridCache alternate API — has L1Duration/L2Duration)
+            if (typeName.Contains("CacheEntryOptions") ||
+                typeName.Contains("CacheOptions"))
             {
                 hasOptions = true;
                 break;
