@@ -9,6 +9,7 @@ using Xunit;
 
 namespace Haworks.Payouts.Unit.Ledger;
 
+[Trait("Category", "Integration")]
 public sealed class LedgerServiceTests : IDisposable
 {
     private readonly PayoutsDbContext _context;
