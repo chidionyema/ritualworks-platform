@@ -75,14 +75,20 @@ jobs:
 
       - name: Generate coverage report
         if: always()
+        continue-on-error: true
         run: |
           dotnet tool install --global dotnet-reportgenerator-globaltool 2>/dev/null || true
-          reportgenerator \
-            -reports:"TestResults/**/coverage.cobertura.xml" \
-            -targetdir:TestResults/CoverageReport \
-            -reporttypes:"Cobertura;TextSummary"
-          echo "### Test Coverage" >> $GITHUB_STEP_SUMMARY
-          cat TestResults/CoverageReport/Summary.txt >> $GITHUB_STEP_SUMMARY
+          if ls TestResults/**/coverage.cobertura.xml 1>/dev/null 2>&1; then
+            reportgenerator \
+              -reports:"TestResults/**/coverage.cobertura.xml" \
+              -targetdir:TestResults/CoverageReport \
+              -reporttypes:"Cobertura;TextSummary"
+            echo "### Test Coverage" >> $GITHUB_STEP_SUMMARY
+            cat TestResults/CoverageReport/Summary.txt >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Test Coverage" >> $GITHUB_STEP_SUMMARY
+            echo "No coverage data generated (tests may have failed)" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Upload coverage to Codecov
         if: always()
