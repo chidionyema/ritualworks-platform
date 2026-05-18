@@ -93,3 +93,18 @@ Network idempotency (Inbox) is not enough. You must protect against logical busi
 ## 4. Code Generation Standards
 * **NO SHORTCUTS:** Never use `// TODO`, `throw new NotImplementedException()`, or `Guid.NewGuid()` as placeholders for real business logic or idempotency keys. Write complete, compiling code.
 * Always inject `CancellationToken` into `ExecuteAsync`, `FirstOrDefaultAsync`, and external API calls.
+  ┌──────────────────────────────────┬────────────────────────────────────┬───────┐
+  │             Command              │                What                │ Time  │
+  ├──────────────────────────────────┼────────────────────────────────────┼───────┤
+  │ make build svc=identity          │ Build one service (no analyzers)   │ ~30s  │
+  ├──────────────────────────────────┼────────────────────────────────────┼───────┤
+  │ make build                       │ Build full solution (no analyzers) │ ~2min │
+  ├──────────────────────────────────┼────────────────────────────────────┼───────┤
+  │ make build-full                  │ Build with all 850 analyzer rules  │ ~4min │
+  ├──────────────────────────────────┼────────────────────────────────────┼───────┤
+  │ make lint                        │ Analyzers only                     │ ~4min │
+  ├──────────────────────────────────┼────────────────────────────────────┼───────┤
+  │ make test svc=identity           │ Build + test one service           │ ~45s  │
+  ├──────────────────────────────────┼────────────────────────────────────┼───────┤
+  │ make test svc=identity mode=unit │ Unit tests only                    │ ~15s  │
+  └──────────────────────────────────┴────────────────────────────────────┴───────┘
