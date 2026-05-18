@@ -125,7 +125,7 @@ public class DemoController : ControllerBase
                 ProductId = demoProductId,
                 ProductName = "Demo Widget",
                 Quantity = string.Equals(request.ScenarioType, "stockRace", StringComparison.Ordinal) ? 3 : 1,
-                UnitPrice = 39.99m,
+                UnitPriceCents = (long)Math.Round(39.99m * 100m, 0),
             },
         };
 
@@ -161,6 +161,7 @@ public class DemoController : ControllerBase
             orderId,
             status = "Started",
             subscriptionToken = "demo-token",
+            _metadata = BuildMetadata(),
         });
     }
 
@@ -230,7 +231,7 @@ public class DemoController : ControllerBase
                 orderId,
                 userId = "demo-user",
                 customerEmail = "demo@haworks.dev",
-                totalAmount = items.Sum(i => i.UnitPrice * i.Quantity),
+                totalAmount = items.Sum(i => (i.UnitPriceCents / 100m) * i.Quantity),
                 idempotencyKey,
                 items,
             };
@@ -326,7 +327,7 @@ public class DemoController : ControllerBase
             await _notifier.NotifyEventFlowAsync(new EventFlowEvent(
                 sessionId, eventId.ToString(), "persisted", request.Payload?.ToString(), DateTime.UtcNow), ct);
 
-            return Ok(new { sessionId, eventId, status = "Persisted" });
+            return Ok(new { sessionId, eventId, status = "Persisted", _metadata = BuildMetadata(("payments-svc", resp)) });
         }
         catch (Exception ex)
         {
@@ -474,6 +475,7 @@ public class DemoController : ControllerBase
                 responseTimeMs = sw.ElapsedMilliseconds,
                 upstreamInstance,
                 message = resp.IsSuccessStatusCode ? "OK" : $"Upstream {(int)resp.StatusCode}",
+                _metadata = BuildMetadata(("catalog-svc", resp)),
             });
         }
         catch (BrokenCircuitException)
@@ -494,6 +496,7 @@ public class DemoController : ControllerBase
                 responseTimeMs = sw.ElapsedMilliseconds,
                 retryAfterSeconds = 6,
                 message = "Circuit open — fail-fast",
+                _metadata = BuildMetadata(("catalog-svc", null)),
             });
         }
         catch (Exception ex)
@@ -512,6 +515,7 @@ public class DemoController : ControllerBase
                 rejectedCount = s_circuitRejected,
                 responseTimeMs = sw.ElapsedMilliseconds,
                 message = ex.Message,
+                _metadata = BuildMetadata(("catalog-svc", null)),
             });
         }
     }
@@ -567,6 +571,20 @@ public class DemoController : ControllerBase
             successCount = 0,
             rejectedCount = 0,
         });
+    }
+
+    private object BuildMetadata(params (string service, HttpResponseMessage? response)[] upstreams)
+    {
+        return new
+        {
+            bff = new { instance = Environment.MachineName, region = Environment.GetEnvironmentVariable("FLY_REGION") ?? "local" },
+            upstreams = upstreams.Select(u => new
+            {
+                service = u.service,
+                instance = u.response?.Headers.TryGetValues("X-Instance-Id", out var vals) == true ? vals.FirstOrDefault() : null,
+            }).ToArray(),
+            timestamp = DateTimeOffset.UtcNow,
+        };
     }
 
     // Maps Polly's CircuitState enum to the kebab-case strings the frontend expects.
@@ -632,12 +650,13 @@ public class DemoController : ControllerBase
         // the browser is subscribed to.
         var sessionId = demoSession is { } id && id != Guid.Empty ? id : Guid.NewGuid();
         var client = _httpClientFactory.CreateClient(BackendClients.Identity);
+        HttpResponseMessage? vaultResp = null;
         try
         {
-            using var resp = await client.PostAsync($"/admin/vault/rotate-credentials?roleName=haworks-identity&sessionId={sessionId}", content: null, ct);
-            if (!resp.IsSuccessStatusCode)
+            vaultResp = await client.PostAsync($"/admin/vault/rotate-credentials?roleName=haworks-identity&sessionId={sessionId}", content: null, ct);
+            if (!vaultResp.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Identity vault-rotate returned {Status}", resp.StatusCode);
+                _logger.LogWarning("Identity vault-rotate returned {Status}", vaultResp.StatusCode);
             }
         }
         catch (Exception ex)
@@ -645,7 +664,9 @@ public class DemoController : ControllerBase
             _logger.LogWarning(ex, "Identity vault-rotate request failed");
         }
 
-        return Ok(new { sessionId, status = "Rotating" });
+        var result = Ok(new { sessionId, status = "Rotating", _metadata = BuildMetadata(("identity-svc", vaultResp)) });
+        vaultResp?.Dispose();
+        return result;
     }
 
     // ========================================================================
@@ -719,6 +740,7 @@ public class DemoController : ControllerBase
                     ttlSeconds = keyInfo.GetProperty("ttlSeconds").GetInt32(),
                 },
                 cacheAgeSeconds = body.GetProperty("cacheAgeSeconds").GetInt32(),
+                _metadata = BuildMetadata(("orders-svc", resp)),
             });
         }
         catch (Exception ex)
@@ -824,10 +846,9 @@ public class DemoController : ControllerBase
             {
                 return StatusCode((int)resp.StatusCode, new { error = "catalog stampede demo failed" });
             }
-            // Forward catalog's response shape verbatim — fields match what
-            // the frontend expects.
-            var json = await resp.Content.ReadAsStringAsync(ct);
-            return Content(json, "application/json");
+            var body = await resp.Content.ReadFromJsonAsync<System.Text.Json.Nodes.JsonObject>(cancellationToken: ct);
+            body!["_metadata"] = System.Text.Json.JsonSerializer.SerializeToNode(BuildMetadata(("catalog-svc", resp)));
+            return Ok(body);
         }
         catch (Exception ex)
         {
@@ -958,6 +979,7 @@ public class DemoController : ControllerBase
                     pubsubMessageSent = true,
                     instancesNotified = 1,
                 },
+                _metadata = BuildMetadata(("catalog-svc", cachedResp)),
             });
         }
         catch (Exception ex)
@@ -1117,6 +1139,12 @@ public class DemoController : ControllerBase
                 sessionId, "update_inventory", inventoryId.ToString(),
                 "success", 0, DateTime.UtcNow), ct);
 
+            var inventoryNode = System.Text.Json.Nodes.JsonNode.Parse(body)?.AsObject();
+            if (inventoryNode != null)
+            {
+                inventoryNode["_metadata"] = System.Text.Json.JsonSerializer.SerializeToNode(BuildMetadata(("catalog-svc", resp)));
+                return Ok(inventoryNode);
+            }
             return Content(body, "application/json");
         }
         catch (Exception ex)
@@ -1177,6 +1205,7 @@ public class DemoController : ControllerBase
                 resetAt,
                 retryAfterSeconds,
             },
+            _metadata = BuildMetadata(),
         });
     }
 
