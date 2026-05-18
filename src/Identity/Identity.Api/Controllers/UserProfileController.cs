@@ -11,7 +11,7 @@ namespace Haworks.Identity.Api.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public class UserProfileController : ControllerBase
 {
     private readonly IMediator _mediator;

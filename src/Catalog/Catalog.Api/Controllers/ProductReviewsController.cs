@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.Catalog.Api.Controllers;
 
-[Route("api/products/{productId}/reviews")]
+[Route("api/v{version:apiVersion}/products/{productId}/reviews")]
 [ApiController]
 public class ProductReviewsController : ControllerBase
 {

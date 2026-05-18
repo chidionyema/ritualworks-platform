@@ -16,7 +16,7 @@ public sealed record MediaFileResponse(
 
 [ApiController]
 [Authorize]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public class MediaController(IMediator mediator) : ControllerBase
 {
     /// <summary>

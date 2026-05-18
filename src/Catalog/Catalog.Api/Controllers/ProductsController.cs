@@ -9,7 +9,7 @@ using Haworks.Catalog.Application.Queries;
 namespace Haworks.Catalog.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
 public sealed class ProductsController(
     IMediator mediator,

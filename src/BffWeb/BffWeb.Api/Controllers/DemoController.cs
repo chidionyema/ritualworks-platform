@@ -33,7 +33,7 @@ namespace Haworks.BffWeb.Api.Controllers;
 /// chaos -> shared chaos flag in Vault that downstream services consult.
 /// </summary>
 [ApiController]
-[Route("api/demo")]
+[Route("api/v{version:apiVersion}/demo")]
 public class DemoController : ControllerBase
 {
     private readonly IDemoHubNotifier _notifier;

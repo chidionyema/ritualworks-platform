@@ -8,7 +8,7 @@ using Haworks.Catalog.Application.Queries;
 namespace Haworks.Catalog.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public sealed class CategoriesController(IMediator mediator) : ControllerBase
 {
     [HttpGet]

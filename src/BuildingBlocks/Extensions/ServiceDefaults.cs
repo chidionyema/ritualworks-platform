@@ -55,8 +55,19 @@ public static class ServiceDefaults
             opts.EnableForHttps = true;
         });
 
-        // Rate limiting is configured per-service in each API's Program.cs.
-        // The shared library cannot reference Microsoft.AspNetCore.App APIs.
+        // API versioning — URL segment: /api/v1/products
+        builder.Services.AddApiVersioning(opts =>
+        {
+            opts.DefaultApiVersion = new Asp.Versioning.ApiVersion(1, 0);
+            opts.AssumeDefaultVersionWhenUnspecified = true;
+            opts.ReportApiVersions = true;
+            opts.ApiVersionReader = new Asp.Versioning.UrlSegmentApiVersionReader();
+        })
+        .AddApiExplorer(opts =>
+        {
+            opts.GroupNameFormat = "'v'VVV";
+            opts.SubstituteApiVersionInUrl = true;
+        });
 
         // Correlation-id propagation: registers IHttpContextAccessor + the
         // outbound DelegatingHandler. Must be called before

@@ -14,7 +14,7 @@ namespace Haworks.CheckoutOrchestrator.Api.Controllers;
 /// REST surface for the saga.
 /// </summary>
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [Authorize(Roles = "Admin,Service")]
 public sealed class CheckoutsController(IMediator mediator) : ControllerBase
 {

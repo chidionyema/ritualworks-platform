@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace Haworks.Privacy.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
 [EnableRateLimiting("api")]
 public class PrivacyRequestsController : ControllerBase

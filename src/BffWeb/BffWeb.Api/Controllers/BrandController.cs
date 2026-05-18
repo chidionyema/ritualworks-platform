@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 namespace Haworks.BffWeb.Api.Controllers;
 
 [ApiController]
-[Route("api/brand")]
+[Route("api/v{version:apiVersion}/brand")]
 [AllowAnonymous]
 public class BrandController(IOptionsSnapshot<BrandOptions> brandOptions) : ControllerBase
 {

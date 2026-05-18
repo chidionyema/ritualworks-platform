@@ -29,7 +29,7 @@ namespace Haworks.Identity.Api.Controllers;
 /// AspNetUserLogins join table. Other services only see the canonical UserId.
 /// </summary>
 [ApiController]
-[Route("api/external-authentication")]
+[Route("api/v{version:apiVersion}/external-authentication")]
 public sealed class ExternalAuthenticationController : ControllerBase
 {
     private readonly IMediator _mediator;

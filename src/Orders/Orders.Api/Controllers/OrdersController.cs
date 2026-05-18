@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 namespace Haworks.Orders.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public sealed class OrdersController(IMediator mediator) : ControllerBase
 {
     [HttpGet("{id:guid}")]

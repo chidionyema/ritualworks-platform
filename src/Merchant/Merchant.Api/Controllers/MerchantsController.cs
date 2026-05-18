@@ -18,7 +18,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Haworks.Merchant.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
 public class MerchantsController : ControllerBase
 {

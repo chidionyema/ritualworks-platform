@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace Haworks.Identity.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public class AuthenticationController : ControllerBase
 {
     private readonly IMediator _mediator;

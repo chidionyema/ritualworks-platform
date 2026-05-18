@@ -13,7 +13,7 @@ namespace Haworks.Notifications.Api.Controllers;
 
 // Webhook endpoints are called by email/SMS providers (SES, SendGrid, Twilio) — signature validation replaces auth
 [ApiController]
-[Route("api/notifications/webhooks")]
+[Route("api/v{version:apiVersion}/notifications/webhooks")]
 [AllowAnonymous]
 public sealed class WebhooksController(
     IPublishEndpoint publishEndpoint,

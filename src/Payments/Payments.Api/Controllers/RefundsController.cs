@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Haworks.Payments.Api.Controllers;
 
 [ApiController]
-[Route("api/refunds")]
+[Route("api/v{version:apiVersion}/refunds")]
 [Authorize(Roles = "Admin")]
 public sealed class RefundsController(IMediator mediator) : ControllerBase
 {
