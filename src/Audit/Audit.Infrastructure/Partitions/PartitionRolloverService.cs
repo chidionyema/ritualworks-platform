@@ -24,18 +24,25 @@ public class PartitionRolloverService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await EnsurePartitionsExistAsync(stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to ensure audit partitions exist");
-            }
+                try
+                {
+                    await EnsurePartitionsExistAsync(stoppingToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "Failed to ensure audit partitions exist");
+                }
 
-            await Task.Delay(TimeSpan.FromHours(24), _timeProvider, stoppingToken);
+                await Task.Delay(TimeSpan.FromHours(24), _timeProvider, stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown
         }
     }
 

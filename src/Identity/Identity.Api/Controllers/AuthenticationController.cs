@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Haworks.Identity.Api.Models;
 using Haworks.Identity.Application;
 using Haworks.Identity.Application;
@@ -27,6 +28,8 @@ public class AuthenticationController : ControllerBase
     // API-only: Bearer tokens are not auto-sent by browsers, so CSRF protection is not required. See OWASP CSRF guidance for token-based auth.
     [HttpGet("csrf-token")]
     [IgnoreAntiforgeryToken]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public IActionResult GetAntiforgeryToken()
     {
         var tokens = _antiforgery.GetAndStoreTokens(HttpContext);
@@ -174,6 +177,8 @@ public class AuthenticationController : ControllerBase
     /// </summary>
     [HttpGet("debug-auth")]
     [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public IActionResult DebugAuth()
     {
         if (!(User.Identity?.IsAuthenticated ?? false))
@@ -201,6 +206,8 @@ public class AuthenticationController : ControllerBase
 
     [HttpPost("service-token")]
     [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ServiceToken(
         [FromHeader(Name = "X-Service-Secret")] string? serviceSecret,
         CancellationToken ct)

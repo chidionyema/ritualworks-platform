@@ -34,12 +34,23 @@ public class AuditExportWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Poll for any stranded jobs that were queued but not picked up (e.g. due to crash)
-        _ = Task.Run(() => PollStrandedJobsAsync(stoppingToken), stoppingToken);
-
-        await foreach (var jobId in _queue.ReadAllAsync(stoppingToken))
+        try
         {
-            await ProcessJobSafeAsync(jobId, stoppingToken);
+            _ = Task.Run(() => PollStrandedJobsAsync(stoppingToken), stoppingToken);
+
+            await foreach (var jobId in _queue.ReadAllAsync(stoppingToken))
+            {
+                await ProcessJobSafeAsync(jobId, stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "AuditExportWorker crashed — export jobs will not be processed");
+            throw;
         }
     }
 

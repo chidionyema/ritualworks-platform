@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Haworks.BuildingBlocks.Vault;
 using MassTransit;
 using Microsoft.AspNetCore.Authorization;
@@ -67,6 +68,8 @@ public sealed class AdminController(
     /// the most recent vault refresh.
     /// </summary>
     [HttpGet("vault/status")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetVaultStatus(CancellationToken ct)
     {
         if (!VaultEnabled)
@@ -141,6 +144,8 @@ public sealed class AdminController(
     }
 
     [HttpPost("vault/rotate-credentials")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public IActionResult RotateCredentials(
         // Default to identity's real Vault dynamic-Postgres role (per
         // deploy/aspire/manifests/database/roles.json). Calling

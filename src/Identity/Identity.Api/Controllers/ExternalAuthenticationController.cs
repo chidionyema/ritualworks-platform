@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 using Haworks.BuildingBlocks.Common;
 using Haworks.Identity.Application;
@@ -50,6 +51,8 @@ public sealed class ExternalAuthenticationController : ControllerBase
 
     [HttpGet("challenge/{provider}")]
     [EnableRateLimiting("auth")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Challenge(string provider, [FromQuery] string? redirectUrl, CancellationToken ct)
     {
         var providers = await _signInManager.GetExternalAuthenticationSchemesAsync();
@@ -71,6 +74,8 @@ public sealed class ExternalAuthenticationController : ControllerBase
 
     [HttpGet("callback")]
     [EnableRateLimiting("auth")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Callback(CancellationToken ct)
     {
         var result = await _mediator.Send(new ExternalLoginCallbackCommand(HttpContext), ct);
@@ -94,6 +99,8 @@ public sealed class ExternalAuthenticationController : ControllerBase
     }
 
     [HttpGet("providers")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetAvailableProviders(CancellationToken ct)
     {
         var result = await _mediator.Send(new GetAvailableProvidersQuery(), ct);
@@ -104,6 +111,8 @@ public sealed class ExternalAuthenticationController : ControllerBase
 
     [Authorize]
     [HttpPost("link/{provider}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> LinkExternalLogin(string provider, CancellationToken ct)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -125,6 +134,8 @@ public sealed class ExternalAuthenticationController : ControllerBase
 
     [HttpGet("link-callback")]
     [EnableRateLimiting("auth")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> LinkCallback(CancellationToken ct)
     {
         var info = await _signInManager.GetExternalLoginInfoAsync();
@@ -141,6 +152,8 @@ public sealed class ExternalAuthenticationController : ControllerBase
 
     [Authorize]
     [HttpDelete("unlink/{provider}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> RemoveExternalLogin(string provider, CancellationToken ct)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -153,6 +166,8 @@ public sealed class ExternalAuthenticationController : ControllerBase
 
     [Authorize]
     [HttpGet("logins")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetUserLogins(CancellationToken ct)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);

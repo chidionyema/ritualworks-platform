@@ -33,7 +33,7 @@ public sealed class SubscriptionRenewalRequestedConsumer(
                 UserId = string.Empty,
                 Provider = paymentGateway.ActiveProvider,
                 AmountCents = 0,
-                Currency = msg.Currency ?? string.Empty,
+                Currency = string.Empty, // event lacks currency; populated downstream
                 NewPeriodEnd = DateTime.UtcNow.AddMonths(1),
                 RenewedAt = DateTime.UtcNow
             }, context.CancellationToken);
