@@ -9,6 +9,6 @@
 
       Identity.Api gets the FULL ServiceDefaults stack for free.
     -->
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
   </ItemGroup>
 </Project>

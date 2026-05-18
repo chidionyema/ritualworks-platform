@@ -5,10 +5,10 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Search.Application/Search.Application.csproj" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.0" />
-    <PackageReference Include="MassTransit.RabbitMQ" Version="8.3.4" />
-    <PackageReference Include="Elastic.Clients.Elasticsearch" Version="8.17.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="MassTransit.RabbitMQ" />
+    <PackageReference Include="Elastic.Clients.Elasticsearch" />
     <InternalsVisibleTo Include="Search.Integration" />
   </ItemGroup>
 </Project>

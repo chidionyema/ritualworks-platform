@@ -148,7 +148,7 @@ public sealed class TemplateTests
         var enUs = TemplateFactory.Build("order.shipped", NotificationChannel.Email, "en-US", 2, true, "en-US-subject", "body", null, null);
         var wildcard = TemplateFactory.Build("order.shipped", NotificationChannel.Email, "*", 1, true, "wildcard-subject", "body", null, null);
         var repo = new Mock<ITemplateRepository>(MockBehavior.Strict);
-        repo.Setup(r => r.GetVersionsAsync("order.shipped"))
+        repo.Setup(r => r.GetVersionsAsync("order.shipped", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<NotificationTemplate> { enUs, wildcard });
 
         var selector = new TemplateSelector(repo.Object);
@@ -165,7 +165,7 @@ public sealed class TemplateTests
     {
         var wildcard = TemplateFactory.Build("order.shipped", NotificationChannel.Email, "*", 1, true, "wildcard-subject", "body", null, null);
         var repo = new Mock<ITemplateRepository>(MockBehavior.Strict);
-        repo.Setup(r => r.GetVersionsAsync("order.shipped"))
+        repo.Setup(r => r.GetVersionsAsync("order.shipped", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<NotificationTemplate> { wildcard });
 
         var selector = new TemplateSelector(repo.Object);
@@ -181,7 +181,7 @@ public sealed class TemplateTests
     {
         var inactiveEnUs = TemplateFactory.Build("order.shipped", NotificationChannel.Email, "en-US", 1, isActive: false, "x", "y", null, null);
         var repo = new Mock<ITemplateRepository>(MockBehavior.Strict);
-        repo.Setup(r => r.GetVersionsAsync("order.shipped"))
+        repo.Setup(r => r.GetVersionsAsync("order.shipped", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<NotificationTemplate> { inactiveEnUs });
 
         var selector = new TemplateSelector(repo.Object);
@@ -198,7 +198,7 @@ public sealed class TemplateTests
         var v3 = TemplateFactory.Build("order.shipped", NotificationChannel.Email, "en-US", 3, true, "v3", "body", null, null);
         var v2 = TemplateFactory.Build("order.shipped", NotificationChannel.Email, "en-US", 2, true, "v2", "body", null, null);
         var repo = new Mock<ITemplateRepository>(MockBehavior.Strict);
-        repo.Setup(r => r.GetVersionsAsync("order.shipped"))
+        repo.Setup(r => r.GetVersionsAsync("order.shipped", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<NotificationTemplate> { v1, v3, v2 });
 
         var selector = new TemplateSelector(repo.Object);
@@ -215,7 +215,7 @@ public sealed class TemplateTests
         var v2Inactive = TemplateFactory.Build("order.shipped", NotificationChannel.Email, "en-US", 2, isActive: false, "v2", "body", null, null);
         var v1Active = TemplateFactory.Build("order.shipped", NotificationChannel.Email, "en-US", 1, isActive: true, "v1", "body", null, null);
         var repo = new Mock<ITemplateRepository>(MockBehavior.Strict);
-        repo.Setup(r => r.GetVersionsAsync("order.shipped"))
+        repo.Setup(r => r.GetVersionsAsync("order.shipped", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<NotificationTemplate> { v2Inactive, v1Active });
 
         var selector = new TemplateSelector(repo.Object);

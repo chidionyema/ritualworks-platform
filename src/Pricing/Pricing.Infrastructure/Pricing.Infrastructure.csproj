@@ -6,10 +6,10 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Pricing.Application/Pricing.Application.csproj" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.0" />
-    <PackageReference Include="MassTransit.RabbitMQ" Version="8.3.4" />
-    <PackageReference Include="Refit.HttpClientFactory" Version="7.2.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="MassTransit.RabbitMQ" />
+    <PackageReference Include="Refit.HttpClientFactory" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Haworks.Pricing.Integration" />

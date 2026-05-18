@@ -20,10 +20,10 @@
          L1.A/B/C/D never modify the csproj (the parallel-execution
          contract). The four phases share the same BCL + MediatR +
          FluentValidation surface. -->
-    <PackageReference Include="AWSSDK.S3" Version="4.0.23" />
-    <PackageReference Include="MediatR" Version="12.4.1" />
-    <PackageReference Include="FluentValidation" Version="11.10.0" />
-    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.10.0" />
-    <PackageReference Include="MassTransit" Version="8.3.4" />
+    <PackageReference Include="AWSSDK.S3" />
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="MassTransit" />
   </ItemGroup>
 </Project>

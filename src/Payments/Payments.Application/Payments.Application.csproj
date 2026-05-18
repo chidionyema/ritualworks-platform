@@ -9,16 +9,16 @@
     <ProjectReference Include="../../Contracts/Haworks.Contracts.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="MediatR" Version="12.4.1" />
-    <PackageReference Include="FluentValidation" Version="11.10.0" />
-    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.10.0" />
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
     <!-- Stripe.net types referenced by IStripeClientFactory abstraction. The
          concrete client lives in Payments.Infrastructure; the interface in
          Application needs the Stripe.net types it abstracts. -->
-    <PackageReference Include="Stripe.net" Version="44.10.0" />
-    <PackageReference Include="VaultSharp" Version="1.17.5" />
-    <PackageReference Include="Hangfire.Core" Version="1.8.15" />
-    <PackageReference Include="MassTransit" Version="8.3.4" />
+    <PackageReference Include="Stripe.net" />
+    <PackageReference Include="VaultSharp" />
+    <PackageReference Include="Hangfire.Core" />
+    <PackageReference Include="MassTransit" />
   </ItemGroup>
 
   <ItemGroup>

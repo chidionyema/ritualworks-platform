@@ -10,10 +10,10 @@
     <ProjectReference Include="../../../src/Contracts/Haworks.Contracts.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="MediatR" Version="12.4.1" />
-    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.10.0" />
-    <PackageReference Include="MassTransit" Version="8.3.4" />
-    <PackageReference Include="VaultSharp" Version="1.17.5" />
-    <PackageReference Include="Hangfire.Core" Version="1.8.15" />
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="MassTransit" />
+    <PackageReference Include="VaultSharp" />
+    <PackageReference Include="Hangfire.Core" />
   </ItemGroup>
 </Project>
