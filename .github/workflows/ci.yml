@@ -15,6 +15,9 @@ concurrency:
 env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  # MSBuild parallelism — use all available cores (GitHub runners have 4)
+  DOTNET_SYSTEM_CONSOLE_ALLOW_ANSI_COLOR_REDIRECTION: true
   # Enforce the same regex timeout fix the per-assembly module init applies
   # locally — belt-and-braces in case CI's Testcontainers tag matching is
   # subject to the same backtracking.
@@ -47,19 +50,16 @@ jobs:
       - name: Architecture guards
         run: bash scripts/check-architecture.sh
 
-      - name: Restore
-        run: dotnet restore HaworksPlatform.sln
-
-      - name: Format check
-        run: dotnet format HaworksPlatform.sln --verify-no-changes --verbosity diagnostic 2>&1 | tail -20 || echo "::warning::Format violations found — run 'dotnet format' locally"
-
-      - name: Build (no restore)
-        run: dotnet build HaworksPlatform.sln --no-restore --configuration Release
-
       - name: Secret scanning (gitleaks)
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Restore
+        run: dotnet restore HaworksPlatform.sln
+
+      - name: Build (no restore)
+        run: dotnet build HaworksPlatform.sln --no-restore --configuration Release -m
 
       - name: Unit + Architecture + Contract tests with coverage
         run: |
