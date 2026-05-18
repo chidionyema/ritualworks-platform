@@ -1377,6 +1377,98 @@ public class DemoController : ControllerBase
         var body = await resp.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
         return Ok(body);
     }
+
+    // ── Double-Entry Ledger Demo ────────────────────────────────────
+
+    [HttpPost("ledger/simulate")]
+    public async Task<IActionResult> SimulateLedger(
+        [FromBody] LedgerDemoRequest request,
+        [FromHeader(Name = "X-Demo-Session")] string? sessionId,
+        CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient(BackendClients.Payouts);
+        using var resp = await client.PostAsJsonAsync("/demo/ledger/simulate", new
+        {
+            amountCents = request.AmountCents,
+            currency = request.Currency ?? "USD",
+        }, ct);
+
+        if (!resp.IsSuccessStatusCode)
+            return StatusCode((int)resp.StatusCode, new { error = "Ledger simulation failed" });
+
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        return Ok(body);
+    }
+
+    // ── GDPR Erasure Demo ───────────────────────────────────────────
+
+    [HttpPost("erasure/start")]
+    public async Task<IActionResult> StartErasureDemo(
+        [FromHeader(Name = "X-Demo-Session")] string? sessionId,
+        CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient(BackendClients.Privacy);
+        using var resp = await client.PostAsJsonAsync("/api/privacyrequests", new
+        {
+            userId = Guid.NewGuid(), // demo user
+            requestType = "Erasure",
+            reason = "Demo — GDPR Article 17 right to be forgotten",
+        }, ct);
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            var err = await resp.Content.ReadAsStringAsync(ct);
+            return StatusCode((int)resp.StatusCode, new { error = "Erasure request failed", detail = err });
+        }
+
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        return Ok(new
+        {
+            sessionId,
+            requestId = body.TryGetProperty("requestId", out var rid) ? rid.GetGuid() : Guid.Empty,
+            status = "Processing",
+            _metadata = BuildMetadata(("privacy-svc", resp)),
+        });
+    }
+
+    [HttpGet("erasure/{requestId:guid}")]
+    public async Task<IActionResult> GetErasureStatus(Guid requestId, CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient(BackendClients.Privacy);
+        using var resp = await client.GetAsync($"/api/privacyrequests/{requestId}", ct);
+
+        if (!resp.IsSuccessStatusCode)
+            return StatusCode((int)resp.StatusCode, new { error = "Failed to poll erasure state" });
+
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        return Ok(body);
+    }
+
+    // ── CDC Search Demo ─────────────────────────────────────────────
+
+    [HttpGet("search")]
+    public async Task<IActionResult> DemoSearch(
+        [FromQuery] string q,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(q))
+            return BadRequest(new { error = "Query required" });
+
+        var client = _httpClientFactory.CreateClient(BackendClients.Search);
+        using var resp = await client.GetAsync($"/search?q={Uri.EscapeDataString(q)}&pageSize=5", ct);
+
+        if (!resp.IsSuccessStatusCode)
+            return StatusCode((int)resp.StatusCode, new { error = "Search failed" });
+
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        return Ok(new
+        {
+            query = q,
+            results = body,
+            pipeline = "Postgres WAL → Debezium → Kafka → Elasticsearch",
+            _metadata = BuildMetadata(("search-svc", resp)),
+        });
+    }
 }
 
 // DTOs — wire shapes pinned by the frontend's TypeScript types
@@ -1466,6 +1558,12 @@ public record BurstRequest
 {
     public required int Count { get; init; }
     public required int DelayMs { get; init; }
+}
+
+public record LedgerDemoRequest
+{
+    public long AmountCents { get; init; } = 3999L;
+    public string? Currency { get; init; }
 }
 
 public record RefundDemoRequest
