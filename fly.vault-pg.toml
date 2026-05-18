@@ -16,7 +16,7 @@ app            = "haworks-vault-pg"
 primary_region = "iad"
 
 [build]
-  image = "flyio/postgres-flex:15"
+  dockerfile = "deploy/vault-pg/Dockerfile"
 
 [env]
   PRIMARY_REGION = "iad"

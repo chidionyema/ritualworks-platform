@@ -124,7 +124,8 @@ public static class ServiceDefaults
                     // Infrastructure Meters
                     .AddMeter("Haworks.MassTransit")
                     .AddMeter("Haworks.Sagas")
-                    .AddMeter("Resilience.Policies");
+                    .AddMeter("Resilience.Policies")
+                    .AddMeter("Haworks.Vault");
             })
             .WithTracing(tracing =>
             {

@@ -330,15 +330,26 @@ jobs:
       - name: Deploy with canary health gate
         run: |
           flyctl deploy -c fly.${{ matrix.svc }}.toml --remote-only --ha=false
-          # Post-deploy health gate: verify the new release is healthy
+          # Post-deploy health gate: verify the new release is healthy,
+          # including Vault lease status (vault-lease-* health check).
           for i in $(seq 1 30); do
-            if flyctl ssh console -a haworks-${{ matrix.svc }} -C "curl -sf http://localhost:8080/health/ready" 2>/dev/null; then
-              echo "Health check passed after deploy (attempt $i)"
-              exit 0
+            health_json=$(flyctl ssh console -a haworks-${{ matrix.svc }} \
+              -C "curl -sf http://localhost:8080/health" 2>/dev/null || echo "")
+            if [[ -n "$health_json" ]]; then
+              status=$(echo "$health_json" | jq -r '.status // empty' 2>/dev/null || echo "")
+              if [[ "$status" == "Healthy" ]]; then
+                echo "Health check passed (all components healthy) after deploy (attempt $i)"
+                exit 0
+              elif [[ "$status" == "Degraded" ]]; then
+                echo "::warning::Service is Degraded (attempt $i) — Vault lease may be nearing expiry"
+                # Degraded is acceptable for traffic — don't block deploy
+                exit 0
+              fi
             fi
             sleep 2
           done
-          echo "::error::Health check failed after deploy — consider rollback"
+          echo "::error::Health check failed after deploy — service may not have connected to Vault"
+          echo "Check: flyctl ssh console -a haworks-${{ matrix.svc }} -C 'curl -s http://localhost:8080/health' | jq"
           echo "Run: flyctl releases rollback -a haworks-${{ matrix.svc }}"
           exit 1
 

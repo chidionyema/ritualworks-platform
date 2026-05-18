@@ -44,8 +44,12 @@ done
 INIT_FILE=/vault/data/.init.json
 if vault status -format=json | jq -e '.initialized == false' >/dev/null 2>&1; then
   echo "[entrypoint] vault is uninitialized — running operator init"
-  # Single-key shamir for portfolio demo. A real prod deployment would
-  # use 5/3 or 7/5 thresholds with the keys distributed across people.
+  # Single-key shamir for initial launch. Upgrade path:
+  #   1. Schedule a maintenance window
+  #   2. vault operator rekey -init -key-shares=5 -key-threshold=3
+  #   3. Distribute shares to separate operators/escrow
+  #   4. OR migrate to cloud KMS auto-unseal (seal stanza in vault.hcl)
+  # See: https://developer.hashicorp.com/vault/tutorials/operations/rekeying-and-rotating
   vault operator init -key-shares=1 -key-threshold=1 -format=json > "$INIT_FILE"
   chmod 600 "$INIT_FILE"
   echo "[entrypoint] operator init complete; keys stashed at $INIT_FILE"
@@ -88,15 +92,29 @@ seed_token() {
 }
 if vault status -format=json | jq -e '.sealed == false' >/dev/null 2>&1; then
   if TOKEN="$(seed_token)" && [ -n "$TOKEN" ]; then
-    # Enable audit logging to a file on the persistent volume, idempotent.
+    # Rotate audit log on startup. The 1GB Fly volume can fill up if the
+    # audit log grows unbounded. Keep the previous run's log as .prev for
+    # post-incident review; discard anything older.
+    #
+    # If the audit device is already enabled, we must disable it first so
+    # Vault closes the file descriptor — otherwise the renamed file keeps
+    # receiving writes via the old fd.
+    AUDIT_LOG="/vault/data/audit.log"
+    if [ -f "$AUDIT_LOG" ]; then
+      if VAULT_TOKEN="$TOKEN" vault audit list -format=json 2>/dev/null | jq -e '."file/"' >/dev/null 2>&1; then
+        VAULT_TOKEN="$TOKEN" vault audit disable file 2>/dev/null || true
+      fi
+      rm -f "${AUDIT_LOG}.prev"
+      mv "$AUDIT_LOG" "${AUDIT_LOG}.prev"
+      echo "[entrypoint] rotated audit log ($(wc -c < "${AUDIT_LOG}.prev" | tr -d ' ') bytes → .prev)"
+    fi
+
+    # Enable audit logging to a file on the persistent volume.
     # Required for compliance + post-incident review: every authenticated
     # Vault op (login, kv read, dynamic creds issuance, secret-id wrap)
-    # gets a tamper-evident HMAC'd line. Skipping when already enabled
-    # because vault audit enable returns non-zero on duplicate device.
-    if ! VAULT_TOKEN="$TOKEN" vault audit list -format=json 2>/dev/null | jq -e '."file/"' >/dev/null 2>&1; then
-      echo "[entrypoint] enabling audit log at /vault/data/audit.log"
-      VAULT_TOKEN="$TOKEN" vault audit enable file file_path=/vault/data/audit.log >/dev/null
-    fi
+    # gets a tamper-evident HMAC'd line.
+    echo "[entrypoint] enabling audit log at $AUDIT_LOG"
+    VAULT_TOKEN="$TOKEN" vault audit enable file file_path="$AUDIT_LOG" >/dev/null 2>&1 || true
 
     echo "[entrypoint] running seed.sh"
     if VAULT_TOKEN="$TOKEN" /usr/local/bin/seed.sh; then

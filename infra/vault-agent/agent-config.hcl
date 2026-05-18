@@ -39,6 +39,16 @@ template {
   command     = "echo 'DB credentials rotated'"
 }
 
+# Template: Database credentials as JSON (for AgentFile mode)
+# Replace SERVICE_ROLE with the actual role name (e.g., haworks-orders)
+# and SERVICE_NAME with the service suffix (e.g., orders).
+template {
+  source      = "/vault/templates/db-creds.ctmpl"
+  destination = "/vault/secrets/db-SERVICE_NAME.json"
+  perms       = "0600"
+  command     = "echo 'DB credentials rotated (JSON)'"
+}
+
 # Template: JWT signing key (from Vault KV)
 template {
   source      = "/vault/templates/jwt-key.ctmpl"

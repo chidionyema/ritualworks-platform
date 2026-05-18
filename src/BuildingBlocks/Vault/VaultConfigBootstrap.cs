@@ -1,4 +1,5 @@
 using VaultSharp;
+using VaultSharp.Core;
 using VaultSharp.V1.AuthMethods.Token;
 using VaultSharp.V1.Commons;
 
@@ -88,7 +89,7 @@ public static class VaultConfigBootstrap
         }
 
         // Response-unwrap support. ci-stage-vault-creds.sh issues secret_ids
-        // with X-Vault-Wrap-TTL: 300s and stages the WRAPPING TOKEN as
+        // with X-Vault-Wrap-TTL: 1800s (30min) and stages the WRAPPING TOKEN as
         // Vault:SecretId, plus Vault:SecretIdIsWrapped=true to opt in to
         // unwrap. A leaked CI log only exposes the wrapper, useless after
         // 5 minutes or one unwrap (whichever comes first).
@@ -107,7 +108,7 @@ public static class VaultConfigBootstrap
             catch (Exception ex)
             {
                 logger?.LogError(ex,
-                    "[VaultBootstrap] Failed to unwrap Vault:SecretId. The wrapper token may have expired (5min default TTL) or already been used. Re-run ci-stage-vault-creds.sh to issue a fresh wrapper.");
+                    "[VaultBootstrap] Failed to unwrap Vault:SecretId. The wrapper token may have expired (30min default TTL, set by WRAP_TTL_SECONDS in ci-stage-vault-creds.sh) or already been used. Re-run ci-stage-vault-creds.sh to issue a fresh wrapper.");
                 throw;
             }
         }
@@ -117,22 +118,52 @@ public static class VaultConfigBootstrap
         // already have a bootstrap logger threaded through, and emitting two
         // log lines for one login event clutters startup output.
         authenticator ??= new VaultAppRoleAuthenticator();
-        var login = await authenticator.LoginAsync(address, roleId, secretId, ct);
 
-        var client = new VaultClient(new VaultClientSettings(address, new TokenAuthMethodInfo(login.ClientToken)));
+        // Retry the AppRole login with exponential backoff. During deploys Vault
+        // may be temporarily unavailable (immediate deploy strategy = brief
+        // downtime). 5 attempts over ~62s (1+2+4+8+16s delays + call time)
+        // covers the typical Fly machine restart window.
+        const int maxAttempts = 5;
+        VaultAppRoleLoginResult? login = null;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                login = await authenticator.LoginAsync(address, roleId, secretId, ct);
+                break;
+            }
+            catch (Exception ex) when (attempt < maxAttempts && !ct.IsCancellationRequested
+                && (ex is HttpRequestException
+                    or TaskCanceledException
+                    or TimeoutException
+                    or VaultApiException { HttpStatusCode: >= System.Net.HttpStatusCode.InternalServerError }
+                    or VaultApiException { HttpStatusCode: (System.Net.HttpStatusCode)429 }))
+            {
+                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt - 1));
+                logger?.LogWarning(ex,
+                    "[VaultBootstrap] AppRole login attempt {Attempt}/{MaxAttempts} failed; retrying in {Delay}s",
+                    attempt, maxAttempts, delay.TotalSeconds);
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+        }
 
+        var client = new VaultClient(new VaultClientSettings(address, new TokenAuthMethodInfo(login!.ClientToken)));
+
+        var kvMountPoint = configuration["Vault:KvMountPoint"] ?? "secret";
         var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         foreach (var mapping in kvMappings)
         {
             var (vaultPath, configPrefix, optional) = (mapping.VaultPath, mapping.ConfigPrefix, mapping.Optional);
             try
             {
+                var kvStart = DateTime.UtcNow;
                 var resp = await client.V1.Secrets.KeyValue.V2.ReadSecretAsync(
-                    path: vaultPath, mountPoint: "secret");
+                    path: vaultPath, mountPoint: kvMountPoint);
                 foreach (var (key, value) in resp.Data.Data)
                 {
                     dict[$"{configPrefix}:{key}"] = value?.ToString();
                 }
+                VaultMetrics.KvReadDuration.Record((DateTime.UtcNow - kvStart).TotalSeconds, new KeyValuePair<string, object?>("path", vaultPath));
                 logger?.LogInformation("[VaultBootstrap] Loaded {Count} keys from secret/{Path} -> {Prefix}",
                     resp.Data.Data.Count, vaultPath, configPrefix);
             }
@@ -147,6 +178,7 @@ public static class VaultConfigBootstrap
             }
             catch (Exception ex)
             {
+                VaultMetrics.KvReadFailure.Add(1, new KeyValuePair<string, object?>("path", vaultPath), new KeyValuePair<string, object?>("error_type", ex.GetType().Name));
                 logger?.LogError(ex, "[VaultBootstrap] Failed to read secret/{Path}", vaultPath);
                 throw;  // fail fast — these secrets are required for the app to start
             }

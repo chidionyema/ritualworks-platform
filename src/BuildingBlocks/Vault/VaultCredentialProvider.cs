@@ -68,13 +68,40 @@ public sealed class VaultCredentialProvider : IDisposable, IVaultCredentialProvi
 
                 return (username, password);
             }
-            catch (VaultApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.ServiceUnavailable)
+            catch (VaultApiException ex) when (
+                ex.HttpStatusCode == System.Net.HttpStatusCode.ServiceUnavailable
+                || ex.HttpStatusCode == (System.Net.HttpStatusCode)429)
             {
-                // Vault sealed or unavailable — return last-known-good
+                // Vault sealed, unavailable, or rate-limited — return last-known-good
                 if (_cached.HasValue)
                 {
                     _logger.LogWarning(
-                        "Vault unavailable (503) for role {RoleName}; returning stale cached credentials",
+                        "Vault error ({StatusCode}) for role {RoleName}; returning stale cached credentials",
+                        (int)ex.HttpStatusCode, roleName);
+                    return _cached.Value;
+                }
+
+                throw;
+            }
+            catch (HttpRequestException ex)
+            {
+                if (_cached.HasValue)
+                {
+                    _logger.LogWarning(ex,
+                        "Vault network error for role {RoleName}; returning stale cached credentials",
+                        roleName);
+                    return _cached.Value;
+                }
+
+                throw;
+            }
+            catch (TaskCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
+            {
+                // Timeout (not caller cancellation) — return stale if available
+                if (_cached.HasValue)
+                {
+                    _logger.LogWarning(ex,
+                        "Vault request timed out for role {RoleName}; returning stale cached credentials",
                         roleName);
                     return _cached.Value;
                 }

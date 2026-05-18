@@ -18,4 +18,7 @@ public interface IVaultClientFactory
 /// login. Consumers compare <see cref="CreatedAt"/> + <see cref="LeaseDuration"/>
 /// against now to decide when to rebuild.
 /// </summary>
-public sealed record VaultClientHandle(IVaultClient Client, DateTime CreatedAt, TimeSpan LeaseDuration);
+public sealed record VaultClientHandle(IVaultClient Client, DateTime CreatedAt, TimeSpan LeaseDuration, HttpClient? HttpClient = null) : IDisposable
+{
+    public void Dispose() => HttpClient?.Dispose();
+}

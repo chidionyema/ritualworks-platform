@@ -138,10 +138,14 @@ curl -fsS -X PUT -H 'X-Vault-Token: $root_token' --data-binary @/tmp/ci-policy.h
 
     mask "$unseal_key"
     mask "$ci_token"
-    log "staging VAULT_UNSEAL_KEY + VAULT_CI_TOKEN on $VAULT_APP"
+    log "staging VAULT_UNSEAL_KEY + VAULT_CI_TOKEN on $VAULT_APP (clearing stale VAULT_ROOT_TOKEN_PROD)"
     flyctl secrets set --stage -a "$VAULT_APP" \
       "VAULT_UNSEAL_KEY=$unseal_key" \
       "VAULT_CI_TOKEN=$ci_token" >/dev/null
+    # Remove the bootstrap-era root token secret. It was revoked server-side
+    # but leaving the stale value in Fly secrets confuses operators during
+    # incident response. unset is idempotent (no-op if already absent).
+    flyctl secrets unset --stage -a "$VAULT_APP" VAULT_ROOT_TOKEN_PROD 2>/dev/null || true
 
     log "revoking root token..."
     fly_ssh "sh -c \"curl -fsS -X POST -H 'X-Vault-Token: $root_token' http://[::1]:8200/v1/auth/token/revoke-self\"" >/dev/null || true

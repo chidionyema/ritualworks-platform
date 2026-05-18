@@ -89,6 +89,54 @@ public class VaultCredentialProviderTests
         result.Password.Should().Be("cached-pass");
     }
 
+    [Fact]
+    public async Task Returns_stale_on_HttpRequestException()
+    {
+        SetupVaultResponse("cached-user", "cached-pass");
+        var provider = CreateProvider(rotationPeriod: TimeSpan.FromMilliseconds(1));
+        await provider.GetDatabaseCredentialsAsync("test-role");
+        await Task.Delay(10);
+
+        _dbEngine.Setup(x => x.GetStaticCredentialsAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ThrowsAsync(new HttpRequestException("network error"));
+
+        var result = await provider.GetDatabaseCredentialsAsync("test-role");
+        result.Username.Should().Be("cached-user");
+    }
+
+    [Fact]
+    public async Task Returns_stale_on_timeout()
+    {
+        SetupVaultResponse("cached-user", "cached-pass");
+        var provider = CreateProvider(rotationPeriod: TimeSpan.FromMilliseconds(1));
+        await provider.GetDatabaseCredentialsAsync("test-role");
+        await Task.Delay(10);
+
+        _dbEngine.Setup(x => x.GetStaticCredentialsAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ThrowsAsync(new TaskCanceledException("timeout", null, CancellationToken.None));
+
+        var result = await provider.GetDatabaseCredentialsAsync("test-role");
+        result.Username.Should().Be("cached-user");
+    }
+
+    [Fact]
+    public async Task Returns_stale_on_rate_limit_429()
+    {
+        SetupVaultResponse("cached-user", "cached-pass");
+        var provider = CreateProvider(rotationPeriod: TimeSpan.FromMilliseconds(1));
+        await provider.GetDatabaseCredentialsAsync("test-role");
+        await Task.Delay(10);
+
+        _dbEngine.Setup(x => x.GetStaticCredentialsAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ThrowsAsync(new VaultApiException((System.Net.HttpStatusCode)429, "rate limited"));
+
+        var result = await provider.GetDatabaseCredentialsAsync("test-role");
+        result.Username.Should().Be("cached-user");
+    }
+
     private void SetupVaultResponse(string username, string password)
     {
         var credData = new StaticCredentials { Username = username, Password = password };

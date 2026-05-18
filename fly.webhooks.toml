@@ -6,10 +6,10 @@ primary_region = "iad"
 
 [env]
   ASPNETCORE_URLS = "http://+:8080"
-  Vault__Enabled  = "true"
-  Vault__Address  = "http://haworks-vault.internal:8200"
-  Vault__RoleIdPath = "/app/secrets/role_id"
-  Vault__SecretIdPath = "/app/secrets/secret_id"
+  # Vault is NOT integrated in Webhooks service code (no AddVaultIntegration
+  # call). DB credentials come from bootstrap.sh static connection string.
+  # Vault__Enabled, Address, and path config removed — they were leftover
+  # from a template copy and the service has no AppRole in services.json.
 
 [http_service]
   internal_port        = 8080

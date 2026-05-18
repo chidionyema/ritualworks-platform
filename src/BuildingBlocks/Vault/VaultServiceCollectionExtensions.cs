@@ -6,6 +6,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using System;
+using System.Text.Json;
 
 namespace Haworks.BuildingBlocks.Vault;
 
@@ -21,9 +22,6 @@ namespace Haworks.BuildingBlocks.Vault;
 ///   - <see cref="DatabaseOptions"/> (from <c>"Database"</c> config section)
 ///   - <see cref="ICertificateValidator"/>, <see cref="ISecretFileReader"/>
 ///   - <see cref="IVaultClientFactory"/>
-///   - <see cref="ICredentialStore"/> as transient + a
-///     <c>Func&lt;ICredentialStore&gt;</c> factory the VaultService caches
-///     per AppRole role-name internally.
 ///   - <see cref="IResiliencePolicyFactory"/>
 ///   - <see cref="IVaultService"/>
 ///
@@ -45,20 +43,15 @@ public static class VaultServiceCollectionExtensions
 
         services.AddOptions<DatabaseOptions>()
             .Bind(configuration.GetSection(DatabaseOptions.SectionName))
-            // VaultService.ValidateConfiguration() throws on a missing
-            // Database.Host even when the dynamic DB credential path isn't
-            // exercised. PostConfigure with sensible defaults so callers
-            // that only need RefreshCredentials() (no dynamic DB role)
-            // don't have to populate the section.
+            // Database:Host is optional. When set, VaultService can build
+            // connection strings from dynamic credentials (vault-pg sandbox).
+            // When absent (Neon / managed PG), services use the static
+            // connection string from bootstrap.sh and the PeriodicPasswordProvider
+            // gracefully skips rotation. See AddVaultNpgsqlDataSource().
             .PostConfigure(opts =>
             {
-                if (string.IsNullOrWhiteSpace(opts.Host))
-                    throw new InvalidOperationException("Vault:DynamicDb:Host must be configured — loopback fallback disabled for container safety");
                 if (opts.Port == 0) opts.Port = 5432;
-                if (string.IsNullOrWhiteSpace(opts.Database))
-                    throw new InvalidOperationException("Vault:DynamicDb:Database must be configured");
-            })
-            .ValidateOnStart();
+            });
 
         // Vault wiring needs an HTTP client for the Vault API (the AppRole
         // authenticator uses IHttpClientFactory).
@@ -68,13 +61,6 @@ public static class VaultServiceCollectionExtensions
         services.AddSingleton<ISecretFileReader, SecretFileReader>();
         services.AddSingleton<IVaultAppRoleAuthenticator, VaultAppRoleAuthenticator>();
         services.AddSingleton<IVaultClientFactory, VaultClientFactory>();
-
-        // VaultService caches one ICredentialStore per AppRole role-name
-        // and refreshes its credentials in-place; each role gets a fresh
-        // store on first use, so the registration is transient + a
-        // factory delegate the consumer invokes per role.
-        services.AddTransient<ICredentialStore, CredentialStore>();
-        services.AddSingleton<Func<ICredentialStore>>(sp => sp.GetRequiredService<ICredentialStore>);
 
         services.AddSingleton<IResiliencePolicyFactory, ResiliencePolicyFactory>();
 
@@ -91,8 +77,12 @@ public static class VaultServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers an NpgsqlDataSource that automatically rotates its password
-    /// using Vault static roles.
+    /// Registers an NpgsqlDataSource with production-grade pool defaults.
+    /// When <c>Vault:DatabaseMode</c> is <c>StaticRole</c>, registers a
+    /// <see cref="NpgsqlDataSourceBuilder.UsePeriodicPasswordProvider"/> that
+    /// fetches rotated credentials from Vault's static database role endpoint.
+    /// When <c>None</c> (default — Neon / managed PG), uses the static password
+    /// from the connection string with no rotation.
     /// </summary>
     public static IServiceCollection AddVaultNpgsqlDataSource(
         this IServiceCollection services,
@@ -101,88 +91,130 @@ public static class VaultServiceCollectionExtensions
     {
         services.AddSingleton(sp =>
         {
-            var vault = sp.GetRequiredService<IVaultService>();
-            // Ensure production-grade pool defaults are applied if not in connection string.
-            // Npgsql default is 100 max / 0 min; we set sensible defaults for microservices.
             var csb = new NpgsqlConnectionStringBuilder(connectionString);
-            if (csb.MaxPoolSize == 100) csb.MaxPoolSize = 50;    // 50 per service avoids Neon/PG saturation
-            if (csb.MinPoolSize == 0) csb.MinPoolSize = 5;       // Keep 5 warm connections
-            if (csb.ConnectionIdleLifetime == 300) csb.ConnectionIdleLifetime = 120; // Recycle faster for serverless PG
+            if (csb.MaxPoolSize == 100) csb.MaxPoolSize = 50;
+            if (csb.MinPoolSize == 0) csb.MinPoolSize = 5;
+            if (csb.ConnectionIdleLifetime == 300) csb.ConnectionIdleLifetime = 120;
 
+            var config = sp.GetRequiredService<IConfiguration>();
+            var dbMode = config.GetValue("Vault:DatabaseMode", "None");
             var builder = new NpgsqlDataSourceBuilder(csb.ConnectionString);
-            builder.UsePeriodicPasswordProvider(async (sb, ct) =>
+
+            if (string.Equals(dbMode, "StaticRole", StringComparison.OrdinalIgnoreCase))
             {
-                var (_, securePass) = await vault.GetDatabaseCredentialsAsync(roleName, ct);
-                var pass = new System.Net.NetworkCredential(string.Empty, securePass).Password;
-                return pass;
-            }, TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(30));
+                var vault = sp.GetRequiredService<IVaultService>();
+                var logger = sp.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("Haworks.Vault.PeriodicPasswordProvider");
+                // F-01 fix: Track the last-known-good password from Vault so
+                // that on failure we return the LAST SUCCESSFUL Vault password,
+                // not the original static password (which Vault may have
+                // already rotated away from).
+                var lastKnownGoodPassword = csb.Password ?? string.Empty;
+
+                builder.UsePeriodicPasswordProvider(async (sb, ct) =>
+                {
+                    try
+                    {
+                        var (_, password) = await vault.GetDatabaseCredentialsAsync(roleName, ct);
+                        lastKnownGoodPassword = password;
+                        return password;
+                    }
+                    catch (Exception ex)
+                    {
+                        VaultMetrics.CredentialRotationFailure.Add(1, new KeyValuePair<string, object?>("role", roleName), new KeyValuePair<string, object?>("error_type", ex.GetType().Name));
+                        logger.LogWarning(ex,
+                            "Vault credential rotation failed for role {Role}; returning last-known-good password",
+                            roleName);
+                        return lastKnownGoodPassword;
+                    }
+                }, TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(30));
+            }
+            else if (string.Equals(dbMode, "AgentFile", StringComparison.OrdinalIgnoreCase))
+            {
+                var agentSecretsPath = config["Vault:Agent:SecretsPath"] ?? "/vault/secrets";
+                var serviceName = roleName.StartsWith("haworks-", StringComparison.OrdinalIgnoreCase)
+                    ? roleName["haworks-".Length..]
+                    : roleName;
+                var credFile = Path.Combine(agentSecretsPath, $"db-{serviceName}.json");
+                var logger = sp.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("Haworks.Vault.AgentFilePasswordProvider");
+                var fallbackPassword = csb.Password ?? string.Empty;
+                var lastKnownGoodPassword = fallbackPassword;
+
+                builder.UsePeriodicPasswordProvider(async (sb, ct) =>
+                {
+                    var result = await ReadAgentCredentialFileAsync(credFile, logger, ct).ConfigureAwait(false);
+
+                    if (result is null)
+                    {
+                        logger.LogDebug("Agent credential file {File} not found; using fallback", credFile);
+                        return lastKnownGoodPassword;
+                    }
+
+                    if (result.Value.Error is { } ex)
+                    {
+                        VaultMetrics.CredentialRotationFailure.Add(1,
+                            new KeyValuePair<string, object?>("role", serviceName),
+                            new KeyValuePair<string, object?>("error_type", ex.GetType().Name));
+                        logger.LogWarning(ex,
+                            "Failed to read agent credential file {File}; using last-known-good password",
+                            credFile);
+                        return lastKnownGoodPassword;
+                    }
+
+                    if (!string.IsNullOrEmpty(result.Value.Username))
+                        sb.Username = result.Value.Username;
+
+                    lastKnownGoodPassword = result.Value.Password;
+                    return result.Value.Password;
+                }, TimeSpan.FromMinutes(1), TimeSpan.FromSeconds(10));
+            }
+
             return builder.Build();
         });
         return services;
     }
 
     /// <summary>
-    /// Registers VaultCredentialProvider + VaultRotatingConnectionStringProvider
-    /// for zero-downtime Postgres credential rotation via Vault static roles.
-    /// The <see cref="IConnectionStringProvider"/> can be injected into DbContext
-    /// factories for dynamic connection string resolution.
+    /// Reads a Vault Agent-rendered credential JSON file containing
+    /// <c>{ "username": "...", "password": "..." }</c>.
+    /// Returns <c>null</c> when the file does not exist, or an error result
+    /// when the file is malformed. Extracted for unit-testability.
     /// </summary>
-    public static IServiceCollection AddVaultRotatingPostgres(
-        this IServiceCollection services,
-        string roleName,
-        IConfiguration configuration)
+    internal static async ValueTask<AgentCredentialResult?> ReadAgentCredentialFileAsync(
+        string filePath, ILogger? logger = null, CancellationToken ct = default)
     {
-        // Register IVaultCredentialProvider as singleton (it has internal caching).
-        // It resolves IVaultService (already registered by AddVaultIntegration) to
-        // obtain a VaultSharp IVaultClient via the existing factory infrastructure.
-        services.AddSingleton<IVaultCredentialProvider>(sp =>
+        if (!File.Exists(filePath))
+            return null;
+
+        try
         {
-            var factory = sp.GetRequiredService<IVaultClientFactory>();
-            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Options.VaultOptions>>().Value;
-            // Vault client creation runs on a thread-pool thread to avoid blocking the DI
-            // container build thread (no sync-over-async on the request path).
-            var handle = Task.Run(async () =>
-                await factory.CreateClientAsync(options, CancellationToken.None)
-                    .ConfigureAwait(false))
-#pragma warning disable HWK021 // Sync DI factory — no async overload
-                .GetAwaiter(); // Dispose-safe one-time DI init
-#pragma warning restore HWK021
-            var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
-                .CreateLogger<VaultCredentialProvider>();
-            return new VaultCredentialProvider(handle.GetResult().Client, logger);
-        });
+            var json = await File.ReadAllTextAsync(filePath, ct).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(json))
+                return new AgentCredentialResult(null, string.Empty,
+                    new InvalidOperationException($"Agent credential file {filePath} is empty (0 bytes) — Vault Agent may still be rendering"));
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
 
-        // The base connection string is the static one from config (without dynamic user/pass).
-        // Resolve by stripping the "haworks-" prefix to match the ConnectionStrings key.
-        var serviceKey = roleName.Replace("haworks-", string.Empty, StringComparison.Ordinal);
-        var baseConnectionString = configuration.GetConnectionString(serviceKey)
-            ?? configuration.GetConnectionString("DefaultConnection")
-            ?? string.Empty;
+            var password = root.GetProperty("password").GetString()
+                ?? throw new InvalidOperationException($"Agent credential file {filePath} has null password");
 
-        // Register the rotating provider as both IConnectionStringProvider and IHostedService.
-        services.AddSingleton<VaultRotatingConnectionStringProvider>(sp =>
+            string? username = null;
+            if (root.TryGetProperty("username", out var usernameEl))
+                username = usernameEl.GetString();
+
+            return new AgentCredentialResult(username, password, Error: null);
+        }
+        catch (Exception ex)
         {
-            var credProvider = sp.GetRequiredService<IVaultCredentialProvider>();
-            var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
-                .CreateLogger<VaultRotatingConnectionStringProvider>();
-            return new VaultRotatingConnectionStringProvider(credProvider, roleName, baseConnectionString, logger);
-        });
-        services.AddSingleton<IConnectionStringProvider>(sp =>
-            sp.GetRequiredService<VaultRotatingConnectionStringProvider>());
-        services.AddHostedService(sp =>
-            sp.GetRequiredService<VaultRotatingConnectionStringProvider>());
-
-        // Register Vault lease health check
-        services.AddHealthChecks()
-            .Add(new HealthCheckRegistration(
-                $"vault-lease-{roleName}",
-                sp => new VaultLeaseHealthCheck(
-                    sp.GetRequiredService<IVaultCredentialProvider>(),
-                    roleName,
-                    sp.GetRequiredService<ILogger<VaultLeaseHealthCheck>>()),
-                failureStatus: HealthStatus.Degraded,
-                tags: VaultHealthCheckTags));
-
-        return services;
+            logger?.LogWarning(ex, "Failed to parse agent credential file {File}", filePath);
+            return new AgentCredentialResult(null, string.Empty, ex);
+        }
     }
+
+    /// <summary>Result of reading a Vault Agent credential file.</summary>
+    internal readonly record struct AgentCredentialResult(
+        string? Username,
+        string Password,
+        Exception? Error);
 }

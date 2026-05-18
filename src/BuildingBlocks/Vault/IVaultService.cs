@@ -1,5 +1,3 @@
-using System.Security;
-
 namespace Haworks.BuildingBlocks.Vault;
 
 /// <summary>
@@ -21,7 +19,7 @@ public interface IVaultService : IDisposable
     /// dynamic users (haworks-catalog, haworks-orders, ...) are issued and
     /// renewed independently.
     /// </summary>
-    Task<(string Username, SecureString Password)> GetDatabaseCredentialsAsync(string roleName, CancellationToken ct = default);
+    Task<(string Username, string Password)> GetDatabaseCredentialsAsync(string roleName, CancellationToken ct = default);
 
     /// <summary>
     /// Forces a credential refresh for the named role from Vault.

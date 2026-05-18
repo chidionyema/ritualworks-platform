@@ -1,0 +1,95 @@
+{
+  "uid": "vault-health",
+  "title": "Vault Health",
+  "description": "Vault authentication, credential rotation, and KV read metrics",
+  "tags": ["haworks", "vault", "infrastructure"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Auth Success / Failure Rate",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(vault_auth_success_total[5m])) by (service)",
+          "legendFormat": "success ({{ service }})"
+        },
+        {
+          "expr": "sum(rate(vault_auth_failure_total[5m])) by (service)",
+          "legendFormat": "failure ({{ service }})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      },
+      "options": {
+        "stacking": { "mode": "normal" }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Credential Rotation Latency (p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(vault_credential_rotation_duration_seconds_bucket[5m])) by (le, role))",
+          "legendFormat": "{{ role }} p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "id": 3,
+      "title": "KV Read Latency (p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(vault_kv_read_duration_seconds_bucket[5m])) by (le, path))",
+          "legendFormat": "{{ path }} p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Rotation Failures (1h)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(increase(vault_credential_rotation_failure_total[1h]))",
+          "legendFormat": "failures"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 1, "color": "orange" },
+              { "value": 5, "color": "red" }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

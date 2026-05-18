@@ -42,4 +42,22 @@ public sealed class VaultOptions
     public bool EnableCrlChecks { get; set; } = true;
     public int TokenRenewalThresholdMinutes { get; set; } = 10;
     public int MaxRetryAttempts { get; set; } = 5;
+
+    /// <summary>
+    /// Vault Agent sidecar configuration. Used when DeliveryMode=AgentSidecar
+    /// or DatabaseMode=AgentFile.
+    /// </summary>
+    public AgentOptions Agent { get; set; } = new();
+}
+
+/// <summary>
+/// Options for Vault Agent sidecar secret delivery.
+/// </summary>
+public sealed class AgentOptions
+{
+    /// <summary>
+    /// Path where Vault Agent renders secret files.
+    /// Default: /vault/secrets
+    /// </summary>
+    public string SecretsPath { get; set; } = "/vault/secrets";
 }

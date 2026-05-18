@@ -1,9 +1,9 @@
 {
-  "_comment": "AppRole template — instantiated PER SERVICE by vault-init.sh. Substitution: {{service}} → service name from infra/vault/services.json. Each service gets its own AppRole bound to its own policy.",
+  "_comment": "AppRole template — instantiated PER SERVICE by vault-init.sh and seed.sh. Substitution: {{service}} → service name from infra/vault/services.json. Each service gets its own AppRole bound to its own policy.",
   "role_name_template":  "haworks-{{service}}",
   "token_policies":     ["svc-{{service}}"],
   "token_ttl":          "1h",
   "token_max_ttl":      "24h",
-  "secret_id_ttl":      "0",
-  "secret_id_num_uses": "0"
+  "secret_id_ttl":      "720h",
+  "secret_id_num_uses": "1"
 }

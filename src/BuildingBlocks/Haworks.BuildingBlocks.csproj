@@ -59,6 +59,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Haworks.BuildingBlocks.Unit" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../Contracts/Haworks.Contracts.csproj" />
   </ItemGroup>
 

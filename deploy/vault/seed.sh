@@ -167,28 +167,34 @@ else
     username="$VAULT_PG_OPERATOR_USERNAME" \
     password="$VAULT_PG_OPERATOR_PASSWORD" >/dev/null
 
-  # Per-bounded-context dynamic roles. Simpler creation_statements than the
-  # dev manifest's role-statements.json because the prod sandbox Postgres
-  # has no <db>_owner group roles (single shared user, single database).
-  # Issued users get LOGIN + CONNECT + USAGE on public schema only.
+  # Per-bounded-context STATIC roles. Each role maps to a fixed Postgres
+  # username (created by the vault-pg init). Vault rotates only the password
+  # on the rotation_period schedule. The C# code calls GetStaticCredentialsAsync
+  # which reads from /v1/database/static-creds/{role}.
+  #
+  # Static (not dynamic) because:
+  #   - App servers are long-lived; one username per bounded context is correct
+  #   - Dynamic roles create ephemeral usernames that break EF migrations
+  #   - GetStaticCredentialsAsync matches database/static-roles/ (not database/roles/)
+  #   - Dev vault-init.sh already uses database/static-roles/ — prod must match
+  DB_ROTATION_PERIOD=$(jq -r '.rotation_period' "$DB_ROLES")
   ROLE_COUNT=$(jq -r '.roles | length' "$DB_ROLES")
   j=0
   while [ "$j" -lt "$ROLE_COUNT" ]; do
     ROLE_NAME=$(jq -r ".roles[$j].role_name" "$DB_ROLES")
+    USERNAME=$(jq -r ".roles[$j].username"  "$DB_ROLES")
 
-    vault write "database/roles/$ROLE_NAME" \
+    vault write "database/static-roles/$ROLE_NAME" \
       db_name=vault-pg \
-      creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; GRANT CONNECT ON DATABASE postgres TO \"{{name}}\"; GRANT USAGE ON SCHEMA public TO \"{{name}}\";" \
-      revocation_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
-      default_ttl="$DB_DEFAULT_TTL" \
-      max_ttl="$DB_MAX_TTL" >/dev/null
-    echo "[seed] configured dynamic role $ROLE_NAME"
+      username="$USERNAME" \
+      rotation_period="$DB_ROTATION_PERIOD" >/dev/null
+    echo "[seed] configured static role $ROLE_NAME (username=$USERNAME)"
 
     j=$((j + 1))
   done
 
   echo "[seed] database engine ready. Verify with:"
-  echo "[seed]   vault read database/creds/haworks-identity"
+  echo "[seed]   vault read database/static-creds/haworks-identity"
 fi
 
 # ---------------------------------------------------------------------------

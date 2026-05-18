@@ -1,0 +1,38 @@
+groups:
+  - name: vault-health
+    rules:
+      - alert: VaultCredentialRotationFailing
+        expr: rate(vault_credential_rotation_failure_total[5m]) > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Vault credential rotation failing for {{ $labels.role }}"
+          description: "Credential rotation for role {{ $labels.role }} has been failing for 10+ minutes — database connections will expire"
+
+      - alert: VaultCredentialRotationSustainedFailure
+        expr: increase(vault_credential_rotation_failure_total[30m]) > 5
+        for: 30m
+        labels:
+          severity: page
+        annotations:
+          summary: "Sustained Vault credential rotation failure for {{ $labels.role }}"
+          description: "Credential rotation for role {{ $labels.role }} has failed >5 times in the last 30 minutes — immediate investigation required"
+
+      - alert: VaultAuthFailureSpike
+        expr: rate(vault_auth_failure_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Vault authentication failure spike on {{ $labels.service }}"
+          description: "Service {{ $labels.service }} is failing Vault auth at {{ $value | humanize }}/s — possible secret rotation issue or Vault outage"
+
+      - alert: VaultKvReadFailureSpike
+        expr: rate(vault_kv_read_failure_total[5m]) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Vault KV read failures elevated for path {{ $labels.path }}"
+          description: "KV reads for {{ $labels.path }} failing at {{ $value | humanize }}/s — check Vault connectivity and ACL policies"

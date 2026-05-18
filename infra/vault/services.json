@@ -5,7 +5,6 @@
     { "name": "catalog",                 "has_db": true,  "db_role": "haworks-catalog"                },
     { "name": "orders",                  "has_db": true,  "db_role": "haworks-orders"                 },
     { "name": "payments",                "has_db": true,  "db_role": "haworks-payments"               },
-    { "name": "content",                 "has_db": true,  "db_role": "haworks-content"                },
     { "name": "checkout-orchestrator",   "has_db": true,  "db_role": "haworks-checkout-orchestrator" },
     { "name": "notifications",           "has_db": true,  "db_role": "haworks-notifications"           },
     { "name": "bff-web",                 "has_db": false                                              }

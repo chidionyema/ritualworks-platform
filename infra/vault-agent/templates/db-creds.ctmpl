@@ -1,0 +1,10 @@
+{{- /* Vault Agent template: renders DB credentials as JSON for AgentFile mode.
+       Uses VAULT_DB_ROLE env var (set per-service in K8s pod spec or agent config).
+       Falls back to SERVICE_ROLE placeholder for documentation.
+       The app reads /vault/secrets/db-{service}.json via UsePeriodicPasswordProvider. */ -}}
+{{ with secret (printf "database/static-creds/%s" (env "VAULT_DB_ROLE" | default "SERVICE_ROLE")) }}
+{
+  "username": "{{ .Data.username }}",
+  "password": "{{ .Data.password }}"
+}
+{{ end }}
