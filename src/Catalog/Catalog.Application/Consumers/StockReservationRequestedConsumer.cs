@@ -152,7 +152,7 @@ public sealed class StockReservationRequestedConsumer(
             OrderId = evt.OrderId,
             SagaId = evt.SagaId,
             UserId = evt.UserId,
-            TotalAmount = evt.TotalAmount,
+            TotalAmountCents = evt.TotalAmountCents,
             Currency = evt.Currency,
             CustomerEmail = evt.CustomerEmail,
             IdempotencyKey = evt.IdempotencyKey,

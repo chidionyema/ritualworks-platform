@@ -55,7 +55,13 @@ public class OrderDbContext : DbContext
             entity.Property(o => o.SagaId).IsRequired();
             entity.Property(o => o.IdempotencyKey).HasMaxLength(200).IsRequired();
             entity.Property(o => o.CustomerEmail).HasMaxLength(254).IsRequired();
-            entity.Property(o => o.TotalAmount).HasColumnType("numeric(18,2)").IsRequired();
+            entity.Property(o => o.TotalAmountCents)
+                .HasColumnName("TotalAmount")
+                .HasColumnType("numeric(18,2)")
+                .HasConversion(
+                    cents => cents / 100m,
+                    dec => (long)Math.Round(dec * 100m, 0))
+                .IsRequired();
             entity.Property(o => o.Currency).HasMaxLength(3).IsRequired();
             entity.Property(o => o.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.Property(o => o.AbandonReason).HasMaxLength(500);
@@ -95,7 +101,13 @@ public class OrderDbContext : DbContext
             entity.ToTable("OrderItems");
             entity.HasKey(i => i.Id);
             entity.Property(i => i.ProductName).HasMaxLength(200).IsRequired();
-            entity.Property(i => i.UnitPrice).HasColumnType("numeric(18,2)").IsRequired();
+            entity.Property(i => i.UnitPriceCents)
+                .HasColumnName("UnitPrice")
+                .HasColumnType("numeric(18,2)")
+                .HasConversion(
+                    cents => cents / 100m,
+                    dec => (long)Math.Round(dec * 100m, 0))
+                .IsRequired();
 
             entity.HasOne(i => i.Order)
                 .WithMany(o => o.Items)

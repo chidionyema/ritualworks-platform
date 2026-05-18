@@ -55,7 +55,7 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
             .FirstOrDefault(p => p.Context.Message.SagaId == sagaId);
         stockReq.Should().NotBeNull();
         stockReq!.Context.Message.OrderId.Should().Be(orderId);
-        stockReq.Context.Message.TotalAmount.Should().Be(25.50m);
+        stockReq.Context.Message.TotalAmountCents.Should().Be(2550L);
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
             OrderId = orderId,
             SagaId = sagaId,
             UserId = "user-1",
-            TotalAmount = 25.50m,
+            TotalAmountCents = 2550L,
             Currency = "USD",
             CustomerEmail = "buyer@example.com",
             Items = new[] { new StockReservationItem
@@ -80,7 +80,7 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
             }},
             OrderLineItems = new[] { new CheckoutItemData
             {
-                ProductId = Guid.NewGuid(), ProductName = "Widget", Quantity = 1, UnitPrice = 25.50m,
+                ProductId = Guid.NewGuid(), ProductName = "Widget", Quantity = 1, UnitPriceCents = 2550L,
             }},
         });
 
@@ -98,7 +98,7 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
             OrderId = orderId, SagaId = sagaId, PaymentId = paymentId,
             UserId = "user-1",
             SessionId = "sess_test", CheckoutUrl = "https://stripe.test/sess_test",
-            Provider = "Stripe", Amount = 25.50m, Currency = "USD",
+            Provider = "Stripe", AmountCents = 2550L, Currency = "USD",
         });
         await PollUntilAsync(() => string.Equals(SagaStateOrNull(sagaId), "ReadyForPayment", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
@@ -106,7 +106,7 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
         await PublishAsync(new PaymentCompletedEvent
         {
             PaymentId = paymentId, OrderId = orderId, SagaId = sagaId,
-            Amount = 25.50m, Currency = "USD", Provider = "Stripe",
+            AmountCents = 2550L, Currency = "USD", Provider = "Stripe",
             TransactionReference = "pi_test",
         });
         await PollUntilAsync(() => string.Equals(SagaStateOrNull(sagaId), "Completed", StringComparison.Ordinal) || string.Equals(SagaStateOrNull(sagaId), "Final", StringComparison.Ordinal),
@@ -164,14 +164,14 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
         await PublishAsync(new StockReservedEvent
         {
             OrderId = orderId, SagaId = sagaId, UserId = "user-1",
-            TotalAmount = 25.50m, Currency = "USD", CustomerEmail = "buyer@example.com",
+            TotalAmountCents = 2550L, Currency = "USD", CustomerEmail = "buyer@example.com",
             Items = new[] { new StockReservationItem
             {
                 ProductId = Guid.NewGuid(), ProductName = "Widget", Quantity = 1, RemainingStock = 9,
             }},
             OrderLineItems = new[] { new CheckoutItemData
             {
-                ProductId = Guid.NewGuid(), ProductName = "Widget", Quantity = 1, UnitPrice = 25.50m,
+                ProductId = Guid.NewGuid(), ProductName = "Widget", Quantity = 1, UnitPriceCents = 2550L,
             }},
         });
         await PollUntilAsync(() => string.Equals(SagaStateOrNull(sagaId), "StockReservedState", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
@@ -204,14 +204,14 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
         await PublishAsync(new StockReservedEvent
         {
             OrderId = orderId, SagaId = sagaId, UserId = "user-1",
-            TotalAmount = 25.50m, Currency = "USD", CustomerEmail = "buyer@example.com",
+            TotalAmountCents = 2550L, Currency = "USD", CustomerEmail = "buyer@example.com",
             Items = new[] { new StockReservationItem
             {
                 ProductId = Guid.NewGuid(), ProductName = "Widget", Quantity = 1, RemainingStock = 9,
             }},
             OrderLineItems = new[] { new CheckoutItemData
             {
-                ProductId = Guid.NewGuid(), ProductName = "Widget", Quantity = 1, UnitPrice = 25.50m,
+                ProductId = Guid.NewGuid(), ProductName = "Widget", Quantity = 1, UnitPriceCents = 2550L,
             }},
         });
         await PollUntilAsync(() => string.Equals(SagaStateOrNull(sagaId), "StockReservedState", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
@@ -222,7 +222,7 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
             OrderId = orderId, SagaId = sagaId, PaymentId = paymentId,
             UserId = "user-1",
             SessionId = "sess_x", CheckoutUrl = "https://stripe.test/sess_x",
-            Provider = "Stripe", Amount = 25.50m, Currency = "USD",
+            Provider = "Stripe", AmountCents = 2550L, Currency = "USD",
         });
         await PollUntilAsync(() => string.Equals(SagaStateOrNull(sagaId), "ReadyForPayment", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
@@ -230,8 +230,8 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
         await PublishAsync(new PaymentAmountMismatchEvent
         {
             PaymentId = paymentId, OrderId = orderId,
-            Provider = "Stripe", ActualPaid = 75m, ExpectedTotal = 25.50m,
-            Difference = 49.50m, Reason = "captured 75; expected 25.50",
+            Provider = "Stripe", ActualPaidCents = 75m, ExpectedTotalCents = 2550L,
+            DifferenceCents = 4950L, Reason = "captured 75; expected 25.50",
         });
         await PollUntilAsync(() => string.Equals(SagaStateOrNull(sagaId), "RequiresReview", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
@@ -259,14 +259,14 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
         await PublishAsync(new StockReservedEvent
         {
             OrderId = orderId, SagaId = sagaId, UserId = "user-1",
-            TotalAmount = 25.50m, Currency = "USD", CustomerEmail = "buyer@example.com",
+            TotalAmountCents = 2550L, Currency = "USD", CustomerEmail = "buyer@example.com",
             Items = new[] { new StockReservationItem
             {
                 ProductId = Guid.NewGuid(), ProductName = "Widget", Quantity = 1, RemainingStock = 9,
             }},
             OrderLineItems = new[] { new CheckoutItemData
             {
-                ProductId = Guid.NewGuid(), ProductName = "Widget", Quantity = 1, UnitPrice = 25.50m,
+                ProductId = Guid.NewGuid(), ProductName = "Widget", Quantity = 1, UnitPriceCents = 2550L,
             }},
         });
         await PollUntilAsync(() => string.Equals(SagaStateOrNull(sagaId), "StockReservedState", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
@@ -289,7 +289,7 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
             OrderId = orderId, SagaId = sagaId, PaymentId = paymentId,
             UserId = "user-1",
             SessionId = "sess_resume", CheckoutUrl = "https://stripe.test/sess_resume",
-            Provider = "Stripe", Amount = 25.50m, Currency = "USD",
+            Provider = "Stripe", AmountCents = 2550L, Currency = "USD",
         });
         await PollUntilAsync(() => string.Equals(SagaStateOrNull(sagaId), "ReadyForPayment", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
@@ -308,10 +308,10 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
             OrderId = orderId,
             UserId = userId,
             CustomerEmail = "buyer@example.com",
-            TotalAmount = 25.50m,
+            TotalAmountCents = 2550L,
             Items = new[] { new CheckoutItemData
             {
-                ProductId = Guid.NewGuid(), ProductName = "Widget", Quantity = 1, UnitPrice = 25.50m,
+                ProductId = Guid.NewGuid(), ProductName = "Widget", Quantity = 1, UnitPriceCents = 2550L,
             }},
             IdempotencyKey = "key-" + Guid.NewGuid().ToString("N"),
             IsGuest = false,

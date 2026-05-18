@@ -51,7 +51,7 @@ public class CheckoutDbContext : DbContext, ICheckoutDbContext
             entity.Property(s => s.CurrentState).HasMaxLength(64).IsRequired();
             entity.Property(s => s.UserId).HasMaxLength(450).IsRequired();
             entity.Property(s => s.CustomerEmail).HasMaxLength(254).IsRequired();
-            entity.Property(s => s.TotalAmount).HasColumnType("numeric(18,2)");
+            entity.Property(s => s.TotalAmountCents).HasColumnType("bigint");
             entity.Property(s => s.Currency).HasMaxLength(3).IsRequired();
             entity.Property(s => s.IdempotencyKey).HasMaxLength(200);
             entity.Property(s => s.LineItemsJson).HasColumnType("jsonb");

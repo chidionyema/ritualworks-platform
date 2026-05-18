@@ -28,7 +28,7 @@ public sealed record StockReservedEvent : DomainEvent
     public required string UserId { get; init; }
 
     /// <summary>The total amount due for the order, including tax.</summary>
-    public required decimal TotalAmount { get; init; }
+    public required long TotalAmountCents { get; init; }
 
     /// <summary>The order currency (e.g., "USD").</summary>
     public required string Currency { get; init; }

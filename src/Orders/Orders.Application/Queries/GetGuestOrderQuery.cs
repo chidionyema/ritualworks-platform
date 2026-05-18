@@ -46,7 +46,7 @@ internal sealed class GetGuestOrderQueryHandler(
             order.UserId,
             order.SagaId,
             order.CustomerEmail,
-            order.TotalAmount,
+            order.TotalAmountCents / 100m,
             order.Currency,
             order.Status.ToString(),
             order.PaymentId,
@@ -57,8 +57,8 @@ internal sealed class GetGuestOrderQueryHandler(
                 i.ProductId,
                 i.ProductName,
                 i.Quantity,
-                i.UnitPrice,
-                i.Quantity * i.UnitPrice)).ToList(),
+                i.UnitPriceCents / 100m,
+                (i.Quantity * i.UnitPriceCents) / 100m)).ToList(),
             guestInfo.OrderToken);
 
         return Result.Success(dto);

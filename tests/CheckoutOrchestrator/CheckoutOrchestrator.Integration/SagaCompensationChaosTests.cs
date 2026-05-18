@@ -93,11 +93,11 @@ public sealed class SagaCompensationChaosTests : IClassFixture<SagaCompensationF
             OrderId = orderId,
             UserId = "user-chaos",
             CustomerEmail = "chaos@example.com",
-            TotalAmount = 30m,
+            TotalAmountCents = 3000L,
             Items = new[] { new CheckoutItemData
             {
                 ProductId = productId, ProductName = "Widget",
-                Quantity = reservedQuantity, UnitPrice = 10m,
+                Quantity = reservedQuantity, UnitPriceCents = 1000L,
             }},
             IdempotencyKey = "chaos-key",
             IsGuest = false,
@@ -110,7 +110,7 @@ public sealed class SagaCompensationChaosTests : IClassFixture<SagaCompensationF
         await PublishAsync(new StockReservedEvent
         {
             OrderId = orderId, SagaId = sagaId, UserId = "user-chaos",
-            TotalAmount = 30m, Currency = "USD", CustomerEmail = "chaos@example.com",
+            TotalAmountCents = 3000L, Currency = "USD", CustomerEmail = "chaos@example.com",
             Items = new[] { new Haworks.Contracts.Catalog.StockReservationItem
             {
                 ProductId = productId, ProductName = "Widget",
@@ -119,7 +119,7 @@ public sealed class SagaCompensationChaosTests : IClassFixture<SagaCompensationF
             OrderLineItems = new[] { new CheckoutItemData
             {
                 ProductId = productId, ProductName = "Widget",
-                Quantity = reservedQuantity, UnitPrice = 10m,
+                Quantity = reservedQuantity, UnitPriceCents = 1000L,
             }},
         });
         await PollUntilAsync(() => string.Equals(SagaStateOrNull(sagaId), "StockReservedState", StringComparison.Ordinal), TimeSpan.FromSeconds(15));

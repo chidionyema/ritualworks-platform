@@ -19,8 +19,8 @@ public sealed record PaymentCompletedEvent : DomainEvent
     /// <summary>The saga correlation ID for distributed tracing.</summary>
     public required Guid SagaId { get; init; }
 
-    /// <summary>The amount paid.</summary>
-    public required decimal Amount { get; init; }
+    /// <summary>The amount paid in cents.</summary>
+    public required long AmountCents { get; init; }
 
     /// <summary>The currency code (e.g., "USD", "EUR").</summary>
     public required string Currency { get; init; }

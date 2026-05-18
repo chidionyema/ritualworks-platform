@@ -80,7 +80,7 @@ public sealed class PaymentExpiryTests : IClassFixture<CheckoutWebAppFactory>, I
             OrderId = orderId, SagaId = sagaId, PaymentId = paymentId,
             UserId = "user-1",
             SessionId = "sess_test", CheckoutUrl = "https://stripe.test/sess_test",
-            Provider = "Stripe", Amount = 25.50m, Currency = "USD",
+            Provider = "Stripe", AmountCents = 2550L, Currency = "USD",
         });
         await PollUntilAsync(() => string.Equals(SagaStateOrNull(sagaId), "ReadyForPayment", StringComparison.Ordinal), TimeSpan.FromSeconds(15));
 
@@ -143,10 +143,10 @@ public sealed class PaymentExpiryTests : IClassFixture<CheckoutWebAppFactory>, I
         await PublishAsync(new CheckoutInitiatedEvent
         {
             SagaId = sagaId, OrderId = orderId, UserId = "user-1",
-            CustomerEmail = "buyer@example.com", TotalAmount = 25.50m,
+            CustomerEmail = "buyer@example.com", TotalAmountCents = 2550L,
             Items = new[] { new CheckoutItemData
             {
-                ProductId = productId, ProductName = "Widget", Quantity = 1, UnitPrice = 25.50m,
+                ProductId = productId, ProductName = "Widget", Quantity = 1, UnitPriceCents = 2550L,
             }},
             IdempotencyKey = "key-" + Guid.NewGuid().ToString("N"),
             IsGuest = false,
@@ -156,14 +156,14 @@ public sealed class PaymentExpiryTests : IClassFixture<CheckoutWebAppFactory>, I
         await PublishAsync(new StockReservedEvent
         {
             OrderId = orderId, SagaId = sagaId, UserId = "user-1",
-            TotalAmount = 25.50m, Currency = "USD", CustomerEmail = "buyer@example.com",
+            TotalAmountCents = 2550L, Currency = "USD", CustomerEmail = "buyer@example.com",
             Items = new[] { new StockReservationItem
             {
                 ProductId = productId, ProductName = "Widget", Quantity = 1, RemainingStock = 9,
             }},
             OrderLineItems = new[] { new CheckoutItemData
             {
-                ProductId = productId, ProductName = "Widget", Quantity = 1, UnitPrice = 25.50m,
+                ProductId = productId, ProductName = "Widget", Quantity = 1, UnitPriceCents = 2550L,
             }},
         });
         await PollUntilAsync(() => string.Equals(SagaStateOrNull(sagaId), "StockReservedState", StringComparison.Ordinal), TimeSpan.FromSeconds(15));

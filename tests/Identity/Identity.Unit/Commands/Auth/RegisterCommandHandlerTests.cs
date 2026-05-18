@@ -90,7 +90,7 @@ public class RegisterCommandHandlerTests : TestBase
             .ReturnsAsync(IdentityResult.Success);
 
         _jwtTokenServiceMock
-            .Setup(j => j.GenerateTokenAsync(It.IsAny<User>(), It.IsAny<DateTime>()))
+            .Setup(j => j.GenerateTokenAsync(It.IsAny<User>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateTestToken());
 
         _jwtTokenServiceMock

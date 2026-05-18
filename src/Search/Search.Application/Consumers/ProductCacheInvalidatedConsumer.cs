@@ -99,7 +99,7 @@ public sealed class ProductCacheInvalidatedConsumer : IConsumer<ProductCacheInva
                     UserId = match.UserId,
                     ProductId = fetched.Id,
                     ProductName = fetched.Name,
-                    UnitPrice = fetched.UnitPrice,
+                    UnitPriceCents = (long)Math.Round(fetched.UnitPrice * 100m, 0),
                     MatchedAt = DateTimeOffset.UtcNow
                 }, context.CancellationToken).ConfigureAwait(false);
             }

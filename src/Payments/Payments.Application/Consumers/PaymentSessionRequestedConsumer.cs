@@ -54,7 +54,7 @@ public sealed class PaymentSessionRequestedConsumer(
         using var activity = PaymentsActivities.Source.StartActivity("payments.session.create");
         activity?.SetTag("order.id", evt.OrderId);
         activity?.SetTag("saga.id", evt.SagaId);
-        activity?.SetTag("payment.amount_cents", (long)Math.Round(evt.Amount * 100m, 0, MidpointRounding.AwayFromZero));
+        activity?.SetTag("payment.amount_cents", evt.AmountCents);
         activity?.SetTag("payment.currency", evt.Currency);
         activity?.SetTag("payment.provider", isDemoMode ? "demo-mock" : "stripe");
         activity?.SetTag("payment.demo_mode", isDemoMode);
@@ -75,8 +75,8 @@ public sealed class PaymentSessionRequestedConsumer(
             var payment = Haworks.Payments.Domain.Payment.Create(
                 evt.OrderId,
                 evt.UserId,
-                evt.Amount,
-                evt.Tax,
+                evt.AmountCents,
+                evt.TaxCents,
                 evt.Currency,
                 Haworks.Contracts.Payments.PaymentProvider.Stripe,
                 evt.SagaId);
@@ -117,7 +117,7 @@ public sealed class PaymentSessionRequestedConsumer(
                 SessionId = result.SessionId,
                 CheckoutUrl = result.SessionUrl,
                 Provider = Haworks.Contracts.Payments.PaymentProvider.Stripe.ToString(),
-                Amount = evt.Amount,
+                AmountCents = evt.AmountCents,
                 Currency = evt.Currency
             }, context.CancellationToken);
 
@@ -162,7 +162,7 @@ public sealed class PaymentSessionRequestedConsumer(
             SessionId = sessionId,
             CheckoutUrl = $"{brandOptions.Value.PrimaryUrl.TrimEnd('/')}/checkout/{sessionId}",
             Provider = provider,
-            Amount = evt.Amount,
+            AmountCents = evt.AmountCents,
             Currency = evt.Currency
         }, context.CancellationToken);
 
@@ -200,7 +200,7 @@ public sealed class PaymentSessionRequestedConsumer(
                 PaymentId = paymentId,
                 OrderId = evt.OrderId,
                 SagaId = evt.SagaId,
-                Amount = evt.Amount,
+                AmountCents = evt.AmountCents,
                 Currency = evt.Currency,
                 Provider = provider,
                 TransactionReference = $"demo-ref-{Guid.NewGuid():N}"

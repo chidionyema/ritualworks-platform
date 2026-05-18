@@ -15,11 +15,11 @@ public class StartCheckoutCommandValidatorTests
         OrderId: Guid.NewGuid(),
         UserId: "user-123",
         CustomerEmail: "test@example.com",
-        TotalAmount: 100.00m,
+        TotalAmountCents: 10000L,
         IdempotencyKey: "key-123",
         Items: new List<CheckoutItemData>
         {
-            new() { ProductId = Guid.NewGuid(), ProductName = "Product 1", Quantity = 1, UnitPrice = 100.00m }
+            new() { ProductId = Guid.NewGuid(), ProductName = "Product 1", Quantity = 1, UnitPriceCents = 10000L }
         }
     );
 
@@ -53,9 +53,9 @@ public class StartCheckoutCommandValidatorTests
     [Fact]
     public void Validate_WithNegativeAmount_ShouldHaveError()
     {
-        var command = CreateValidCommand() with { TotalAmount = -1.00m };
+        var command = CreateValidCommand() with { TotalAmountCents = -1L };
         var result = _validator.TestValidate(command);
-        result.ShouldHaveValidationErrorFor(x => x.TotalAmount);
+        result.ShouldHaveValidationErrorFor(x => x.TotalAmountCents);
     }
 
     [Fact]
@@ -69,12 +69,12 @@ public class StartCheckoutCommandValidatorTests
     [Fact]
     public void Validate_WithTooManyItems_ShouldHaveError()
     {
-        var items = Enumerable.Range(0, 101).Select(_ => new CheckoutItemData 
-        { 
-            ProductId = Guid.NewGuid(), 
-            ProductName = "P", 
-            Quantity = 1, 
-            UnitPrice = 1 
+        var items = Enumerable.Range(0, 101).Select(_ => new CheckoutItemData
+        {
+            ProductId = Guid.NewGuid(),
+            ProductName = "P",
+            Quantity = 1,
+            UnitPriceCents = 1L
         }).ToList();
 
         var command = CreateValidCommand() with { Items = items };
@@ -89,7 +89,7 @@ public class StartCheckoutCommandValidatorTests
         { 
             Items = new List<CheckoutItemData> 
             { 
-                new() { ProductId = Guid.Empty, ProductName = "", Quantity = 0, UnitPrice = -1 } 
+                new() { ProductId = Guid.Empty, ProductName = "", Quantity = 0, UnitPriceCents = -1L } 
             } 
         };
         var result = _validator.TestValidate(command);

@@ -11,7 +11,7 @@ namespace Haworks.Payments.Unit;
 public sealed class PaymentTests
 {
     private static Payment NewPayment(decimal amount = 100m) =>
-        Payment.Create(Guid.NewGuid(), "user-1", amount, tax: 0m, "USD",
+        Payment.Create(Guid.NewGuid(), "user-1", amount, taxCents: 0m, "USD",
             PaymentProvider.Stripe, sagaId: Guid.NewGuid());
 
     [Fact]

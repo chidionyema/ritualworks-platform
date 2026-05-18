@@ -25,7 +25,7 @@ public sealed record ConfirmReservationCommand(
     Guid ReservationId,
     string UserId,
     string CustomerEmail,
-    decimal TotalAmount,
+    long TotalAmountCents,
     string Currency,
     string? ClientIdempotencyKey,
     string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result<ConfirmReservationResultDto>>;
@@ -103,7 +103,7 @@ internal sealed class ConfirmReservationCommandHandler(
             OrderId = orderId,
             SagaId = sagaId,
             UserId = request.UserId,
-            TotalAmount = request.TotalAmount,
+            TotalAmountCents = request.TotalAmountCents,
             Currency = request.Currency,
             CustomerEmail = request.CustomerEmail,
             IdempotencyKey = request.ClientIdempotencyKey,
@@ -113,7 +113,7 @@ internal sealed class ConfirmReservationCommandHandler(
                 ProductId = i.ProductId,
                 ProductName = i.ProductName,
                 Quantity = i.Quantity,
-                UnitPrice = 0m, // Sync flow does not capture per-line prices.
+                UnitPriceCents = 0, // Sync flow does not capture per-line prices.
             }).ToList(),
         }, ct);
 

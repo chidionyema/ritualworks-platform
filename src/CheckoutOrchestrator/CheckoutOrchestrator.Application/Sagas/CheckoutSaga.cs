@@ -84,7 +84,7 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                     sagaState.OrderId = msg.OrderId;
                     sagaState.UserId = msg.UserId;
                     sagaState.CustomerEmail = msg.CustomerEmail;
-                    sagaState.TotalAmount = msg.TotalAmount;
+                    sagaState.TotalAmountCents = msg.TotalAmountCents;
                     sagaState.Currency = msg.Currency ?? throw new InvalidOperationException("Currency is required on CheckoutStartedEvent");
                     sagaState.IdempotencyKey = msg.IdempotencyKey;
                     sagaState.LineItemsJson = JsonSerializer.Serialize(msg.Items);
@@ -96,7 +96,7 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                     SagaId = ctx.Saga.CorrelationId,
                     UserId = ctx.Message.UserId,
                     CustomerEmail = ctx.Message.CustomerEmail,
-                    TotalAmount = ctx.Message.TotalAmount,
+                    TotalAmountCents = ctx.Message.TotalAmountCents,
                     Currency = ctx.Saga.Currency,
                     Items = ctx.Message.Items,
                     IdempotencyKey = ctx.Message.IdempotencyKey,
@@ -113,7 +113,7 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                 {
                     OrderId = ctx.Saga.OrderId,
                     SagaId = ctx.Saga.CorrelationId,
-                    Amount = ctx.Saga.TotalAmount,
+                    AmountCents = ctx.Saga.TotalAmountCents,
                     Currency = ctx.Saga.Currency,
                     UserId = ctx.Saga.UserId,
                     CustomerEmail = ctx.Saga.CustomerEmail,
@@ -121,7 +121,7 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                         .Select(li => new PaymentLineItemData
                         {
                             Name = li.ProductName,
-                            UnitAmountCents = (long)Math.Round(li.UnitPrice * 100m, 0, MidpointRounding.AwayFromZero),
+                            UnitAmountCents = li.UnitPriceCents,
                             Quantity = li.Quantity,
                         }).ToList(),
                     SuccessUrl = options.SuccessUrl,
@@ -229,7 +229,7 @@ public sealed class CheckoutSaga : MassTransitStateMachine<CheckoutSagaState>
                 .TransitionTo(Abandoned),
             When(PaymentAmountMismatch)
                 .Then(ctx => ctx.Saga.FailureReason =
-                    $"PaymentAmountMismatch: expected={ctx.Message.ExpectedTotal}, actual={ctx.Message.ActualPaid}")
+                    $"PaymentAmountMismatch: expected={ctx.Message.ExpectedTotalCents / 100m:F2}, actual={ctx.Message.ActualPaidCents / 100m:F2}")
                 .Unschedule(PaymentExpirySchedule)
                 .PublishAsync(ctx => ctx.Init<StockReleaseRequestedEvent>(new StockReleaseRequestedEvent
                 {

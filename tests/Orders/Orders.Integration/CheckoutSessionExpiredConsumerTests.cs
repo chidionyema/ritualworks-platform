@@ -76,7 +76,7 @@ public sealed class CheckoutSessionExpiredConsumerTests(OrdersWebAppFactory fact
             PaymentId = Guid.NewGuid(),
             OrderId = orderId,
             SagaId = Guid.NewGuid(),
-            Amount = 25.50m,
+            AmountCents = 2550L,
             Currency = "USD",
             Provider = "Stripe",
             TransactionReference = "pi_xyz",

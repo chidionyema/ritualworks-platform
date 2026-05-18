@@ -23,7 +23,7 @@ public sealed record PaymentVerifiedEvent : DomainEvent
     public string? TransactionReference { get; init; }
 
     /// <summary>The verified payment amount.</summary>
-    public required decimal Amount { get; init; }
+    public required long AmountCents { get; init; }
 
     /// <summary>The currency code.</summary>
     public required string Currency { get; init; }

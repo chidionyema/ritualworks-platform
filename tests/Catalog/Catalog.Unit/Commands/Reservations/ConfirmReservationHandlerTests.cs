@@ -38,7 +38,7 @@ public sealed class ConfirmReservationHandlerTests : TestBase
             .ReturnsAsync((StockReservation?)null);
 
         var result = await _handler.Handle(
-            new ConfirmReservationCommand(id, "u1", "u1@x.com", 10m, "USD", null),
+            new ConfirmReservationCommand(id, "u1", "u1@x.com", 1000L, "USD", null),
             CancellationToken.None);
 
         Assert.True(result.IsFailure);
@@ -56,7 +56,7 @@ public sealed class ConfirmReservationHandlerTests : TestBase
             .ReturnsAsync(reservation);
 
         var result = await _handler.Handle(
-            new ConfirmReservationCommand(reservation.Id, "u1", "u1@x.com", 10m, "USD", null),
+            new ConfirmReservationCommand(reservation.Id, "u1", "u1@x.com", 1000L, "USD", null),
             CancellationToken.None);
 
         Assert.True(result.IsFailure);
@@ -75,7 +75,7 @@ public sealed class ConfirmReservationHandlerTests : TestBase
             .ReturnsAsync(reservation);
 
         var result = await _handler.Handle(
-            new ConfirmReservationCommand(reservation.Id, "u1", "u1@x.com", 10m, "USD", null),
+            new ConfirmReservationCommand(reservation.Id, "u1", "u1@x.com", 1000L, "USD", null),
             CancellationToken.None);
 
         Assert.True(result.IsFailure);
@@ -112,7 +112,7 @@ public sealed class ConfirmReservationHandlerTests : TestBase
             .Returns(Task.CompletedTask);
 
         var result = await _handler.Handle(
-            new ConfirmReservationCommand(reservation.Id, "u1", "u1@x.com", 30m, "USD", "key-1"),
+            new ConfirmReservationCommand(reservation.Id, "u1", "u1@x.com", 3000L, "USD", "key-1"),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);

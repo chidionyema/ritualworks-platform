@@ -145,7 +145,7 @@ public sealed class WebhookIdempotencyTests : IAsyncLifetime
             orderId: Guid.NewGuid(),
             userId: "user-test",
             amount: amount,
-            tax: 0m,
+            taxCents: 0m,
             currency: "USD",
             provider: PaymentProvider.Stripe,
             sagaId: Guid.NewGuid());

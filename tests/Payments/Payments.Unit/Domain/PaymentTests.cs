@@ -9,8 +9,8 @@ public class PaymentTests
 {
     private readonly Guid _orderId = Guid.NewGuid();
     private readonly string _userId = "user-123";
-    private readonly decimal _amount = 100.00m;
-    private readonly decimal _tax = 8.00m;
+    private readonly decimal _amount = 10000L;
+    private readonly decimal _tax = 800L;
     private readonly string _currency = "USD";
     private readonly PaymentProvider _provider = PaymentProvider.Stripe;
     private readonly Guid _sagaId = Guid.NewGuid();

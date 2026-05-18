@@ -75,7 +75,7 @@ internal sealed class PayPalPaymentProcessor(
 
         // 4. Financial integrity checks
         decimal actualPaid = sessionEvent.AmountTotal / CheckoutConstants.CentMultiplier;
-        decimal expectedTotal = payment.Amount + payment.Tax;
+        decimal expectedTotal = (payment.AmountCents + payment.TaxCents) / CheckoutConstants.CentMultiplier;
 
         if (PaymentValidationHelper.HasAmountMismatch(actualPaid, expectedTotal))
         {
@@ -91,7 +91,7 @@ internal sealed class PayPalPaymentProcessor(
             PaymentId = payment.Id,
             OrderId = payment.OrderId,
             SagaId = payment.SagaId,
-            Amount = payment.Amount,
+            AmountCents = payment.AmountCents,
             Currency = sessionEvent.Currency,
             Provider = PaymentProvider.PayPal.ToString(),
             TransactionReference = sessionEvent.TransactionId
@@ -154,7 +154,7 @@ internal sealed class PayPalPaymentProcessor(
             ["OrderId"] = orderId.ToString(),
             ["PaymentId"] = payment.Id.ToString(),
             ["TransactionId"] = sessionEvent.TransactionId,
-            ["Amount"] = payment.Amount.ToString("F2"),
+            ["AmountCents"] = payment.AmountCents.ToString(),
             ["Currency"] = sessionEvent.Currency
         });
     }

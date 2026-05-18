@@ -53,8 +53,8 @@ public class PaymentDbContext : DbContext, IPaymentDbContext
             entity.ToTable("Payments");
             entity.HasKey(p => p.Id);
 
-            entity.Property(p => p.Amount).HasColumnType("numeric(18,2)");
-            entity.Property(p => p.TotalRefunded).HasColumnType("numeric(18,2)").HasDefaultValue(0m);
+            entity.Property(p => p.AmountCents).HasColumnType("bigint");
+            entity.Property(p => p.TotalRefundedCents).HasColumnType("bigint").HasDefaultValue(0L);
             entity.Property(p => p.Currency).HasMaxLength(3);
             entity.Property(p => p.Status).HasConversion<string>();
             entity.Property(p => p.Provider).HasConversion<string>();
@@ -119,7 +119,7 @@ public class PaymentDbContext : DbContext, IPaymentDbContext
             entity.Property(s => s.OrderId).IsRequired();
             entity.Property(s => s.PaymentId).IsRequired();
             entity.Property(s => s.RefundId).IsRequired();
-            entity.Property(s => s.Amount).HasColumnType("numeric(18,2)").IsRequired();
+            entity.Property(s => s.AmountCents).HasColumnType("bigint").IsRequired();
             entity.Property(s => s.Currency).HasMaxLength(3).IsRequired();
             entity.Property(s => s.Provider).HasMaxLength(20);
             entity.Property(s => s.ProviderRefundId).HasMaxLength(500);

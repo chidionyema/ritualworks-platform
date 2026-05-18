@@ -92,7 +92,8 @@ public class LoginCommandHandlerTests : TestBase
         _jwtTokenServiceMock.Verify(
             j => j.GenerateTokenAsync(
                 It.Is<User>(u => u.Id == user.Id),
-                It.IsAny<DateTime>()),
+                It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -177,7 +178,7 @@ public class LoginCommandHandlerTests : TestBase
             .Setup(sm => sm.CheckPasswordSignInAsync(It.IsAny<User>(), It.IsAny<string>(), It.IsAny<bool>()))
             .ReturnsAsync(Microsoft.AspNetCore.Identity.SignInResult.Success);
         _jwtTokenServiceMock
-            .Setup(j => j.GenerateTokenAsync(It.IsAny<User>(), It.IsAny<DateTime>()))
+            .Setup(j => j.GenerateTokenAsync(It.IsAny<User>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(token ?? CreateTestToken(user));
         _refreshTokenServiceMock
             .Setup(r => r.GenerateRefreshTokenAsync(user.Id, It.IsAny<CancellationToken>()))

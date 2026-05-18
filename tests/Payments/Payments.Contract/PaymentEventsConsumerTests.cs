@@ -47,7 +47,7 @@ public sealed class PaymentEventsConsumerTests
                 paymentId            = "11111111-1111-1111-1111-111111111111",
                 orderId              = "22222222-2222-2222-2222-222222222222",
                 sagaId               = "33333333-3333-3333-3333-333333333333",
-                amount               = 50.00m,
+                amountCents          = 5000,
                 currency             = "USD",
                 provider             = "Stripe",
                 transactionReference = "pi_abc",
@@ -58,7 +58,7 @@ public sealed class PaymentEventsConsumerTests
                 evt.PaymentId.Should().Be(Guid.Parse("11111111-1111-1111-1111-111111111111"));
                 evt.OrderId.Should().Be(Guid.Parse("22222222-2222-2222-2222-222222222222"));
                 evt.SagaId.Should().Be(Guid.Parse("33333333-3333-3333-3333-333333333333"));
-                evt.Amount.Should().Be(50.00m);
+                evt.AmountCents.Should().Be(5000);
                 evt.Currency.Should().Be("USD");
                 evt.Provider.Should().Be("Stripe");
                 evt.TransactionReference.Should().Be("pi_abc");
@@ -109,9 +109,9 @@ public sealed class PaymentEventsConsumerTests
                 paymentId     = "66666666-6666-6666-6666-666666666666",
                 orderId       = "77777777-7777-7777-7777-777777777777",
                 provider      = "Stripe",
-                actualPaid    = 75.00m,
-                expectedTotal = 50.00m,
-                difference    = 25.00m,
+                actualPaidCents    = 7500,
+                expectedTotalCents = 5000,
+                differenceCents    = 2500,
                 reason        = "Stripe captured 75.00 USD; expected 50.00 USD",
             })
             .VerifyAsync<PaymentAmountMismatchEvent>(evt =>
@@ -119,9 +119,9 @@ public sealed class PaymentEventsConsumerTests
                 evt.PaymentId.Should().Be(Guid.Parse("66666666-6666-6666-6666-666666666666"));
                 evt.OrderId.Should().Be(Guid.Parse("77777777-7777-7777-7777-777777777777"));
                 evt.Provider.Should().Be("Stripe");
-                evt.ActualPaid.Should().Be(75.00m);
-                evt.ExpectedTotal.Should().Be(50.00m);
-                evt.Difference.Should().Be(25.00m);
+                evt.ActualPaidCents.Should().Be(7500);
+                evt.ExpectedTotalCents.Should().Be(5000);
+                evt.DifferenceCents.Should().Be(2500);
                 evt.Reason.Should().NotBeNullOrEmpty();
                 return Task.CompletedTask;
             });

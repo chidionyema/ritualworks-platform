@@ -36,12 +36,13 @@ public sealed class CreateRefundCommandHandler(
         }
 
         var refundId = Guid.NewGuid();
+        var amountCents = (long)Math.Round(request.Amount * 100m, 0);
 
         // Mutate domain state first — RecordRefund validates remaining amount
         // and throws if total would exceed payment amount.
         try
         {
-            payment.RecordRefund(request.Amount);
+            payment.RecordRefund(amountCents);
         }
         catch (InvalidOperationException ex)
         {
@@ -61,7 +62,7 @@ public sealed class CreateRefundCommandHandler(
             RefundId = refundId,
             OrderId = payment.OrderId,
             PaymentId = payment.Id,
-            Amount = request.Amount,
+            AmountCents = amountCents,
             Currency = request.Currency,
             Reason = request.Reason,
             RequestedBy = request.RequestedBy ?? "Operator"

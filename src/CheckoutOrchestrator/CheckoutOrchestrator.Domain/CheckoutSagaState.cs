@@ -34,7 +34,7 @@ public class CheckoutSagaState : SagaStateMachineInstance, ISagaVersion
 
     public string UserId { get; set; } = string.Empty;
     public string CustomerEmail { get; set; } = string.Empty;
-    public decimal TotalAmount { get; set; }
+    public long TotalAmountCents { get; set; }
     public string Currency { get; set; } = "USD";
     public string? IdempotencyKey { get; set; }
 

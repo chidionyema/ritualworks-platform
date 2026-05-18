@@ -17,7 +17,7 @@ internal sealed class StartCheckoutCommandValidator : AbstractValidator<StartChe
             .EmailAddress()
             .WithMessage("Invalid email format");
 
-        RuleFor(x => x.TotalAmount)
+        RuleFor(x => x.TotalAmountCents)
             .GreaterThan(0)
             .WithMessage("Total amount must be greater than zero");
 
@@ -31,7 +31,7 @@ internal sealed class StartCheckoutCommandValidator : AbstractValidator<StartChe
         {
             item.RuleFor(x => x.ProductId).NotEqual(Guid.Empty);
             item.RuleFor(x => x.Quantity).GreaterThan(0).LessThan(100);
-            item.RuleFor(x => x.UnitPrice).GreaterThan(0);
+            item.RuleFor(x => x.UnitPriceCents).GreaterThan(0);
             item.RuleFor(x => x.ProductName).NotEmpty();
         });
     }

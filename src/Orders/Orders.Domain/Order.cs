@@ -24,11 +24,11 @@ public class Order : AuditableEntity
     /// <summary>EF Core materialization constructor.</summary>
     protected Order() : base() { }
 
-    private Order(string userId, decimal totalAmount, string currency, Guid sagaId, string idempotencyKey, string customerEmail)
+    private Order(string userId, long totalAmountCents, string currency, Guid sagaId, string idempotencyKey, string customerEmail)
         : base()
     {
         UserId = userId;
-        TotalAmount = totalAmount;
+        TotalAmountCents = totalAmountCents;
         Currency = currency;
         SagaId = sagaId;
         IdempotencyKey = idempotencyKey;
@@ -41,7 +41,7 @@ public class Order : AuditableEntity
     public string IdempotencyKey { get; private set; } = string.Empty;
     public string CustomerEmail { get; private set; } = string.Empty;
 
-    public decimal TotalAmount { get; private set; }
+    public long TotalAmountCents { get; private set; }
     public string Currency { get; private set; } = "USD";
     public OrderStatus Status { get; private set; } = OrderStatus.Created;
 
@@ -56,24 +56,24 @@ public class Order : AuditableEntity
 
     public static Order Create(
         string userId,
-        decimal totalAmount,
+        long totalAmountCents,
         string currency,
         Guid sagaId,
         string idempotencyKey,
         string customerEmail,
-        IEnumerable<(Guid productId, string productName, int quantity, decimal unitPrice)> lineItems)
+        IEnumerable<(Guid productId, string productName, int quantity, long unitPriceCents)> lineItems)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userId);
         ArgumentException.ThrowIfNullOrWhiteSpace(currency);
         ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(customerEmail);
-        if (totalAmount < 0)      throw new ArgumentException("TotalAmount cannot be negative", nameof(totalAmount));
+        if (totalAmountCents < 0)      throw new ArgumentException("TotalAmountCents cannot be negative", nameof(totalAmountCents));
         if (sagaId == Guid.Empty) throw new ArgumentException("SagaId required", nameof(sagaId));
 
-        var order = new Order(userId, totalAmount, currency, sagaId, idempotencyKey, customerEmail);
+        var order = new Order(userId, totalAmountCents, currency, sagaId, idempotencyKey, customerEmail);
         foreach (var li in lineItems)
         {
-            order._items.Add(OrderItem.Create(order.Id, li.productId, li.productName, li.quantity, li.unitPrice));
+            order._items.Add(OrderItem.Create(order.Id, li.productId, li.productName, li.quantity, li.unitPriceCents));
         }
         if (order._items.Count == 0)
         {

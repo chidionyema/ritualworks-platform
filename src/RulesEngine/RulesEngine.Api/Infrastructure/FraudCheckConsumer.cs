@@ -40,7 +40,7 @@ public sealed class FraudCheckConsumer(
         // Build the evaluation context from the event
         var variables = new Dictionary<string, object>
         {
-            ["totalAmount"] = (double)msg.TotalAmount,
+            ["totalAmount"] = (double)(msg.TotalAmountCents / 100m),
             ["itemCount"] = msg.ItemCount,
             ["isGuest"] = msg.IsGuest,
             ["currency"] = msg.Currency,

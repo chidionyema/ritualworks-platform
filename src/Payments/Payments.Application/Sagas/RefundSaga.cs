@@ -35,7 +35,7 @@ public sealed class RefundSaga : MassTransitStateMachine<RefundSagaState>
                     saga.OrderId = msg.OrderId;
                     saga.PaymentId = msg.PaymentId;
                     saga.RefundId = msg.RefundId;
-                    saga.Amount = msg.Amount;
+                    saga.AmountCents = msg.AmountCents;
                     saga.Currency = msg.Currency;
                     saga.Reason = msg.Reason ?? "";
                     saga.Provider = msg.Provider ?? "Stripe";
@@ -46,7 +46,7 @@ public sealed class RefundSaga : MassTransitStateMachine<RefundSagaState>
                     RefundId = ctx.Saga.CorrelationId,
                     Provider = ctx.Saga.Provider, // RS-04: use provider from event, not hardcoded
                     PaymentId = ctx.Saga.PaymentId,
-                    Amount = ctx.Saga.Amount,
+                    AmountCents = ctx.Saga.AmountCents,
                     Currency = ctx.Saga.Currency
                 }))
                 .Schedule(RefundTimeoutSchedule, ctx => ctx.Init<RefundTimedOutEvent>(new RefundTimedOutEvent
@@ -91,7 +91,7 @@ public sealed class RefundSaga : MassTransitStateMachine<RefundSagaState>
                     RefundId = ctx.Saga.CorrelationId,
                     OrderId = ctx.Saga.OrderId,
                     PaymentId = ctx.Saga.PaymentId,
-                    Amount = ctx.Saga.Amount,
+                    AmountCents = ctx.Saga.AmountCents,
                     Currency = ctx.Saga.Currency
                 }))
                 .TransitionTo(Refunded)
@@ -138,7 +138,7 @@ public sealed class RefundSaga : MassTransitStateMachine<RefundSagaState>
                     RefundId = ctx.Saga.CorrelationId,
                     Provider = ctx.Saga.Provider,
                     PaymentId = ctx.Saga.PaymentId,
-                    Amount = ctx.Saga.Amount,
+                    AmountCents = ctx.Saga.AmountCents,
                     Currency = ctx.Saga.Currency
                 }))
                 .Schedule(RefundTimeoutSchedule, ctx => ctx.Init<RefundTimedOutEvent>(new RefundTimedOutEvent

@@ -31,11 +31,18 @@ public sealed class SagaHealthWatcher : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!await DelaySafeAsync(TimeSpan.FromSeconds(30), stoppingToken)) return;
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            await TickSafeAsync(stoppingToken);
+            if (!await DelaySafeAsync(TimeSpan.FromSeconds(30), stoppingToken)) return;
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await TickSafeAsync(stoppingToken);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "SagaHealthWatcher failed unexpectedly");
         }
     }
 
@@ -79,15 +86,15 @@ public sealed class SagaHealthWatcher : BackgroundService
 
         var stuck = await db.RefundSagas
             .Where(s => s.CurrentState == "RequiresReview" /* monitoring only — not a saga state transition */ && s.CreatedAt < deadline)
-            .Select(s => new { s.CorrelationId, s.OrderId, s.Amount, s.CreatedAt })
+            .Select(s => new { s.CorrelationId, s.OrderId, s.AmountCents, s.CreatedAt })
             .ToListAsync(ct);
 
         foreach (var saga in stuck)
         {
             PaymentsActivities.RefundStuckInReview.Add(1);
             _logger.LogCritical(
-                "Refund saga {SagaId} stuck in RequiresReview for order {OrderId}, amount {Amount}, since {CreatedAt}",
-                saga.CorrelationId, saga.OrderId, saga.Amount, saga.CreatedAt);
+                "Refund saga {SagaId} stuck in RequiresReview for order {OrderId}, amountCents {AmountCents}, since {CreatedAt}",
+                saga.CorrelationId, saga.OrderId, saga.AmountCents, saga.CreatedAt);
         }
     }
 

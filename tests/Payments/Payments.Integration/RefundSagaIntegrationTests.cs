@@ -50,7 +50,7 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
         var payment = Payment.Create(
             Guid.NewGuid(),
             "user_123",
-            100.00m,
+            10000L,
             0,
             "USD",
             PaymentProvider.Stripe,
@@ -64,7 +64,7 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
         var request = new CreateRefundRequest
         {
             PaymentId = payment.Id,
-            Amount = 50.00m,
+            Amount = 5000L,
             Currency = "USD",
             Reason = "Test refund",
             RequestedBy = "TestRunner"
@@ -125,7 +125,7 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
         {
             RefundId = refundId,
             ProviderRefundId = "re_provider_001",
-            AmountRefunded = 50.00m,
+            AmountRefundedCents = 5000L,
             CompletedAt = DateTime.UtcNow,
         });
         await PollUntilAsync(
@@ -141,7 +141,7 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
             .First(p => p.Context.Message.RefundId == refundId);
         completed.Context.Message.OrderId.Should().Be(orderId);
         completed.Context.Message.PaymentId.Should().Be(paymentId);
-        completed.Context.Message.Amount.Should().Be(50.00m);
+        completed.Context.Message.Amount.Should().Be(5000L);
         completed.Context.Message.Currency.Should().Be("USD");
     }
 
@@ -348,7 +348,7 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
         {
             RefundId = refundId,
             ProviderRefundId = "re_provider_005",
-            AmountRefunded = 50.00m,
+            AmountRefundedCents = 5000L,
             CompletedAt = DateTime.UtcNow,
         });
         await PollUntilAsync(
@@ -364,7 +364,7 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
         {
             RefundId = refundId,
             ProviderRefundId = "re_provider_005",
-            AmountRefunded = 50.00m,
+            AmountRefundedCents = 5000L,
             CompletedAt = DateTime.UtcNow,
         });
 
@@ -421,7 +421,7 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
         {
             RefundId = refundId,
             ProviderRefundId = "re_provider_006",
-            AmountRefunded = 50.00m,
+            AmountRefundedCents = 5000L,
             CompletedAt = DateTime.UtcNow,
         });
         await PollUntilAsync(
@@ -448,7 +448,7 @@ public class RefundSagaIntegrationTests : IAsyncLifetime
             RefundId = refundId,
             OrderId = orderId,
             PaymentId = paymentId,
-            Amount = 50.00m,
+            Amount = 5000L,
             Currency = "USD",
             Reason = "Integration test refund",
             Provider = "Stripe",

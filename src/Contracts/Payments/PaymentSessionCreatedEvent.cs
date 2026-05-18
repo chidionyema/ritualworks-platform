@@ -31,7 +31,7 @@ public sealed record PaymentSessionCreatedEvent : DomainEvent
     public required string Provider { get; init; }
 
     /// <summary>The total amount for this payment session.</summary>
-    public required decimal Amount { get; init; }
+    public required long AmountCents { get; init; }
 
     /// <summary>The currency code (e.g., "USD").</summary>
     public required string Currency { get; init; }

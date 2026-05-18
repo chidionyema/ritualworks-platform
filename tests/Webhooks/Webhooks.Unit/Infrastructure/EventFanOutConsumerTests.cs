@@ -38,7 +38,7 @@ public class EventFanOutConsumerTests
         { 
             OrderId = orderId, 
             CustomerId = Guid.NewGuid(), 
-            TotalAmount = 100,
+            TotalAmountCents = 10000,
             CustomerEmail = "test@example.com"
         };
         
