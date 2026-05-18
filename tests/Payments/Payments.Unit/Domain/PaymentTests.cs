@@ -9,8 +9,8 @@ public class PaymentTests
 {
     private readonly Guid _orderId = Guid.NewGuid();
     private readonly string _userId = "user-123";
-    private readonly long _amount = 10000L;
-    private readonly long _tax = 800L;
+    private readonly decimal _amount = 100.00m;
+    private readonly decimal _tax = 8.00m;
     private readonly string _currency = "USD";
     private readonly PaymentProvider _provider = PaymentProvider.Stripe;
     private readonly Guid _sagaId = Guid.NewGuid();
@@ -47,14 +47,14 @@ public class PaymentTests
     public void Create_WithNegativeAmount_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
-            Payment.Create(_orderId, _userId, -1L, _tax, _currency, _provider, _sagaId));
+            Payment.Create(_orderId, _userId, -1m, _tax, _currency, _provider, _sagaId));
     }
 
     [Fact]
     public void Create_with_negative_tax_throws()
     {
         Assert.Throws<ArgumentException>(() =>
-            Payment.Create(_orderId, _userId, _amount, -1L, _currency, _provider, _sagaId));
+            Payment.Create(_orderId, _userId, _amount, -1m, _currency, _provider, _sagaId));
     }
 
     [Fact]
@@ -183,7 +183,7 @@ public class PaymentTests
     public void RecordRefund_partial_tracks_amount()
     {
         var payment = CreateCompleted();
-        payment.RecordRefund(3000L);
+        payment.RecordRefund(30m);
         payment.TotalRefunded.Should().Be(30m);
         payment.Status.Should().Be(PaymentStatus.Completed); // not fully refunded yet
     }
@@ -192,7 +192,7 @@ public class PaymentTests
     public void RecordRefund_full_transitions_to_Refunded()
     {
         var payment = CreateCompleted();
-        payment.RecordRefund(10000L); // Amount = 100
+        payment.RecordRefund(100m); // Amount = 100
         payment.TotalRefunded.Should().Be(100m);
         payment.Status.Should().Be(PaymentStatus.Refunded);
     }
@@ -201,11 +201,11 @@ public class PaymentTests
     public void RecordRefund_multiple_partials_accumulate()
     {
         var payment = CreateCompleted();
-        payment.RecordRefund(4000L);
-        payment.RecordRefund(4000L);
+        payment.RecordRefund(40m);
+        payment.RecordRefund(40m);
         payment.TotalRefunded.Should().Be(80m);
         payment.Status.Should().Be(PaymentStatus.Completed);
-        payment.RecordRefund(2000L); // now fully refunded
+        payment.RecordRefund(20m); // now fully refunded
         payment.Status.Should().Be(PaymentStatus.Refunded);
     }
 
@@ -213,8 +213,8 @@ public class PaymentTests
     public void RecordRefund_exceeding_total_throws()
     {
         var payment = CreateCompleted();
-        payment.RecordRefund(6000L);
-        var act = () => payment.RecordRefund(5000L); // 60 + 50 = 110 > 100
+        payment.RecordRefund(60m);
+        var act = () => payment.RecordRefund(50m); // 60 + 50 = 110 > 100
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*exceed*");
     }
@@ -223,7 +223,7 @@ public class PaymentTests
     public void RecordRefund_on_Pending_throws()
     {
         var payment = CreateDefault();
-        var act = () => payment.RecordRefund(1000L);
+        var act = () => payment.RecordRefund(10m);
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*Pending*");
     }
@@ -232,7 +232,7 @@ public class PaymentTests
     public void RecordRefund_zero_throws()
     {
         var payment = CreateCompleted();
-        var act = () => payment.RecordRefund(0L);
+        var act = () => payment.RecordRefund(0m);
         act.Should().Throw<ArgumentException>();
     }
 

@@ -1,0 +1,60 @@
+{
+  "consumer": {
+    "name": "ConsumerOfCatalog"
+  },
+  "interactions": [
+    {
+      "contents": {
+        "content": {
+          "currency": "USD",
+          "customerEmail": "buyer@example.com",
+          "eventId": "00000000-0000-0000-0000-000000000000",
+          "idempotencyKey": "key-abc",
+          "items": [
+            {
+              "productId": "33333333-3333-3333-3333-333333333333",
+              "productName": "Widget",
+              "quantity": 3,
+              "remainingStock": 7
+            }
+          ],
+          "occurredAt": "2026-05-03T12:00:00Z",
+          "orderId": "11111111-1111-1111-1111-111111111111",
+          "orderLineItems": [
+            {
+              "productId": "33333333-3333-3333-3333-333333333333",
+              "productName": "Widget",
+              "quantity": 3,
+              "unitPrice": 10.0
+            }
+          ],
+          "sagaId": "22222222-2222-2222-2222-222222222222",
+          "totalAmount": 30.0,
+          "userId": "user-123"
+        },
+        "contentType": "application/json",
+        "encoded": false
+      },
+      "description": "a StockReservedEvent for a 1-line order",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "an in-flight saga for orderId 11111111-... reserved 3 units of productId 33333333-..."
+        }
+      ],
+      "type": "Asynchronous/Messages"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "ffi": "0.4.23",
+      "models": "1.2.5"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "catalog-svc"
+  }
+}
