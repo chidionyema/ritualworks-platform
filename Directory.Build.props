@@ -96,7 +96,7 @@
          - MA0006: Use String.Equals with StringComparison
          - MA0011: IFormatProvider missing
          - MA0051: Method too long (complexity guard) -->
-    <PackageReference Include="Meziantou.Analyzer" Version="2.0.182">
+    <PackageReference Include="Meziantou.Analyzer" Version="3.0.85">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
