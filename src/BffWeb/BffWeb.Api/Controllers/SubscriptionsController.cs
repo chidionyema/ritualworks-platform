@@ -10,7 +10,7 @@ namespace Haworks.BffWeb.Api.Controllers;
 /// </summary>
 [Authorize]
 [ApiController]
-[Route("api/subscriptions")]
+[Route("api/v{version:apiVersion}/subscriptions")]
 public sealed class SubscriptionsController : ControllerBase
 {
     private readonly IHttpClientFactory _httpFactory;

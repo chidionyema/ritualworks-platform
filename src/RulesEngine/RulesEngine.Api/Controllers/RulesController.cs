@@ -9,7 +9,7 @@ namespace Haworks.RulesEngine.Api.Controllers;
 
 [Authorize]
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public class RulesController : ControllerBase
 {
     private readonly IMediator _mediator;

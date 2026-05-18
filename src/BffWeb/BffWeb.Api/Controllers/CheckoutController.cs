@@ -27,7 +27,7 @@ namespace Haworks.BffWeb.Api.Controllers;
 ///   6. Browser navigates to the checkout URL.
 /// </summary>
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
 public sealed class CheckoutController(
     IHttpClientFactory httpClientFactory,

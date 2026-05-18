@@ -11,7 +11,7 @@ namespace Haworks.BffWeb.Api.Controllers;
 /// IP) while letting the public BFF host expose the route.
 /// </summary>
 [ApiController]
-[Route("api/search")]
+[Route("api/v{version:apiVersion}/search")]
 public sealed class SearchController : ControllerBase
 {
     private readonly IHttpClientFactory _httpFactory;

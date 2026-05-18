@@ -16,7 +16,7 @@ namespace Haworks.BffWeb.Api.Controllers;
 /// production, every endpoint short-circuits to 403.
 /// </summary>
 [ApiController]
-[Route("api/demo/chaos")]
+[Route("api/v{version:apiVersion}/demo/chaos")]
 [AllowAnonymous]
 public sealed class ChaosController : ControllerBase
 {

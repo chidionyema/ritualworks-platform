@@ -16,7 +16,7 @@ namespace Haworks.BffWeb.Api.Controllers;
 /// automatically — no explicit wiring needed here.
 /// </summary>
 [ApiController]
-[Route("api/checkout/reservations")]
+[Route("api/v{version:apiVersion}/checkout/reservations")]
 public sealed class ReservationsController : ControllerBase
 {
     private readonly IHttpClientFactory _httpFactory;

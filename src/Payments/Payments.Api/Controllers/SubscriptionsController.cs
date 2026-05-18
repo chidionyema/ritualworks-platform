@@ -9,7 +9,7 @@ using Haworks.BuildingBlocks.Extensions;
 namespace Haworks.Payments.Api.Controllers;
 
 [ApiController]
-[Route("api/subscriptions")]
+[Route("api/v{version:apiVersion}/subscriptions")]
 [Authorize]
 public sealed class SubscriptionsController(IMediator mediator) : ControllerBase
 {

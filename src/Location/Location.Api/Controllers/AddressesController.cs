@@ -10,7 +10,7 @@ namespace Haworks.Location.Api.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public class AddressesController(IMediator mediator) : ControllerBase
 {
     [HttpPost]

@@ -8,7 +8,7 @@ namespace Haworks.BffWeb.Api.Controllers;
 /// BFF proxy to <c>location-svc</c>.
 /// </summary>
 [ApiController]
-[Route("api/locations")]
+[Route("api/v{version:apiVersion}/locations")]
 [Authorize]
 public sealed class LocationsController(IHttpClientFactory httpFactory) : ControllerBase
 {

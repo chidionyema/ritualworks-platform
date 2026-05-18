@@ -18,7 +18,7 @@ namespace Haworks.Catalog.Api.Controllers;
 /// to match the monolith's URL exactly so existing frontends keep working.
 /// </summary>
 [ApiController]
-[Route("api/checkout/reservations")]
+[Route("api/v{version:apiVersion}/checkout/reservations")]
 public sealed class ReservationsController(IMediator mediator) : ControllerBase
 {
     /// <summary>

@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Haworks.Payouts.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
 public class LedgerController(IMediator mediator) : ControllerBase
 {

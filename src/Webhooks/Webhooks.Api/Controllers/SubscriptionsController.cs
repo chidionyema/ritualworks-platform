@@ -10,7 +10,7 @@ using System.Security.Claims;
 namespace Haworks.Webhooks.Api.Controllers;
 
 [ApiController]
-[Route("api/webhooks/subscriptions")]
+[Route("api/v{version:apiVersion}/webhooks/subscriptions")]
 [Authorize]
 public sealed class SubscriptionsController(IMediator mediator) : ControllerBase
 {

@@ -8,7 +8,7 @@ namespace Haworks.FeatureFlags.Api.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public class FeatureFlagsController : ControllerBase
 {
     private readonly IMediator _mediator;

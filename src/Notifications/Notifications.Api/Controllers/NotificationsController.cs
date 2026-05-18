@@ -10,7 +10,7 @@ using Haworks.BuildingBlocks.Extensions;
 namespace Haworks.Notifications.Api.Controllers;
 
 [ApiController]
-[Route("api/notifications")]
+[Route("api/v{version:apiVersion}/notifications")]
 [Authorize]
 [EnableRateLimiting("api")]
 public sealed class NotificationsController(IMediator mediator) : ControllerBase
