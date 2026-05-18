@@ -125,7 +125,7 @@ public class DemoController : ControllerBase
                 ProductId = demoProductId,
                 ProductName = "Demo Widget",
                 Quantity = string.Equals(request.ScenarioType, "stockRace", StringComparison.Ordinal) ? 3 : 1,
-                UnitPriceCents = (long)Math.Round(39.99m * 100m, 0),
+                UnitPrice = 39.99m,
             },
         };
 
@@ -231,7 +231,7 @@ public class DemoController : ControllerBase
                 orderId,
                 userId = "demo-user",
                 customerEmail = "demo@haworks.dev",
-                totalAmount = items.Sum(i => (i.UnitPriceCents / 100m) * i.Quantity),
+                totalAmount = items.Sum(i => i.UnitPrice * i.Quantity),
                 idempotencyKey,
                 items,
             };
