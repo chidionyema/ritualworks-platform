@@ -50,36 +50,20 @@ jobs:
       - name: Build (no restore)
         run: dotnet build HaworksPlatform.sln --no-restore --configuration Release
 
-      - name: Unit tests
+      - name: Unit + Architecture + Contract tests (parallel)
         run: |
-          shopt -s nullglob
-          # Only test projects that are in the solution (avoids broken scaffolds)
-          sln_projects=$(dotnet sln HaworksPlatform.sln list 2>/dev/null | tail -n +3)
-          printf '%s\n' tests/*/*.Unit/*.csproj tests/*.Unit/*.csproj | awk -F/ '!seen[$NF]++' | while read -r proj; do
-            if echo "$sln_projects" | grep -qF "$(basename "$proj")"; then
-              dotnet test "$proj" --no-build --configuration Release --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=minimal"
-            fi
-          done
-
-      - name: Architecture tests
-        run: |
-          shopt -s nullglob
-          sln_projects=$(dotnet sln HaworksPlatform.sln list 2>/dev/null | tail -n +3)
-          printf '%s\n' tests/*/*.Architecture/*.csproj tests/*.Architecture/*.csproj | awk -F/ '!seen[$NF]++' | while read -r proj; do
-            if echo "$sln_projects" | grep -qF "$(basename "$proj")"; then
-              dotnet test "$proj" --no-build --configuration Release --logger "console;verbosity=minimal"
-            fi
-          done
-
-      - name: Contract (Pact) tests
-        run: |
-          shopt -s nullglob
-          sln_projects=$(dotnet sln HaworksPlatform.sln list 2>/dev/null | tail -n +3)
-          printf '%s\n' tests/*/*.Contract/*.csproj tests/*.Contract/*.csproj | awk -F/ '!seen[$NF]++' | while read -r proj; do
-            if echo "$sln_projects" | grep -qF "$(basename "$proj")"; then
-              dotnet test "$proj" --no-build --configuration Release --logger "console;verbosity=minimal"
-            fi
-          done
+          # Run all non-integration tests from the solution in one shot.
+          # dotnet test on the .sln runs all test assemblies in parallel;
+          # xUnit parallelises within each assembly. ~2x faster than the
+          # old sequential per-project loop.
+          #
+          # --filter excludes integration tests (they need Docker and run
+          # in the separate matrix job below).
+          dotnet test HaworksPlatform.sln \
+            --no-build --configuration Release \
+            --filter "FullyQualifiedName!~Integration" \
+            --logger "trx;LogFileName=test-results.trx" \
+            --logger "console;verbosity=minimal"
 
       - name: Upload test results
         if: always()

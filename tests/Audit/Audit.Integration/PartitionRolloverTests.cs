@@ -48,12 +48,12 @@ public class PartitionRolloverTests : IClassFixture<AuditWebAppFactory>
         var fromDate = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).ToString("yyyy-MM-dd");
         var toDate = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1).ToString("yyyy-MM-dd");
 
-#pragma warning disable EF1002
+#pragma warning disable EF1002, HWK027 // Test-only: partition name is deterministic, not user input
         await db.Database.ExecuteSqlRawAsync($@"
             CREATE TABLE IF NOT EXISTS {partitionName} PARTITION OF audit_events
             FOR VALUES FROM ('{fromDate}') TO ('{toDate}');
         ");
-#pragma warning restore EF1002
+#pragma warning restore EF1002, HWK027
 
         // Assert
         var partitions = await db.Database.SqlQueryRaw<string>(@"
