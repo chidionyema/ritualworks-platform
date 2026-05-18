@@ -25,7 +25,7 @@ public sealed record CheckoutInitiatedEvent : DomainEvent
     public required IReadOnlyList<CheckoutItemData> Items { get; init; }
 
     /// <summary>The total order amount including tax.</summary>
-    public required decimal TotalAmount { get; init; }
+    public required long TotalAmountCents { get; init; }
 
     /// <summary>Customer email for payment session and notifications.</summary>
     public required string CustomerEmail { get; init; }

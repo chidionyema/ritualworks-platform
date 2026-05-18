@@ -97,7 +97,7 @@ public sealed class ReservationsController(IMediator mediator) : ControllerBase
                 reservationId,
                 userId,
                 email,
-                body.TotalAmount,
+                body.TotalAmountCents,
                 body.Currency,
                 clientKey),
             ct);
@@ -124,6 +124,6 @@ public sealed record CreateReservationRequest(
 /// <summary>Body for <c>POST /api/checkout/reservations/{id}/confirm</c>.</summary>
 public sealed record ConfirmReservationRequest
 {
-    public required decimal TotalAmount { get; init; }
+    public required long TotalAmountCents { get; init; }
     public required string Currency { get; init; }
 }

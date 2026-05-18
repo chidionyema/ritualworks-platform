@@ -12,14 +12,14 @@ public class OrderItem : AuditableEntity
     /// <summary>EF Core materialization constructor.</summary>
     protected OrderItem() : base() { }
 
-    private OrderItem(Guid orderId, Guid productId, string productName, int quantity, decimal unitPrice)
+    private OrderItem(Guid orderId, Guid productId, string productName, int quantity, long unitPriceCents)
         : base()
     {
         OrderId = orderId;
         ProductId = productId;
         ProductName = productName;
         Quantity = quantity;
-        UnitPrice = unitPrice;
+        UnitPriceCents = unitPriceCents;
     }
 
     public Guid OrderId { get; private set; }
@@ -28,18 +28,18 @@ public class OrderItem : AuditableEntity
     public Guid ProductId { get; private set; }                       // opaque FK -> catalog-svc
     public string ProductName { get; private set; } = string.Empty;   // snapshot at order time
     public int Quantity { get; private set; }
-    public decimal UnitPrice { get; private set; }                    // snapshot at order time
+    public long UnitPriceCents { get; private set; }                    // snapshot at order time
 
-    public decimal LineTotal => Quantity * UnitPrice;
+    public long LineTotalCents => Quantity * UnitPriceCents;
 
-    public static OrderItem Create(Guid orderId, Guid productId, string productName, int quantity, decimal unitPrice)
+    public static OrderItem Create(Guid orderId, Guid productId, string productName, int quantity, long unitPriceCents)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(productName);
         if (orderId == Guid.Empty)   throw new ArgumentException("OrderId required", nameof(orderId));
         if (productId == Guid.Empty) throw new ArgumentException("ProductId required", nameof(productId));
         if (quantity <= 0)           throw new ArgumentException("Quantity must be positive", nameof(quantity));
-        if (unitPrice < 0)           throw new ArgumentException("UnitPrice cannot be negative", nameof(unitPrice));
+        if (unitPriceCents < 0)           throw new ArgumentException("UnitPriceCents cannot be negative", nameof(unitPriceCents));
 
-        return new OrderItem(orderId, productId, productName, quantity, unitPrice);
+        return new OrderItem(orderId, productId, productName, quantity, unitPriceCents);
     }
 }

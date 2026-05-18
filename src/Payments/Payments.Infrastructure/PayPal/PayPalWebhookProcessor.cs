@@ -234,7 +234,7 @@ internal sealed class PayPalWebhookProcessor(
                 {
                     RefundId = sagaId,
                     ProviderRefundId = refundId,
-                    AmountRefunded = decimal.Parse(amount),
+                    AmountRefundedCents = (long)(decimal.Parse(amount) * CheckoutConstants.CentMultiplier),
                     CompletedAt = DateTime.UtcNow
                 }, ct);
             }

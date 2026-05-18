@@ -28,7 +28,7 @@ public sealed class CheckoutsController(IMediator mediator) : ControllerBase
             body.OrderId,
             body.UserId,
             body.CustomerEmail,
-            body.TotalAmount,
+            (long)Math.Round(body.TotalAmount * 100m, 0, MidpointRounding.AwayFromZero),
             body.IdempotencyKey,
             body.Items
         ), ct);

@@ -28,13 +28,13 @@ public class PaymentCompletedConsumer : IConsumer<PaymentCompletedEvent>
         }
 
         _logger.LogInformation("Processing payment completion for Order: {OrderId}, Seller: {SellerId}, Amount: {Amount}",
-            evt.OrderId, evt.SellerId, evt.Amount);
+            evt.OrderId, evt.SellerId, evt.AmountCents / 100m);
 
         try
         {
             await _ledgerService.CreditSellerAsync(
                 evt.SellerId,
-                evt.Amount,
+                evt.AmountCents / 100m,
                 evt.Currency,
                 evt.PaymentId,
                 $"Payment for Order {evt.OrderId}",

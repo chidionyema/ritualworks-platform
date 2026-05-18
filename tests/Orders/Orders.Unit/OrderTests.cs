@@ -6,11 +6,11 @@ namespace Haworks.Orders.Unit;
 
 public sealed class OrderTests
 {
-    private static IEnumerable<(Guid productId, string productName, int quantity, decimal unitPrice)>
-        OneItem() => new[] { (Guid.NewGuid(), "Widget", 1, 10m) };
+    private static IEnumerable<(Guid productId, string productName, int quantity, long unitPriceCents)>
+        OneItem() => new[] { (Guid.NewGuid(), "Widget", 1, 1000L) };
 
-    private static Order NewOrder(decimal total = 10m, string userId = "user-1") =>
-        Order.Create(userId, total, "USD", Guid.NewGuid(), "key-1", "buyer@example.com", OneItem());
+    private static Order NewOrder(long totalCents = 1000L, string userId = "user-1") =>
+        Order.Create(userId, totalCents, "USD", Guid.NewGuid(), "key-1", "buyer@example.com", OneItem());
 
     [Fact]
     public void Create_initializes_to_Created_status_with_one_item()
@@ -26,29 +26,29 @@ public sealed class OrderTests
     [Fact]
     public void Create_with_no_items_throws()
     {
-        Action act = () => Order.Create("u", 0m, "USD", Guid.NewGuid(), "k", "e@x.com",
-            Array.Empty<(Guid, string, int, decimal)>());
+        Action act = () => Order.Create("u", 0L, "USD", Guid.NewGuid(), "k", "e@x.com",
+            Array.Empty<(Guid, string, int, long)>());
         act.Should().Throw<ArgumentException>();
     }
 
     [Fact]
     public void Create_with_empty_userId_throws()
     {
-        Action act = () => Order.Create("", 1m, "USD", Guid.NewGuid(), "k", "e@x.com", OneItem());
+        Action act = () => Order.Create("", 1L, "USD", Guid.NewGuid(), "k", "e@x.com", OneItem());
         act.Should().Throw<ArgumentException>();
     }
 
     [Fact]
     public void Create_with_empty_sagaId_throws()
     {
-        Action act = () => Order.Create("u", 1m, "USD", Guid.Empty, "k", "e@x.com", OneItem());
+        Action act = () => Order.Create("u", 1L, "USD", Guid.Empty, "k", "e@x.com", OneItem());
         act.Should().Throw<ArgumentException>();
     }
 
     [Fact]
     public void Create_with_negative_total_throws()
     {
-        Action act = () => Order.Create("u", -1m, "USD", Guid.NewGuid(), "k", "e@x.com", OneItem());
+        Action act = () => Order.Create("u", -1L, "USD", Guid.NewGuid(), "k", "e@x.com", OneItem());
         act.Should().Throw<ArgumentException>();
     }
 
@@ -122,28 +122,28 @@ public sealed class OrderItemTests
     [Fact]
     public void Create_computes_LineTotal()
     {
-        var item = OrderItem.Create(Guid.NewGuid(), Guid.NewGuid(), "Widget", 3, 10.50m);
-        item.LineTotal.Should().Be(31.50m);
+        var item = OrderItem.Create(Guid.NewGuid(), Guid.NewGuid(), "Widget", 3, 1050L);
+        item.LineTotalCents.Should().Be(3150L);
     }
 
     [Fact]
     public void Create_with_zero_quantity_throws()
     {
-        Action act = () => OrderItem.Create(Guid.NewGuid(), Guid.NewGuid(), "Widget", 0, 1m);
+        Action act = () => OrderItem.Create(Guid.NewGuid(), Guid.NewGuid(), "Widget", 0, 1L);
         act.Should().Throw<ArgumentException>();
     }
 
     [Fact]
     public void Create_with_negative_unitPrice_throws()
     {
-        Action act = () => OrderItem.Create(Guid.NewGuid(), Guid.NewGuid(), "Widget", 1, -1m);
+        Action act = () => OrderItem.Create(Guid.NewGuid(), Guid.NewGuid(), "Widget", 1, -1L);
         act.Should().Throw<ArgumentException>();
     }
 
     [Fact]
     public void Create_with_empty_productId_throws()
     {
-        Action act = () => OrderItem.Create(Guid.NewGuid(), Guid.Empty, "Widget", 1, 1m);
+        Action act = () => OrderItem.Create(Guid.NewGuid(), Guid.Empty, "Widget", 1, 1L);
         act.Should().Throw<ArgumentException>();
     }
 }

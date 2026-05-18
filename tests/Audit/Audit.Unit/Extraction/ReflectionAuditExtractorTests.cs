@@ -20,7 +20,7 @@ public class ReflectionAuditExtractorTests
         { 
             OrderId = Guid.NewGuid(),
             CustomerId = Guid.NewGuid(),
-            TotalAmount = 100m,
+            TotalAmountCents = 10000L,
             CustomerEmail = "test@example.com",
             OccurredAt = DateTime.UtcNow
         };

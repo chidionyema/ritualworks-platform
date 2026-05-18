@@ -38,7 +38,7 @@ internal sealed class GetRefundSagaStateQueryHandler(
             saga.OrderId,
             saga.PaymentId,
             saga.CurrentState,
-            saga.Amount,
+            saga.AmountCents / 100m,
             saga.Currency,
             saga.Reason,
             saga.Provider,

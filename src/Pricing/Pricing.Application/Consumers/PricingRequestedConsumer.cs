@@ -61,9 +61,9 @@ public sealed class PricingRequestedConsumer(
                 SagaId = msg.SagaId,
                 OrderId = msg.OrderId,
                 CalculationId = result.CalculationId,
-                Subtotal = result.Subtotal,
-                TaxAmount = result.TaxAmount,
-                Total = result.Total,
+                SubtotalCents = (long)Math.Round(result.Subtotal * 100m, 0),
+                TaxCents = (long)Math.Round(result.TaxAmount * 100m, 0),
+                TotalCents = (long)Math.Round(result.Total * 100m, 0),
                 Currency = result.Currency,
             }, context.CancellationToken);
 

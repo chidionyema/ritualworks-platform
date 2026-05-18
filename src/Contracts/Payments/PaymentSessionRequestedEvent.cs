@@ -15,7 +15,7 @@ public sealed record PaymentSessionRequestedEvent : DomainEvent
     public required Guid SagaId { get; init; }
 
     /// <summary>Total amount to charge.</summary>
-    public required decimal Amount { get; init; }
+    public required long AmountCents { get; init; }
 
     /// <summary>Currency code (e.g., "USD").</summary>
     public required string Currency { get; init; }
@@ -27,7 +27,7 @@ public sealed record PaymentSessionRequestedEvent : DomainEvent
     public required string CustomerEmail { get; init; }
 
     /// <summary>Tax amount included in the total (may be 0 when not available).</summary>
-    public decimal Tax { get; init; } = 0m;
+    public long TaxCents { get; init; } = 0;
 
     /// <summary>Line items for the payment session.</summary>
     public required IReadOnlyList<PaymentLineItemData> LineItems { get; init; }

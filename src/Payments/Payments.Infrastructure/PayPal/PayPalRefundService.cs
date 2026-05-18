@@ -129,7 +129,7 @@ internal sealed class PayPalRefundService(
                 PaymentId = payment.Id,
                 OrderId = payment.OrderId,
                 RefundId = refund!.Id!,
-                AmountCents = request.AmountCents ?? (long)(payment.Amount * CheckoutConstants.CentMultiplier),
+                AmountCents = request.AmountCents ?? payment.AmountCents,
                 Currency = payment.Currency,
                 Provider = PaymentProvider.PayPal,
                 Reason = request.Reason

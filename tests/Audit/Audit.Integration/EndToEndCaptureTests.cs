@@ -40,7 +40,7 @@ public sealed class EndToEndCaptureTests : IClassFixture<AuditWebAppFactory>
         {
             OrderId = orderId,
             CustomerId = Guid.NewGuid(),
-            TotalAmount = 99.99m,
+            TotalAmountCents = 9999L,
             CustomerEmail = "test@example.com"
         });
 
@@ -50,7 +50,7 @@ public sealed class EndToEndCaptureTests : IClassFixture<AuditWebAppFactory>
             PaymentId = paymentId,
             OrderId = orderId,
             SagaId = Guid.NewGuid(),
-            Amount = 99.99m,
+            AmountCents = 9999L,
             Currency = "USD",
             Provider = "Stripe",
             TransactionReference = "tx_123"

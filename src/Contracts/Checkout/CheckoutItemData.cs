@@ -15,5 +15,5 @@ public sealed record CheckoutItemData
     public required int Quantity { get; init; }
 
     /// <summary>Unit price at time of checkout.</summary>
-    public required decimal UnitPrice { get; init; }
+    public required long UnitPriceCents { get; init; }
 }

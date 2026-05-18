@@ -27,11 +27,18 @@ public sealed class RefundTimeoutWatcher : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!await DelaySafeAsync(TimeSpan.FromSeconds(30), stoppingToken)) return;
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            await TickSafeAsync(stoppingToken);
+            if (!await DelaySafeAsync(TimeSpan.FromSeconds(30), stoppingToken)) return;
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await TickSafeAsync(stoppingToken);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "RefundTimeoutWatcher failed unexpectedly");
         }
     }
 

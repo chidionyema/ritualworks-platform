@@ -73,7 +73,7 @@ public class CreateOrderCommandHandlerTests : TestBase
                     o.SagaId == command.SagaId &&
                     o.IdempotencyKey == command.IdempotencyKey &&
                     o.CustomerEmail == command.CustomerEmail &&
-                    o.TotalAmount == command.TotalAmount &&
+                    o.TotalAmountCents == (long)Math.Round(command.TotalAmount * 100m, 0, MidpointRounding.AwayFromZero) &&
                     o.Items.Count == 1),
                 It.IsAny<CancellationToken>()),
             Times.Once);
@@ -81,7 +81,7 @@ public class CreateOrderCommandHandlerTests : TestBase
             x => x.PublishAsync(
                 It.Is<OrderCreatedEvent>(e =>
                     e.CustomerEmail == command.CustomerEmail &&
-                    e.TotalAmount == command.TotalAmount),
+                    e.TotalAmountCents == (long)Math.Round(command.TotalAmount * 100m, 0, MidpointRounding.AwayFromZero)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }

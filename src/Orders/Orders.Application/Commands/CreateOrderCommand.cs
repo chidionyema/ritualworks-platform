@@ -52,12 +52,12 @@ internal sealed class CreateOrderCommandHandler(
 
         var order = Order.Create(
             request.UserId,
-            request.TotalAmount,
+            (long)Math.Round(request.TotalAmount * 100m, 0, MidpointRounding.AwayFromZero),
             request.Currency,
             request.SagaId,
             request.IdempotencyKey,
             request.CustomerEmail,
-            request.Items.Select(i => (i.ProductId, i.ProductName, i.Quantity, i.UnitPrice)));
+            request.Items.Select(i => (i.ProductId, i.ProductName, i.Quantity, (long)Math.Round(i.UnitPrice * 100m, 0, MidpointRounding.AwayFromZero))));
 
         await orders.AddAsync(order, ct);
 
@@ -78,7 +78,7 @@ internal sealed class CreateOrderCommandHandler(
         {
             OrderId = order.Id,
             CustomerId = customerGuid,
-            TotalAmount = order.TotalAmount,
+            TotalAmountCents = order.TotalAmountCents,
             CustomerEmail = order.CustomerEmail,
         }, ct);
 

@@ -21,13 +21,13 @@ public sealed record PaymentAmountMismatchEvent : DomainEvent
     public required string Provider { get; init; }
 
     /// <summary>The actual amount paid.</summary>
-    public required decimal ActualPaid { get; init; }
+    public required long ActualPaidCents { get; init; }
 
     /// <summary>The expected order total.</summary>
-    public required decimal ExpectedTotal { get; init; }
+    public required long ExpectedTotalCents { get; init; }
 
     /// <summary>The absolute difference between actual and expected.</summary>
-    public required decimal Difference { get; init; }
+    public required long DifferenceCents { get; init; }
 
     /// <summary>Human-readable reason for the mismatch.</summary>
     public required string Reason { get; init; }

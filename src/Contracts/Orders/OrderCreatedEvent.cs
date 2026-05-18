@@ -17,7 +17,7 @@ public sealed record OrderCreatedEvent : DomainEvent
     public required Guid CustomerId { get; init; }
 
     /// <summary>The total amount of the order.</summary>
-    public required decimal TotalAmount { get; init; }
+    public required long TotalAmountCents { get; init; }
 
     /// <summary>The customer's email for notifications.</summary>
     public required string CustomerEmail { get; init; }

@@ -34,7 +34,7 @@ public sealed class IdempotencyTests : IClassFixture<AuditWebAppFactory>
         {
             OrderId = orderId,
             CustomerId = Guid.NewGuid(),
-            TotalAmount = 50.00m,
+            TotalAmountCents = 5000L,
             CustomerEmail = "idempotent@example.com"
         }, context => context.MessageId = messageId);
 
@@ -42,7 +42,7 @@ public sealed class IdempotencyTests : IClassFixture<AuditWebAppFactory>
         {
             OrderId = orderId,
             CustomerId = Guid.NewGuid(),
-            TotalAmount = 50.00m,
+            TotalAmountCents = 5000L,
             CustomerEmail = "idempotent@example.com"
         }, context => context.MessageId = messageId);
 

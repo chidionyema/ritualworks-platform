@@ -103,7 +103,7 @@ public sealed class PaymentCompletedSagaBridge(IDemoHubNotifier notifier, ILogge
             Step: "payment_completed",
             Service: "payments-svc",
             Status: "completed",
-            Description: $"Payment completed: {ctx.Message.Amount} {ctx.Message.Currency}",
+            Description: $"Payment completed: {ctx.Message.AmountCents / 100m:F2} {ctx.Message.Currency}",
             ProgressPercent: 100,
             Timestamp: DateTime.UtcNow), ctx.CancellationToken);
     }
@@ -134,7 +134,7 @@ public sealed class PaymentAmountMismatchSagaBridge(
                     Step: "payment_failed",
                     Service: "payments-svc",
                     Status: "failed",
-                    Description: $"Payment amount mismatch: Expected {ctx.Message.ExpectedTotal}, received {ctx.Message.ActualPaid}",
+                    Description: $"Payment amount mismatch: Expected {ctx.Message.ExpectedTotalCents / 100m:F2}, received {ctx.Message.ActualPaidCents / 100m:F2}",
                     ProgressPercent: 70,
                     Timestamp: DateTime.UtcNow), ctx.CancellationToken);
             }

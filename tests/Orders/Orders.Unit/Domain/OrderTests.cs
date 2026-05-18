@@ -6,8 +6,8 @@ namespace Haworks.Orders.Unit.Domain;
 
 public class OrderTests
 {
-    private static readonly List<(Guid productId, string productName, int quantity, decimal unitPrice)> DefaultItems = 
-        new() { (Guid.NewGuid(), "Product 1", 1, 100.00m) };
+    private static readonly List<(Guid productId, string productName, int quantity, long unitPriceCents)> DefaultItems =
+        new() { (Guid.NewGuid(), "Product 1", 1, 10000L) };
 
     #region Factory Method Tests
 
@@ -16,19 +16,19 @@ public class OrderTests
     {
         // Arrange
         var userId = "user-123";
-        var totalAmount = 100.00m;
+        var totalAmountCents = 10000L;
         var currency = "USD";
         var sagaId = Guid.NewGuid();
         var idempotencyKey = "key-123";
         var customerEmail = "test@example.com";
 
         // Act
-        var order = Order.Create(userId, totalAmount, currency, sagaId, idempotencyKey, customerEmail, DefaultItems);
+        var order = Order.Create(userId, totalAmountCents, currency, sagaId, idempotencyKey, customerEmail, DefaultItems);
 
         // Assert
         order.Id.Should().NotBeEmpty();
         order.UserId.Should().Be(userId);
-        order.TotalAmount.Should().Be(totalAmount);
+        order.TotalAmountCents.Should().Be(totalAmountCents);
         order.Currency.Should().Be(currency);
         order.SagaId.Should().Be(sagaId);
         order.IdempotencyKey.Should().Be(idempotencyKey);
@@ -44,29 +44,29 @@ public class OrderTests
     public void Create_WithInvalidUserId_ThrowsArgumentException(string? userId)
     {
         Assert.ThrowsAny<ArgumentException>(() => 
-            Order.Create(userId!, 100m, "USD", Guid.NewGuid(), "key", "email", DefaultItems));
+            Order.Create(userId!, 10000L, "USD", Guid.NewGuid(), "key", "email", DefaultItems));
     }
 
     [Fact]
     public void Create_WithNegativeAmount_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => 
-            Order.Create("user", -1m, "USD", Guid.NewGuid(), "key", "email", DefaultItems));
+            Order.Create("user", -1L, "USD", Guid.NewGuid(), "key", "email", DefaultItems));
     }
 
     [Fact]
     public void Create_WithEmptySagaId_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => 
-            Order.Create("user", 100m, "USD", Guid.Empty, "key", "email", DefaultItems));
+            Order.Create("user", 10000L, "USD", Guid.Empty, "key", "email", DefaultItems));
     }
 
     [Fact]
     public void Create_WithEmptyItems_ThrowsArgumentException()
     {
-        var emptyItems = new List<(Guid, string, int, decimal)>();
-        Assert.Throws<ArgumentException>(() => 
-            Order.Create("user", 100m, "USD", Guid.NewGuid(), "key", "email", emptyItems));
+        var emptyItems = new List<(Guid, string, int, long)>();
+        Assert.Throws<ArgumentException>(() =>
+            Order.Create("user", 10000L, "USD", Guid.NewGuid(), "key", "email", emptyItems));
     }
 
     #endregion
@@ -77,7 +77,7 @@ public class OrderTests
     public void MarkPaid_FromCreated_SetsStatusAndPaymentId()
     {
         // Arrange
-        var order = Order.Create("user", 100m, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
+        var order = Order.Create("user", 10000L, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
         var paymentId = Guid.NewGuid();
 
         // Act
@@ -93,7 +93,7 @@ public class OrderTests
     public void MarkPaid_AlreadyPaid_ReturnsFalse()
     {
         // Arrange
-        var order = Order.Create("user", 100m, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
+        var order = Order.Create("user", 10000L, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
         order.MarkPaid(Guid.NewGuid());
 
         // Act
@@ -108,7 +108,7 @@ public class OrderTests
     public void MarkPaid_AlreadyAbandoned_ReturnsFalse()
     {
         // Arrange
-        var order = Order.Create("user", 100m, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
+        var order = Order.Create("user", 10000L, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
         order.MarkAbandoned("failure");
 
         // Act
@@ -123,7 +123,7 @@ public class OrderTests
     public void MarkAbandoned_FromCreated_SetsStatusAndReason()
     {
         // Arrange
-        var order = Order.Create("user", 100m, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
+        var order = Order.Create("user", 10000L, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
         var reason = "Stock timeout";
 
         // Act
@@ -139,7 +139,7 @@ public class OrderTests
     public void MarkAbandoned_AlreadyPaid_ReturnsFalse()
     {
         // Arrange
-        var order = Order.Create("user", 100m, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
+        var order = Order.Create("user", 10000L, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
         order.MarkPaid(Guid.NewGuid());
 
         // Act
@@ -158,7 +158,7 @@ public class OrderTests
     public void MarkPaid_AddsHistoryEntry_WithCorrectFromAndTo()
     {
         // Arrange
-        var order = Order.Create("user", 100m, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
+        var order = Order.Create("user", 10000L, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
         var paymentId = Guid.NewGuid();
 
         // Act
@@ -177,7 +177,7 @@ public class OrderTests
     public void MarkAbandoned_AddsHistoryEntry_WithReason()
     {
         // Arrange
-        var order = Order.Create("user", 100m, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
+        var order = Order.Create("user", 10000L, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
 
         // Act
         order.MarkAbandoned("Stock timeout", changedBy: "StockReservationFailedConsumer");
@@ -195,7 +195,7 @@ public class OrderTests
     public void MultipleTransitions_PopulatesStatusHistory()
     {
         // Arrange
-        var order = Order.Create("user", 100m, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
+        var order = Order.Create("user", 10000L, "USD", Guid.NewGuid(), "key", "email", DefaultItems);
 
         // Act
         order.MarkPaid(Guid.NewGuid());
@@ -220,19 +220,19 @@ public class OrderTests
     public void Create_ItemsAreCorrectlyPopulated()
     {
         // Arrange
-        var items = new List<(Guid productId, string productName, int quantity, decimal unitPrice)>
+        var items = new List<(Guid productId, string productName, int quantity, long unitPriceCents)>
         {
-            (Guid.NewGuid(), "Product A", 2, 50.00m),
-            (Guid.NewGuid(), "Product B", 1, 30.00m)
+            (Guid.NewGuid(), "Product A", 2, 5000L),
+            (Guid.NewGuid(), "Product B", 1, 3000L)
         };
 
         // Act
-        var order = Order.Create("user", 130m, "USD", Guid.NewGuid(), "key", "email", items);
+        var order = Order.Create("user", 13000L, "USD", Guid.NewGuid(), "key", "email", items);
 
         // Assert
         order.Items.Should().HaveCount(2);
-        order.Items.Should().Contain(i => i.ProductName == "Product A" && i.Quantity == 2 && i.UnitPrice == 50.00m);
-        order.Items.Should().Contain(i => i.ProductName == "Product B" && i.Quantity == 1 && i.UnitPrice == 30.00m);
+        order.Items.Should().Contain(i => i.ProductName == "Product A" && i.Quantity == 2 && i.UnitPriceCents == 5000L);
+        order.Items.Should().Contain(i => i.ProductName == "Product B" && i.Quantity == 1 && i.UnitPriceCents == 3000L);
     }
 
     #endregion

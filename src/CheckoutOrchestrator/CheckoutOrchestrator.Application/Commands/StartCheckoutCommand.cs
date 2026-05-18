@@ -13,7 +13,7 @@ public sealed record StartCheckoutCommand(
     Guid OrderId,
     string UserId,
     string CustomerEmail,
-    decimal TotalAmount,
+    long TotalAmountCents,
     string IdempotencyKey,
     IReadOnlyList<CheckoutItemData> Items,
     string? Currency = null
@@ -49,7 +49,7 @@ internal sealed class StartCheckoutCommandHandler(
         activity?.SetTag("saga.id", sagaId);
         activity?.SetTag("order.id", orderId);
         activity?.SetTag("customer.id", request.UserId);
-        activity?.SetTag("checkout.total_amount_cents", (long)Math.Round(request.TotalAmount * 100m, 0, MidpointRounding.AwayFromZero));
+        activity?.SetTag("checkout.total_amount_cents", request.TotalAmountCents);
         activity?.SetTag("checkout.item_count", request.Items.Count);
 
         // H6 — Publish writes to the outbox; SaveChanges commits both atomically
@@ -59,7 +59,7 @@ internal sealed class StartCheckoutCommandHandler(
             OrderId = orderId,
             UserId = request.UserId,
             CustomerEmail = request.CustomerEmail,
-            TotalAmount = request.TotalAmount,
+            TotalAmountCents = request.TotalAmountCents,
             Items = request.Items,
             IdempotencyKey = request.IdempotencyKey,
             IsGuest = false,

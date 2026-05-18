@@ -38,7 +38,7 @@ public sealed class PaymentSessionCreatedConsumer(
                     paymentId = evt.PaymentId,
                     checkoutUrl = evt.CheckoutUrl,
                     provider = evt.Provider,
-                    amount = evt.Amount,
+                    amount = evt.AmountCents / 100m,
                     currency = evt.Currency,
                 }, context.CancellationToken);
         }

@@ -49,13 +49,20 @@ public sealed class SubscriptionRenewalWatcher : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Stagger first run so the watcher doesn't fire during cold-start
-        // app initialization (services still registering, MT bus warming up).
-        if (!await DelaySafeAsync(TimeSpan.FromSeconds(30), stoppingToken)) return;
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            await TickSafeAsync(stoppingToken);
+            // Stagger first run so the watcher doesn't fire during cold-start
+            // app initialization (services still registering, MT bus warming up).
+            if (!await DelaySafeAsync(TimeSpan.FromSeconds(30), stoppingToken)) return;
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await TickSafeAsync(stoppingToken);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "SubscriptionRenewalWatcher failed unexpectedly");
         }
     }
 

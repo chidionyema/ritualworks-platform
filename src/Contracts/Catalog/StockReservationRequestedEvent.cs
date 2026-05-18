@@ -26,7 +26,7 @@ public sealed record StockReservationRequestedEvent : DomainEvent
     public required string CustomerEmail { get; init; }
 
     /// <summary>The order's total amount (propagated for downstream payment session).</summary>
-    public required decimal TotalAmount { get; init; }
+    public required long TotalAmountCents { get; init; }
 
     /// <summary>Order currency (propagated for downstream payment session).</summary>
     public required string Currency { get; init; }
