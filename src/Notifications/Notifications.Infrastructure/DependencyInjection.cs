@@ -77,6 +77,7 @@ public static partial class DependencyInjection
         {
             services.AddMassTransit(x =>
             {
+                x.AddConsumer<Haworks.BuildingBlocks.Messaging.GlobalFaultConsumer>();
                 x.AddConsumer<Notifications.Application.Consumers.NotificationRequestConsumer, Messaging.NotificationsConsumerDefinition<Notifications.Application.Consumers.NotificationRequestConsumer>>();
                 x.AddConsumer<Haworks.Notifications.Application.Webhooks.NotificationWebhookValidatedConsumer, Messaging.NotificationsConsumerDefinition<Haworks.Notifications.Application.Webhooks.NotificationWebhookValidatedConsumer>>();
                 x.AddConsumer<Notifications.Application.Consumers.RefundEmailConsumer, Messaging.NotificationsConsumerDefinition<Notifications.Application.Consumers.RefundEmailConsumer>>();

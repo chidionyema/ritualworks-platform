@@ -30,6 +30,7 @@ if (!builder.Environment.IsEnvironment("Test"))
 {
     builder.Services.AddMassTransit(cfg =>
     {
+        cfg.AddConsumer<Haworks.BuildingBlocks.Messaging.GlobalFaultConsumer>();
         AuditMassTransit.RegisterConsumers(cfg);
 
         cfg.AddEntityFrameworkOutbox<Haworks.Audit.Infrastructure.Persistence.AuditDbContext>(o =>
