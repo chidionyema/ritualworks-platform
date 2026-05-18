@@ -1,9 +1,9 @@
 name: E2E Tests
+# Manual-only. Requires docker-compose infra (Postgres, Redis, RabbitMQ,
+# Vault, etc.) which doesn't reliably start on GitHub runners within
+# timeout. Run locally: make e2e
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['src/**', 'tests/E2E/**']
 
 jobs:
   e2e:
