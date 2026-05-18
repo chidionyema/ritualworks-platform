@@ -35,8 +35,8 @@ public class PaymentTests
         payment.Id.Should().NotBeEmpty();
         payment.OrderId.Should().Be(_orderId);
         payment.UserId.Should().Be(_userId);
-        payment.AmountCents.Should().Be(_amount);
-        payment.TaxCents.Should().Be(_tax);
+        payment.Amount.Should().Be(_amount);
+        payment.Tax.Should().Be(_tax);
         payment.Currency.Should().Be(_currency);
         payment.Provider.Should().Be(_provider);
         payment.SagaId.Should().Be(_sagaId);
@@ -184,7 +184,7 @@ public class PaymentTests
     {
         var payment = CreateCompleted();
         payment.RecordRefund(3000L);
-        payment.TotalRefundedCents.Should().Be(30m);
+        payment.TotalRefunded.Should().Be(30m);
         payment.Status.Should().Be(PaymentStatus.Completed); // not fully refunded yet
     }
 
@@ -193,7 +193,7 @@ public class PaymentTests
     {
         var payment = CreateCompleted();
         payment.RecordRefund(10000L); // Amount = 100
-        payment.TotalRefundedCents.Should().Be(100m);
+        payment.TotalRefunded.Should().Be(100m);
         payment.Status.Should().Be(PaymentStatus.Refunded);
     }
 
@@ -203,7 +203,7 @@ public class PaymentTests
         var payment = CreateCompleted();
         payment.RecordRefund(4000L);
         payment.RecordRefund(4000L);
-        payment.TotalRefundedCents.Should().Be(80m);
+        payment.TotalRefunded.Should().Be(80m);
         payment.Status.Should().Be(PaymentStatus.Completed);
         payment.RecordRefund(2000L); // now fully refunded
         payment.Status.Should().Be(PaymentStatus.Refunded);

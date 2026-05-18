@@ -497,14 +497,18 @@ internal sealed class ResourceFileLogger(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var resourceEvent in notificationService.WatchAsync(stoppingToken))
+        try
         {
-            var state = resourceEvent.Snapshot.State;
-            if (state == "Starting" || state == "Running")
+            await foreach (var resourceEvent in notificationService.WatchAsync(stoppingToken))
             {
-                _ = Task.Run(() => CaptureLogsAsync(resourceEvent.ResourceId, stoppingToken), stoppingToken);
+                var state = resourceEvent.Snapshot.State;
+                if (state == "Starting" || state == "Running")
+                {
+                    _ = Task.Run(() => CaptureLogsAsync(resourceEvent.ResourceId, stoppingToken), stoppingToken);
+                }
             }
         }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { /* shutdown */ }
     }
 
     private async Task CaptureLogsAsync(string resourceId, CancellationToken ct)
@@ -518,7 +522,7 @@ internal sealed class ResourceFileLogger(
         {
             foreach (var line in logs)
             {
-                await writer.WriteLineAsync("[" + DateTime.Now.ToString("T") + "] " + (line.IsErrorMessage ? "ERR" : "INF") + " " + line.Content);
+                await writer.WriteLineAsync("[" + DateTime.UtcNow.ToString("T") + "] " + (line.IsErrorMessage ? "ERR" : "INF") + " " + line.Content);
             }
         }
     }

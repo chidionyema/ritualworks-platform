@@ -58,7 +58,7 @@ public sealed class SubscriptionRenewalWatcher : BackgroundService
                 await TickSafeAsync(stoppingToken);
             }
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { /* shutdown */ }
         catch (Exception ex)
         {
             _logger.LogCritical(ex, "{Watcher} crashed — background processing stopped", nameof(SubscriptionRenewalWatcher));

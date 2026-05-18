@@ -1306,6 +1306,77 @@ public class DemoController : ControllerBase
             request.Scenario, request.DurationSeconds, traceId);
         return Ok(new { trace_id = traceId });
     }
+
+    // ── Refund Saga Demo ────────────────────────────────────────────
+
+    /// <summary>
+    /// Seeds a completed payment and immediately creates a refund against it.
+    /// Returns the refundId so the frontend can poll state and receive SignalR events.
+    /// </summary>
+    [HttpPost("refund/start")]
+    public async Task<IActionResult> StartRefundDemo(
+        [FromBody] RefundDemoRequest request,
+        [FromHeader(Name = "X-Demo-Session")] string? sessionId,
+        CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient(BackendClients.Payments);
+
+        // Phase 1: Seed a completed payment for the demo
+        var seedResp = await client.PostAsJsonAsync("/demo/seed-completed-payment", new
+        {
+            amountCents = request.AmountCents,
+            currency = request.Currency ?? "USD",
+        }, ct);
+
+        if (!seedResp.IsSuccessStatusCode)
+            return StatusCode((int)seedResp.StatusCode, new { error = "Failed to seed demo payment" });
+
+        var seedBody = await seedResp.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        var paymentId = seedBody.GetProperty("paymentId").GetGuid();
+
+        // Phase 2: Create the refund
+        var refundResp = await client.PostAsJsonAsync("/api/refunds", new
+        {
+            paymentId,
+            amount = request.RefundAmountCents,
+            currency = request.Currency ?? "USD",
+            reason = request.Reason ?? "Demo refund",
+            requestedBy = "demo-user",
+        }, ct);
+
+        if (!refundResp.IsSuccessStatusCode)
+        {
+            var err = await refundResp.Content.ReadAsStringAsync(ct);
+            return StatusCode((int)refundResp.StatusCode, new { error = "Refund creation failed", detail = err });
+        }
+
+        var refundBody = await refundResp.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+
+        return Ok(new
+        {
+            sessionId,
+            paymentId,
+            refundId = refundBody.TryGetProperty("value", out var v) ? v.GetGuid() : refundBody.GetProperty("refundId").GetGuid(),
+            status = "Started",
+            _metadata = BuildMetadata(("payments-svc", refundResp)),
+        });
+    }
+
+    /// <summary>
+    /// Polls the refund saga state from payments-svc.
+    /// </summary>
+    [HttpGet("refund/{refundId:guid}")]
+    public async Task<IActionResult> GetRefundStatus(Guid refundId, CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient(BackendClients.Payments);
+        using var resp = await client.GetAsync($"/api/refunds/{refundId}", ct);
+
+        if (!resp.IsSuccessStatusCode)
+            return StatusCode((int)resp.StatusCode, new { error = "Failed to poll refund state" });
+
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        return Ok(body);
+    }
 }
 
 // DTOs — wire shapes pinned by the frontend's TypeScript types
@@ -1395,4 +1466,12 @@ public record BurstRequest
 {
     public required int Count { get; init; }
     public required int DelayMs { get; init; }
+}
+
+public record RefundDemoRequest
+{
+    public long AmountCents { get; init; } = 3999L;
+    public long RefundAmountCents { get; init; } = 3999L;
+    public string? Currency { get; init; }
+    public string? Reason { get; init; }
 }

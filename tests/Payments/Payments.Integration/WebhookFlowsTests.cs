@@ -129,7 +129,7 @@ public sealed class WebhookFlowsTests : IAsyncLifetime
         completed.Should().NotBeNull("the consumer must publish PaymentCompletedEvent");
         completed!.Context.Message.OrderId.Should().Be(payment.OrderId);
         completed.Context.Message.SagaId.Should().Be(payment.SagaId);
-        completed.Context.Message.AmountCents.Should().Be(5000L);
+        completed.Context.Message.Amount.Should().Be(5000L);
         completed.Context.Message.Provider.Should().Be("Stripe");
 
         // Payment row in DB transitioned to Completed.
@@ -168,9 +168,9 @@ public sealed class WebhookFlowsTests : IAsyncLifetime
         var mismatch = harness.Published.Select<PaymentAmountMismatchEvent>()
             .FirstOrDefault(p => p.Context.Message.PaymentId == payment.Id);
         mismatch.Should().NotBeNull();
-        mismatch!.Context.Message.ActualPaidCents.Should().Be(7500L);
-        mismatch.Context.Message.ExpectedTotalCents.Should().Be(5000L);
-        mismatch.Context.Message.DifferenceCents.Should().Be(2500L);
+        mismatch!.Context.Message.ActualPaid.Should().Be(7500L);
+        mismatch.Context.Message.ExpectedTotal.Should().Be(5000L);
+        mismatch.Context.Message.Difference.Should().Be(2500L);
 
         // Payment must be Flagged, not Completed.
         await using var verifyScope = _factory.Services.CreateAsyncScope();
@@ -284,7 +284,7 @@ public sealed class WebhookFlowsTests : IAsyncLifetime
         var payment = Payment.Create(
             orderId: Guid.NewGuid(),
             userId: "user-test",
-            amountCents: (long)(amount * 100),
+            amount: amount,
             tax: 0m,
             currency: "USD",
             provider: PaymentProvider.Stripe,

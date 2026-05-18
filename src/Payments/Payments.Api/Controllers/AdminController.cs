@@ -1,5 +1,6 @@
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Contracts.Payments;
+using Haworks.Payments.Domain;
 using Haworks.Payments.Infrastructure;
 using MassTransit;
 using Microsoft.AspNetCore.Authorization;
@@ -69,6 +70,33 @@ public sealed class AdminController(
     }
 
     /// <summary>
+    /// Seeds a completed payment for the refund demo. Returns the paymentId
+    /// so BffWeb can immediately create a refund against it.
+    /// </summary>
+    [HttpPost("demo/seed-completed-payment")]
+    public async Task<IActionResult> SeedCompletedPayment(
+        [FromBody] SeedPaymentRequest request,
+        CancellationToken ct)
+    {
+        var payment = Payment.Create(
+            orderId: Guid.NewGuid(),
+            userId: "demo-user",
+            amount: request.AmountCents / 100m,
+            tax: 0m,
+            currency: request.Currency ?? "USD",
+            provider: PaymentProvider.Stripe,
+            sagaId: Guid.NewGuid());
+
+        payment.AttachProviderSession($"sess_demo_{Guid.NewGuid():N}", null);
+        payment.MarkCompleted($"pi_demo_{Guid.NewGuid():N}", "card");
+
+        db.Payments.Add(payment);
+        await db.SaveChangesAsync(ct);
+
+        return Ok(new { paymentId = payment.Id, orderId = payment.OrderId });
+    }
+
+    /// <summary>
     /// Pauses the MassTransit outbox relay for this payments-svc instance.
     /// Subsequent demo-event publishes still land in the OutboxMessage
     /// table, but BusOutboxDeliveryService can't dispatch them — the
@@ -109,6 +137,12 @@ public sealed class AdminController(
             queuedMessages = queued,
         });
     }
+}
+
+public sealed record SeedPaymentRequest
+{
+    public required long AmountCents { get; init; }
+    public string? Currency { get; init; }
 }
 
 public sealed record DemoEventRequest

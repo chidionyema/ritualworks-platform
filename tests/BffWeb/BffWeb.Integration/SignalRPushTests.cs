@@ -85,7 +85,7 @@ public sealed class SignalRPushTests : IClassFixture<BffWebFactory>, IAsyncLifet
                 SessionId = "sess_test",
                 CheckoutUrl = "https://stripe.test/sess_test",
                 Provider = "Stripe",
-                AmountCents = 2550L,
+                Amount = 25.50m,
                 Currency = "USD",
             });
         }
