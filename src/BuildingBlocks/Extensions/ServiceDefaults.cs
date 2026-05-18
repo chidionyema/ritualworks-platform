@@ -49,6 +49,15 @@ public static class ServiceDefaults
 
         builder.Services.AddServiceDiscovery();
 
+        // Response compression — Brotli + gzip for all services.
+        builder.Services.AddResponseCompression(opts =>
+        {
+            opts.EnableForHttps = true;
+        });
+
+        // Rate limiting is configured per-service in each API's Program.cs.
+        // The shared library cannot reference Microsoft.AspNetCore.App APIs.
+
         // Correlation-id propagation: registers IHttpContextAccessor + the
         // outbound DelegatingHandler. Must be called before
         // ConfigureHttpClientDefaults so the handler type is registered
@@ -260,6 +269,8 @@ public static class ServiceDefaults
         // Correlation-id must be the first middleware to run so every log
         // line emitted from this point on (including health checks, auth,
         // routing) is enriched with CorrelationId in Serilog LogContext.
+        app.UseResponseCompression();
+        app.UseRateLimiter();
         app.UseCorrelationId();
 
 

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Haworks.BuildingBlocks.Middleware;
 using Haworks.BuildingBlocks.Vault;
 using MassTransit;
 using Microsoft.AspNetCore.Authorization;
@@ -27,12 +28,13 @@ public sealed class VaultProbeClient
 /// Operational endpoints for identity-svc — exposed for the portfolio
 /// site's demo flow via BffWeb. NOT part of identity's user-facing
 /// surface; in production these MUST be locked behind a localhost-only
-/// or mesh-only middleware (TODO: layer guard before prod deploy).
+/// or mesh-only middleware. Guarded by [InternalOnly] (network) + [Authorize] (auth).
 ///
 /// AllowAnonymous + minimal — same pattern as Catalog.Api/DemoTestController.
 /// </summary>
 [ApiController]
 [Route("admin")]
+[InternalOnly]
 [Authorize(Roles = "Admin,Service")]
 public sealed class AdminController(
     // IServiceProvider so we can resolve Vault deps at action time instead

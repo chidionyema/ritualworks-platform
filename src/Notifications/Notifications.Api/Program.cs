@@ -55,17 +55,7 @@ builder.Services.AddStartupTaskRunner();
 
 builder.Services.AddPlatformAuthentication(builder.Configuration);
 
-builder.Services.AddRateLimiter(options =>
-{
-    options.AddPolicy("api", context =>
-        System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: "api",
-            factory: _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 100,
-                Window = TimeSpan.FromMinutes(1)
-            }));
-});
+// Rate limiting provided by ServiceDefaults (sliding window, 100/10s).
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -117,7 +107,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseRateLimiter();
+// UseRateLimiter provided by ServiceDefaults via MapDefaultEndpoints.
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseIdempotency();

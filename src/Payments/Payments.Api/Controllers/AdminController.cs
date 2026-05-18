@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Messaging;
+using Haworks.BuildingBlocks.Middleware;
 using Haworks.Contracts.Payments;
 using Haworks.Payments.Domain;
 using Haworks.Payments.Infrastructure;
@@ -13,13 +14,14 @@ namespace Haworks.Payments.Api.Controllers;
 /// Operational endpoints for payments-svc — exposed for the portfolio
 /// site's demo flow via BffWeb. NOT part of payments' user-facing surface;
 /// in production these MUST be locked behind a localhost-only or
-/// mesh-only middleware (TODO: layer guard before prod deploy).
+/// mesh-only middleware. Guarded by [InternalOnly] (network) + [Authorize] (auth).
 ///
 /// AllowAnonymous + minimal — same pattern as Catalog.Api/DemoTestController
 /// and Identity.Api/AdminController.
 /// </summary>
 [ApiController]
 [Route("admin")]
+[InternalOnly]
 [Authorize(Roles = "Admin,Service")]
 public sealed class AdminController(
     PaymentDbContext db,
