@@ -42,6 +42,7 @@ if (!builder.Environment.IsEnvironment("Test") && !string.IsNullOrEmpty(kafkaCon
 // MassTransit for Domain Events
 builder.Services.AddMassTransit(x =>
 {
+    x.AddConsumer<Haworks.BuildingBlocks.Messaging.GlobalFaultConsumer>();
     x.AddConsumer<EventFanOutConsumer>();
     
     x.UsingRabbitMq((context, cfg) =>

@@ -24,10 +24,20 @@ public static class MessagingServiceCollectionExtensions
         this IRabbitMqBusFactoryConfigurator cfg,
         IBusRegistrationContext context)
     {
+        // Stage 1: Immediate retries (transient blips — network glitch, brief DB lock)
         cfg.UseMessageRetry(r => r.Incremental(
             retryLimit: 3,
             initialInterval: TimeSpan.FromSeconds(1),
             intervalIncrement: TimeSpan.FromSeconds(2)));
+
+        // Stage 2: Delayed redelivery (service outages — Stripe down, DB failover)
+        // After 3 immediate retries fail, message is redelivered 3 more times with
+        // longer delays. Total time before DLQ: ~36 min (vs 9s without this).
+        // Requires: rabbitmq_delayed_message_exchange plugin enabled on broker.
+        cfg.UseDelayedRedelivery(r => r.Intervals(
+            TimeSpan.FromMinutes(1),
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMinutes(30)));
 
         cfg.ConfigureEndpoints(context);
     }
