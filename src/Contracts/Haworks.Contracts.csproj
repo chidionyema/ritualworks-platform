@@ -13,9 +13,9 @@
     Adding a dependency here propagates to every service in the system.
   -->
   <ItemGroup>
-    <PackageReference Include="Grpc.Net.Client" Version="2.67.0" />
-    <PackageReference Include="Google.Protobuf" Version="3.29.0" />
-    <PackageReference Include="Grpc.Tools" Version="2.68.1">
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Tools">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>

@@ -68,7 +68,7 @@ public sealed class NotificationRequestConsumerTests
         ArrangeRepositoryReturns(notification);
         ArrangeTemplateSelectorReturnsStub();
         _templateRenderer
-            .Setup(r => r.RenderAsync(It.IsAny<string>(), It.IsAny<IDictionary<string, object>>()))
+            .Setup(r => r.RenderAsync(It.IsAny<string>(), It.IsAny<IDictionary<string, object>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("rendered");
         _emailGateway
             .Setup(g => g.SendAsync(It.IsAny<Notification>(), It.IsAny<CancellationToken>()))
@@ -95,7 +95,7 @@ public sealed class NotificationRequestConsumerTests
         ArrangeRepositoryReturns(notification);
         ArrangeTemplateSelectorReturnsStub();
         _templateRenderer
-            .Setup(r => r.RenderAsync(It.IsAny<string>(), It.IsAny<IDictionary<string, object>>()))
+            .Setup(r => r.RenderAsync(It.IsAny<string>(), It.IsAny<IDictionary<string, object>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("rendered");
         _smsGateway
             .Setup(g => g.SendAsync(It.IsAny<Notification>(), It.IsAny<CancellationToken>()))
@@ -173,7 +173,7 @@ public sealed class NotificationRequestConsumerTests
 
     private void ArrangeTemplateSelectorReturnsStub() =>
         _templateSelector
-            .Setup(s => s.SelectAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<NotificationChannel>()))
+            .Setup(s => s.SelectAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<NotificationChannel>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new NotImplementedException("L1.B not yet merged"));
 
     private static Notification CreatedNotification(NotificationChannel channel) =>

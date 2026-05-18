@@ -17,14 +17,14 @@
     <InternalsVisibleTo Include="Haworks.Notifications.Unit" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="MassTransit" Version="8.3.4" />
-    <PackageReference Include="MediatR" Version="12.4.1" />
-    <PackageReference Include="FluentValidation" Version="11.10.0" />
-    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.10.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
-    <PackageReference Include="Scriban" Version="7.0.0" />
-    <PackageReference Include="Mjml.Net" Version="4.1.0" />
+    <PackageReference Include="MassTransit" />
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Scriban" />
+    <PackageReference Include="Mjml.Net" />
   </ItemGroup>
 </Project>

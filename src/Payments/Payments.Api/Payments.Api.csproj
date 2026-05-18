@@ -4,8 +4,8 @@
     <AssemblyName>Payments.Api</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Aspire.Confluent.Kafka" Version="13.3.2" />
+    <PackageReference Include="Aspire.Confluent.Kafka" />
     <ProjectReference Include="../Payments.Infrastructure/Payments.Infrastructure.csproj" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
   </ItemGroup>
 </Project>
