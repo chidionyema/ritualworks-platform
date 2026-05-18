@@ -270,7 +270,15 @@ public static class ServiceDefaults
         // line emitted from this point on (including health checks, auth,
         // routing) is enriched with CorrelationId in Serilog LogContext.
         app.UseResponseCompression();
-        app.UseRateLimiter();
+        // UseRateLimiter only if AddRateLimiter was called in the service's Program.cs.
+        // Some internal services don't configure rate limiting; this guard prevents startup crash.
+        {
+            using var scope = app.Services.CreateScope();
+            var rateLimiterOptions = scope.ServiceProvider
+                .GetService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.RateLimiting.RateLimiterOptions>>();
+            if (rateLimiterOptions != null)
+                app.UseRateLimiter();
+        }
         app.UseCorrelationId();
 
 

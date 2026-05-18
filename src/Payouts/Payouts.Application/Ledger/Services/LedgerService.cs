@@ -20,10 +20,16 @@ public class LedgerService : ILedgerService
     private readonly ILogger<LedgerService> _logger;
     private static readonly Guid SystemPlatformId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
+    // True when running under an in-memory or SQLite provider (unit tests) — FOR UPDATE is not supported.
+    private readonly bool _useLinqFallback;
+
     public LedgerService(IPayoutsDbContext context, ILogger<LedgerService> logger)
     {
         _context = context;
         _logger = logger;
+        _useLinqFallback = context is DbContext dbCtx &&
+            (dbCtx.Database.ProviderName?.Contains("InMemory") == true ||
+             dbCtx.Database.ProviderName?.Contains("Sqlite") == true);
     }
 
     /// <summary>
@@ -194,24 +200,15 @@ public class LedgerService : ILedgerService
     {
         var typeInt = (int)type;
 
-        var account = await _context.LedgerAccounts
-            .FromSqlRaw(
-                """
-                SELECT *, xmin FROM payouts."LedgerAccounts"
-                WHERE "OwnerId" = {0} AND "Type" = {1} AND "Currency" = {2}
-                FOR UPDATE
-                """,
-                ownerId, typeInt, currency)
-            .Where(x => true)
-            .FirstOrDefaultAsync(ct);
-
-        if (account == null)
+        LedgerAccount? account;
+        if (_useLinqFallback)
         {
-            account = LedgerAccount.Create(ownerId, type, currency);
-            _context.LedgerAccounts.Add(account);
-            await _context.SaveChangesAsync(ct);
-
-            // Re-lock the newly created row
+            account = await _context.LedgerAccounts
+                .Where(a => a.OwnerId == ownerId && a.Type == type && a.Currency == currency)
+                .FirstOrDefaultAsync(ct);
+        }
+        else
+        {
             account = await _context.LedgerAccounts
                 .FromSqlRaw(
                     """
@@ -221,7 +218,29 @@ public class LedgerService : ILedgerService
                     """,
                     ownerId, typeInt, currency)
                 .Where(x => true)
-                .FirstAsync(ct);
+                .FirstOrDefaultAsync(ct);
+        }
+
+        if (account == null)
+        {
+            account = LedgerAccount.Create(ownerId, type, currency);
+            _context.LedgerAccounts.Add(account);
+            await _context.SaveChangesAsync(ct);
+
+            if (!_useLinqFallback)
+            {
+                // Re-lock the newly created row
+                account = await _context.LedgerAccounts
+                    .FromSqlRaw(
+                        """
+                        SELECT *, xmin FROM payouts."LedgerAccounts"
+                        WHERE "OwnerId" = {0} AND "Type" = {1} AND "Currency" = {2}
+                        FOR UPDATE
+                        """,
+                        ownerId, typeInt, currency)
+                    .Where(x => true)
+                    .FirstAsync(ct);
+            }
         }
 
         return account;
@@ -230,6 +249,12 @@ public class LedgerService : ILedgerService
     private Task<LedgerAccount?> LockAccount(Guid ownerId, AccountType type, string currency, CancellationToken ct)
     {
         var typeInt = (int)type;
+        if (_useLinqFallback)
+        {
+            return _context.LedgerAccounts
+                .Where(a => a.OwnerId == ownerId && a.Type == type && a.Currency == currency)
+                .FirstOrDefaultAsync(ct);
+        }
         return _context.LedgerAccounts
             .FromSqlRaw(
                 """
@@ -244,6 +269,12 @@ public class LedgerService : ILedgerService
 
     private Task<LedgerAccount?> LockAccountById(Guid accountId, CancellationToken ct)
     {
+        if (_useLinqFallback)
+        {
+            return _context.LedgerAccounts
+                .Where(a => a.Id == accountId)
+                .FirstOrDefaultAsync(ct);
+        }
         return _context.LedgerAccounts
             .FromSqlRaw(
                 """
