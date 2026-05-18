@@ -149,12 +149,14 @@ public static class VaultConfigBootstrap
             var (vaultPath, configPrefix, optional) = (mapping.VaultPath, mapping.ConfigPrefix, mapping.Optional);
             try
             {
+                var kvStart = DateTime.UtcNow;
                 var resp = await client.V1.Secrets.KeyValue.V2.ReadSecretAsync(
                     path: vaultPath, mountPoint: "secret");
                 foreach (var (key, value) in resp.Data.Data)
                 {
                     dict[$"{configPrefix}:{key}"] = value?.ToString();
                 }
+                VaultMetrics.KvReadDuration.Record((DateTime.UtcNow - kvStart).TotalSeconds, new KeyValuePair<string, object?>("path", vaultPath));
                 logger?.LogInformation("[VaultBootstrap] Loaded {Count} keys from secret/{Path} -> {Prefix}",
                     resp.Data.Data.Count, vaultPath, configPrefix);
             }
@@ -169,6 +171,7 @@ public static class VaultConfigBootstrap
             }
             catch (Exception ex)
             {
+                VaultMetrics.KvReadFailure.Add(1, new KeyValuePair<string, object?>("path", vaultPath), new KeyValuePair<string, object?>("error_type", ex.GetType().Name));
                 logger?.LogError(ex, "[VaultBootstrap] Failed to read secret/{Path}", vaultPath);
                 throw;  // fail fast — these secrets are required for the app to start
             }

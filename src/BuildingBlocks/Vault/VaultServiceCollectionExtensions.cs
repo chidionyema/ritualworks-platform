@@ -104,21 +104,27 @@ public static class VaultServiceCollectionExtensions
                 var vault = sp.GetRequiredService<IVaultService>();
                 var logger = sp.GetRequiredService<ILoggerFactory>()
                     .CreateLogger("Haworks.Vault.PeriodicPasswordProvider");
-                var staticPassword = csb.Password ?? string.Empty;
+                // F-01 fix: Track the last-known-good password from Vault so
+                // that on failure we return the LAST SUCCESSFUL Vault password,
+                // not the original static password (which Vault may have
+                // already rotated away from).
+                var lastKnownGoodPassword = csb.Password ?? string.Empty;
 
                 builder.UsePeriodicPasswordProvider(async (sb, ct) =>
                 {
                     try
                     {
                         var (_, password) = await vault.GetDatabaseCredentialsAsync(roleName, ct);
+                        lastKnownGoodPassword = password;
                         return password;
                     }
                     catch (Exception ex)
                     {
+                        VaultMetrics.CredentialRotationFailure.Add(1, new KeyValuePair<string, object?>("role", roleName), new KeyValuePair<string, object?>("error_type", ex.GetType().Name));
                         logger.LogWarning(ex,
-                            "Vault credential rotation failed for role {Role}; using static password",
+                            "Vault credential rotation failed for role {Role}; returning last-known-good password",
                             roleName);
-                        return staticPassword;
+                        return lastKnownGoodPassword;
                     }
                 }, TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(30));
             }

@@ -253,6 +253,7 @@ public class VaultService : IVaultService
             leaseDuration);
         _cache[roleName] = entry;
 
+        VaultMetrics.CredentialRotationDuration.Record((DateTime.UtcNow - start).TotalSeconds, new KeyValuePair<string, object?>("role", roleName));
         _logger.LogInformation("VaultCredentialRotated for {Role}. Expires at {Expiry}, DurationMs={ElapsedMs}",
             roleName, entry.ExpiresAtUtc, (DateTime.UtcNow - start).TotalMilliseconds);
         _telemetry.TrackEvent("VaultCredentialsRefreshed", new Dictionary<string, string>
@@ -298,8 +299,10 @@ public class VaultService : IVaultService
             {
                 var client = await GetClientAsync(innerCt);
                 var mountPoint = _vaultOptions.KvMountPoint ?? "secret";
+                var kvStart = DateTime.UtcNow;
                 var secret = await client.V1.Secrets.KeyValue.V2.ReadSecretAsync(
                     path: path, mountPoint: mountPoint);
+                VaultMetrics.KvReadDuration.Record((DateTime.UtcNow - kvStart).TotalSeconds, new KeyValuePair<string, object?>("path", path));
 
                 if (secret?.Data?.Data == null)
                 {
@@ -319,6 +322,7 @@ public class VaultService : IVaultService
         }
         catch (Exception ex)
         {
+            VaultMetrics.KvReadFailure.Add(1, new KeyValuePair<string, object?>("path", path), new KeyValuePair<string, object?>("error_type", ex.GetType().Name));
             _logger.LogError(ex, "Failed to retrieve secret {Key} from path {Path}", key, path);
             _telemetry.TrackException(ex);
             return null;

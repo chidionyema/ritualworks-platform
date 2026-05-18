@@ -59,15 +59,26 @@ public sealed class VaultAppRoleAuthenticator : IVaultAppRoleAuthenticator
                     onRetry: (ex, ts, attempt, _) =>
                         _logger?.LogWarning(ex, "[VaultAuth] AppRole login attempt {Attempt} failed; retrying in {DelaySeconds}s", attempt, ts.TotalSeconds));
 
-            var resp = await policy.ExecuteAsync(async () =>
+            HttpResponseMessage resp;
+            try
             {
-                var r = await http.PostAsJsonAsync(
-                    "/v1/auth/approle/login",
-                    new { role_id = roleId, secret_id = secretId },
-                    cancellationToken).ConfigureAwait(false);
-                r.EnsureSuccessStatusCode();
-                return r;
-            }).ConfigureAwait(false);
+                resp = await policy.ExecuteAsync(async () =>
+                {
+                    var r = await http.PostAsJsonAsync(
+                        "/v1/auth/approle/login",
+                        new { role_id = roleId, secret_id = secretId },
+                        cancellationToken).ConfigureAwait(false);
+                    r.EnsureSuccessStatusCode();
+                    return r;
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                VaultMetrics.AuthFailure.Add(1,
+                    new KeyValuePair<string, object?>("error_type", ex.GetType().Name));
+                _logger?.LogError(ex, "[VaultAuth] AppRole login failed after all retries");
+                throw;
+            }
 
             var text = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             using var doc = JsonDocument.Parse(text);
@@ -78,9 +89,14 @@ public sealed class VaultAppRoleAuthenticator : IVaultAppRoleAuthenticator
             var leaseSeconds = auth.TryGetProperty("lease_duration", out var leaseEl)
                 ? leaseEl.GetInt64()
                 : 3600L;
+            // F-05 fix: Vault returns lease_duration=0 for root tokens and
+            // unlimited leases. Treat 0 as "no expiration" (default 24h) to
+            // prevent re-auth storms where every API call triggers a login.
+            if (leaseSeconds <= 0) leaseSeconds = 86400L;
             var leaseDuration = TimeSpan.FromSeconds(leaseSeconds);
 
             _logger?.LogInformation("[VaultAuth] AppRole login succeeded; token lease_duration={LeaseSeconds}s", leaseSeconds);
+            VaultMetrics.AuthSuccess.Add(1);
             return new VaultAppRoleLoginResult(token, leaseDuration);
         }
     }
