@@ -90,8 +90,11 @@ public class VaultService : IVaultService
                 "(Vault:RoleId + Vault:SecretId) or file paths " +
                 "(Vault:RoleIdPath + Vault:SecretIdPath).");
 
-        if (string.IsNullOrWhiteSpace(_dbOptions.Host))
-            throw new ArgumentNullException(nameof(_dbOptions.Host));
+        // Database:Host is optional. When absent (managed PG like Neon),
+        // GetDatabaseCredentialsAsync still works for sandbox rotation but
+        // GetDatabaseConnectionStringAsync will throw at call time instead
+        // of at startup. Services on Neon use the static connection string
+        // from bootstrap.sh with PeriodicPasswordProvider gracefully skipping.
     }
 
     private void BuildPolicies()

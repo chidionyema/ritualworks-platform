@@ -45,20 +45,15 @@ public static class VaultServiceCollectionExtensions
 
         services.AddOptions<DatabaseOptions>()
             .Bind(configuration.GetSection(DatabaseOptions.SectionName))
-            // VaultService.ValidateConfiguration() throws on a missing
-            // Database.Host even when the dynamic DB credential path isn't
-            // exercised. PostConfigure with sensible defaults so callers
-            // that only need RefreshCredentials() (no dynamic DB role)
-            // don't have to populate the section.
+            // Database:Host is optional. When set, VaultService can build
+            // connection strings from dynamic credentials (vault-pg sandbox).
+            // When absent (Neon / managed PG), services use the static
+            // connection string from bootstrap.sh and the PeriodicPasswordProvider
+            // gracefully skips rotation. See AddVaultNpgsqlDataSource().
             .PostConfigure(opts =>
             {
-                if (string.IsNullOrWhiteSpace(opts.Host))
-                    throw new InvalidOperationException("Vault:DynamicDb:Host must be configured — loopback fallback disabled for container safety");
                 if (opts.Port == 0) opts.Port = 5432;
-                if (string.IsNullOrWhiteSpace(opts.Database))
-                    throw new InvalidOperationException("Vault:DynamicDb:Database must be configured");
-            })
-            .ValidateOnStart();
+            });
 
         // Vault wiring needs an HTTP client for the Vault API (the AppRole
         // authenticator uses IHttpClientFactory).
@@ -91,8 +86,12 @@ public static class VaultServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers an NpgsqlDataSource that automatically rotates its password
-    /// using Vault static roles.
+    /// Registers an NpgsqlDataSource with production-grade pool defaults.
+    /// When <c>Vault:DatabaseMode</c> is <c>StaticRole</c>, registers a
+    /// <see cref="NpgsqlDataSourceBuilder.UsePeriodicPasswordProvider"/> that
+    /// fetches rotated credentials from Vault's static database role endpoint.
+    /// When <c>None</c> (default — Neon / managed PG), uses the static password
+    /// from the connection string with no rotation.
     /// </summary>
     public static IServiceCollection AddVaultNpgsqlDataSource(
         this IServiceCollection services,
@@ -101,21 +100,39 @@ public static class VaultServiceCollectionExtensions
     {
         services.AddSingleton(sp =>
         {
-            var vault = sp.GetRequiredService<IVaultService>();
-            // Ensure production-grade pool defaults are applied if not in connection string.
-            // Npgsql default is 100 max / 0 min; we set sensible defaults for microservices.
             var csb = new NpgsqlConnectionStringBuilder(connectionString);
-            if (csb.MaxPoolSize == 100) csb.MaxPoolSize = 50;    // 50 per service avoids Neon/PG saturation
-            if (csb.MinPoolSize == 0) csb.MinPoolSize = 5;       // Keep 5 warm connections
-            if (csb.ConnectionIdleLifetime == 300) csb.ConnectionIdleLifetime = 120; // Recycle faster for serverless PG
+            if (csb.MaxPoolSize == 100) csb.MaxPoolSize = 50;
+            if (csb.MinPoolSize == 0) csb.MinPoolSize = 5;
+            if (csb.ConnectionIdleLifetime == 300) csb.ConnectionIdleLifetime = 120;
 
+            var config = sp.GetRequiredService<IConfiguration>();
+            var dbMode = config.GetValue("Vault:DatabaseMode", "None");
             var builder = new NpgsqlDataSourceBuilder(csb.ConnectionString);
-            builder.UsePeriodicPasswordProvider(async (sb, ct) =>
+
+            if (string.Equals(dbMode, "StaticRole", StringComparison.OrdinalIgnoreCase))
             {
-                var (_, securePass) = await vault.GetDatabaseCredentialsAsync(roleName, ct);
-                var pass = new System.Net.NetworkCredential(string.Empty, securePass).Password;
-                return pass;
-            }, TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(30));
+                var vault = sp.GetRequiredService<IVaultService>();
+                var logger = sp.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("Haworks.Vault.PeriodicPasswordProvider");
+                var staticPassword = csb.Password ?? string.Empty;
+
+                builder.UsePeriodicPasswordProvider(async (sb, ct) =>
+                {
+                    try
+                    {
+                        var (_, securePass) = await vault.GetDatabaseCredentialsAsync(roleName, ct);
+                        return new System.Net.NetworkCredential(string.Empty, securePass).Password;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex,
+                            "Vault credential rotation failed for role {Role}; using static password",
+                            roleName);
+                        return staticPassword;
+                    }
+                }, TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(30));
+            }
+
             return builder.Build();
         });
         return services;

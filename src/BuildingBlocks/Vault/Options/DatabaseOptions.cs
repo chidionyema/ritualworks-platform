@@ -10,7 +10,11 @@ public sealed class DatabaseOptions
 {
     public const string SectionName = "Database";
 
-    [Required]
+    /// <summary>
+    /// Vault-managed database host. Optional — when blank (Neon / managed PG),
+    /// services use the static connection string from bootstrap.sh and
+    /// PeriodicPasswordProvider is not registered.
+    /// </summary>
     public string Host { get; set; } = string.Empty;
 
     public int Port { get; set; } = 5432;
