@@ -231,6 +231,7 @@ foreach (var name in new[]
     // friendly name post Aspire service-discovery).
     .AddHttpMessageHandler(sp => new UpstreamInstanceCaptureHandler(
         sp.GetRequiredService<IHttpContextAccessor>(),
+        sp.GetRequiredService<ILogger<UpstreamInstanceCaptureHandler>>(),
         serviceName));
 }
 
@@ -258,6 +259,7 @@ builder.Services.AddHttpClient(BackendClients.CatalogDemo, (sp, client) =>
 .AddHttpMessageHandler(sp => new Haworks.BuildingBlocks.Authentication.UserIdentityForwardingHandler(sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(), sp.GetService<Haworks.BuildingBlocks.Authentication.IServiceTokenProvider>()))
 .AddHttpMessageHandler(sp => new UpstreamInstanceCaptureHandler(
     sp.GetRequiredService<IHttpContextAccessor>(),
+    sp.GetRequiredService<ILogger<UpstreamInstanceCaptureHandler>>(),
     BackendClients.Catalog))
 .AddStandardResilienceHandler(o =>
 {

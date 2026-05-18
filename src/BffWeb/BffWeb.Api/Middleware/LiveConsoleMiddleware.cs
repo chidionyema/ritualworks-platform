@@ -47,19 +47,21 @@ public static class LiveConsoleMiddleware
                                    as IReadOnlyList<UpstreamHop>
                                ?? Array.Empty<UpstreamHop>();
 
-                    var ev = new LiveConsoleEvent(
-                        Ts: DateTime.UtcNow.ToString("o"),
-                        Service: "bff-web",
-                        InstanceId: InstanceIdMiddleware.InstanceId,
-                        Method: context.Request.Method,
-                        Path: context.Request.Path.Value ?? "/",
-                        Status: context.Response.StatusCode,
-                        DurationMs: sw.Elapsed.TotalMilliseconds,
-                        TraceId: Activity.Current?.TraceId.ToString(),
-                        CorrelationId: context.Request.Headers.TryGetValue("X-Correlation-ID", out var cid)
+                    var ev = new LiveConsoleEvent
+                    {
+                        Ts = DateTime.UtcNow.ToString("o"),
+                        Service = "bff-web",
+                        InstanceId = InstanceIdMiddleware.InstanceId,
+                        Method = context.Request.Method,
+                        Path = context.Request.Path.Value ?? "/",
+                        Status = context.Response.StatusCode,
+                        DurationMs = sw.Elapsed.TotalMilliseconds,
+                        TraceId = Activity.Current?.TraceId.ToString(),
+                        CorrelationId = context.Request.Headers.TryGetValue("X-Correlation-ID", out var cid)
                             ? cid.ToString()
                             : null,
-                        Upstreams: hops);
+                        Upstreams = hops
+                    };
 
                     broadcaster.Emit(ev);
                 }

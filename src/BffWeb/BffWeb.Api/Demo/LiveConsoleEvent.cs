@@ -20,14 +20,16 @@ namespace Haworks.BffWeb.Api.Demo;
 /// it as "bff-yumv → catalog-7e3f, orders-bb19" — the visible proof that
 /// the BFF is actually load-balancing across replicas.</para>
 /// </summary>
-public sealed record LiveConsoleEvent(
-    string Ts,
-    string Service,
-    string InstanceId,
-    string Method,
-    string Path,
-    int Status,
-    double DurationMs,
-    string? TraceId,
-    string? CorrelationId,
-    IReadOnlyList<UpstreamHop> Upstreams);
+public sealed record LiveConsoleEvent
+{
+    public string Ts { get; init; } = string.Empty;
+    public string Service { get; init; } = string.Empty;
+    public string InstanceId { get; init; } = string.Empty;
+    public string Method { get; init; } = string.Empty;
+    public string Path { get; init; } = string.Empty;
+    public int Status { get; init; }
+    public double DurationMs { get; init; }
+    public string? TraceId { get; init; }
+    public string? CorrelationId { get; init; }
+    public IReadOnlyList<UpstreamHop> Upstreams { get; init; } = Array.Empty<UpstreamHop>();
+}

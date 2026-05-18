@@ -1,5 +1,6 @@
 using FluentValidation;
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Merchant.Application.Common.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -16,7 +17,8 @@ public record UpdateMerchantCommand(
     string? ContactEmail,
     string? ContactPhone,
     string? Category,
-    string? Website) : IRequest<Result>;
+    string? Website,
+    string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result>;
 
 public class UpdateMerchantCommandValidator : AbstractValidator<UpdateMerchantCommand>
 {

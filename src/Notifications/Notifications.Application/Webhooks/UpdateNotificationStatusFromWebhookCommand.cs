@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Notifications.Domain.Entities;
 using Haworks.Notifications.Domain.Enums;
 using Haworks.Notifications.Application.Commands;
@@ -13,7 +14,8 @@ public sealed record UpdateNotificationStatusFromWebhookCommand(
     string Provider,
     string ProviderMessageId,
     string EventType,
-    string RawPayload) : IRequest<Result>;
+    string RawPayload,
+    string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result>;
 
 internal sealed class UpdateNotificationStatusFromWebhookHandler(
     INotificationRepository repository,

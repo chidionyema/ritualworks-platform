@@ -1,5 +1,6 @@
 using FluentValidation;
 using Haworks.Privacy.Application.Common.Interfaces;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Contracts.Privacy;
 using Haworks.Privacy.Domain.Aggregates;
 using Haworks.Privacy.Domain.Enums;
@@ -10,7 +11,7 @@ using Npgsql;
 
 namespace Haworks.Privacy.Application.Requests.Commands.InitiateRequest;
 
-public record InitiatePrivacyRequestCommand(Guid UserId, PrivacyRequestType Type) : IRequest<Guid>;
+public record InitiatePrivacyRequestCommand(Guid UserId, PrivacyRequestType Type, string IdempotencyKey = "") : IIdempotentCommand, IRequest<Guid>;
 
 public class InitiatePrivacyRequestCommandValidator : AbstractValidator<InitiatePrivacyRequestCommand>
 {

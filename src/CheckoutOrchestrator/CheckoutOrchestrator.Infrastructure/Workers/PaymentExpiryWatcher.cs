@@ -52,13 +52,25 @@ public sealed class PaymentExpiryWatcher : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Stagger first run so the watcher doesn't fire during cold-start
-        // app initialization (services still registering, MT bus warming up).
-        if (!await DelaySafeAsync(TimeSpan.FromSeconds(15), stoppingToken)) return;
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            await TickSafeAsync(stoppingToken);
+            // Stagger first run so the watcher doesn't fire during cold-start
+            // app initialization (services still registering, MT bus warming up).
+            if (!await DelaySafeAsync(TimeSpan.FromSeconds(15), stoppingToken)) return;
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await TickSafeAsync(stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Graceful shutdown
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "Unhandled exception in background service {ServiceName}", nameof(PaymentExpiryWatcher));
+            throw;
         }
     }
 

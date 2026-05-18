@@ -1,12 +1,13 @@
 using FluentValidation;
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Merchant.Application.Common.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Haworks.Merchant.Application.Merchants.Commands.RejectMerchant;
 
-public record RejectMerchantCommand(Guid MerchantId, string RejectedBy, string Reason) : IRequest<Result>;
+public record RejectMerchantCommand(Guid MerchantId, string RejectedBy, string Reason, string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result>;
 
 public class RejectMerchantCommandValidator : AbstractValidator<RejectMerchantCommand>
 {

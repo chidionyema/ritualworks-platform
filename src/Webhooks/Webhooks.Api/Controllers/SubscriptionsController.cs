@@ -2,6 +2,7 @@ using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Common;
 using Haworks.Webhooks.Application.Subscriptions;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -20,6 +21,8 @@ public sealed class SubscriptionsController(IMediator mediator) : ControllerBase
     }
 
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreateWebhookSubscriptionRequest request, CancellationToken ct)
     {
         var partnerId = GetPartnerId();
@@ -35,10 +38,14 @@ public sealed class SubscriptionsController(IMediator mediator) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
         => (await mediator.Send(new GetWebhookSubscriptionQuery(id, GetPartnerId()), ct)).ToActionResult();
 
     [HttpPatch("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateWebhookSubscriptionCommand command, CancellationToken ct)
     {
         if (id != command.Id) return BadRequest();
@@ -47,10 +54,14 @@ public sealed class SubscriptionsController(IMediator mediator) : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
         => (await mediator.Send(new DeleteWebhookSubscriptionCommand(id, GetPartnerId()), ct)).ToActionResult();
 
     [HttpPost("{id:guid}/rotate-secret")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> RotateSecret(Guid id, [FromBody] string? secret, CancellationToken ct)
         => (await mediator.Send(new RotateWebhookSubscriptionSecretCommand(id, secret, GetPartnerId()), ct)).ToActionResult();
 }

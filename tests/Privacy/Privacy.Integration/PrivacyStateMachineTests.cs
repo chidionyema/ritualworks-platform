@@ -192,9 +192,9 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
 
         // Wait for identity completion to be persisted before firing the timeout.
-        await PollUntilAsync(() =>
+        await PollUntilAsync(async () =>
         {
-            var s = ReadSagaAsync(requestId).GetAwaiter().GetResult();
+            var s = await ReadSagaAsync(requestId);
             return s is { IdentityCompleted: true };
         }, TimeSpan.FromSeconds(10));
 
@@ -235,9 +235,9 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         // settling time for negative assertion — duplicate must not change finalized state
         try
         {
-            await PollUntilAsync(() =>
+            await PollUntilAsync(async () =>
             {
-                var s = ReadSagaAsync(requestId).GetAwaiter().GetResult();
+                var s = await ReadSagaAsync(requestId);
                 return s is not null && !string.Equals(s.CurrentState, "Completed", StringComparison.Ordinal) && !string.Equals(s.CurrentState, "Final", StringComparison.Ordinal);
             }, TimeSpan.FromSeconds(2));
         }
@@ -277,9 +277,9 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         // settling time for negative assertion — late failure must not move finalized saga
         try
         {
-            await PollUntilAsync(() =>
+            await PollUntilAsync(async () =>
             {
-                var s = ReadSagaAsync(requestId).GetAwaiter().GetResult();
+                var s = await ReadSagaAsync(requestId);
                 return s is not null && string.Equals(s.CurrentState, "Failed", StringComparison.Ordinal);
             }, TimeSpan.FromSeconds(2));
         }
@@ -331,9 +331,9 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         // settling time for negative assertion — unknown service must not set any flags
         try
         {
-            await PollUntilAsync(() =>
+            await PollUntilAsync(async () =>
             {
-                var s = ReadSagaAsync(requestId).GetAwaiter().GetResult();
+                var s = await ReadSagaAsync(requestId);
                 return s is { IdentityCompleted: true } or { OrdersCompleted: true } or { PaymentsCompleted: true };
             }, TimeSpan.FromSeconds(2));
         }
@@ -359,9 +359,9 @@ public sealed class PrivacyStateMachineTests : IAsyncLifetime
         await PublishErasureCompletedAsync(requestId, userId, "identity-svc");
 
         // Wait for identity completion to be persisted before stopping harness.
-        await PollUntilAsync(() =>
+        await PollUntilAsync(async () =>
         {
-            var s = ReadSagaAsync(requestId).GetAwaiter().GetResult();
+            var s = await ReadSagaAsync(requestId);
             return s is { IdentityCompleted: true };
         }, TimeSpan.FromSeconds(10));
 

@@ -28,11 +28,23 @@ public class CdcFanOutWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        consumer.Subscribe(Topics);
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            await ConsumeOneSafeAsync(stoppingToken);
+            consumer.Subscribe(Topics);
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await ConsumeOneSafeAsync(stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Graceful shutdown
+        }
+        catch (Exception ex)
+        {
+            logger.LogCritical(ex, "Unhandled exception in background service {ServiceName}", nameof(CdcFanOutWorker));
+            throw;
         }
     }
 

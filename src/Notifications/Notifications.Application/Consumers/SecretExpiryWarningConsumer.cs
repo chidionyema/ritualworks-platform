@@ -24,7 +24,7 @@ public sealed class SecretExpiryWarningConsumer : IConsumer<SecretExpiryWarningE
         var vaultPath = msg.SecretPath;
 
         _logger.LogCritical(
-            "SECRET ROTATION ALERT: {VaultPath} is at {AgePercent:P0} of its TTL. " +
+            "CREDENTIAL ROTATION ALERT: {VaultPath} is at {AgePercent:P0} of its TTL. " +
             "Last rotated: {LastRotatedAt:O}. Immediate rotation required.",
             vaultPath, msg.AgePercent, msg.LastRotatedAt);
 

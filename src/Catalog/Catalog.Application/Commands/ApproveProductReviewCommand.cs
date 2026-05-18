@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Catalog.Domain.Interfaces;
 using MediatR;
 
@@ -6,8 +7,9 @@ namespace Haworks.Catalog.Application.Commands;
 
 public sealed record ApproveProductReviewCommand(
     Guid ProductId,
-    Guid ReviewId
-) : IRequest<Result>;
+    Guid ReviewId,
+    string IdempotencyKey = ""
+) : IIdempotentCommand, IRequest<Result>;
 
 internal sealed class ApproveProductReviewCommandHandler : IRequestHandler<ApproveProductReviewCommand, Result>
 {

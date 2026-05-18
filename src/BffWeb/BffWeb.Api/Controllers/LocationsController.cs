@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.BffWeb.Api.Controllers;
@@ -12,7 +13,9 @@ namespace Haworks.BffWeb.Api.Controllers;
 public sealed class LocationsController(IHttpClientFactory httpFactory) : ControllerBase
 {
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] object command, CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Create([FromBody] object command, CancellationToken ct = default)
     {
         var http = httpFactory.CreateClient(BackendClients.Location);
         var response = await http.PostAsJsonAsync("/api/addresses", command, ct);

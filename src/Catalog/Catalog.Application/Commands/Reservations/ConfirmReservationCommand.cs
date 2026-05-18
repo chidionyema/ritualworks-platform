@@ -4,6 +4,7 @@ using Haworks.Catalog.Application.DTOs.Reservations;
 using Haworks.Contracts.Catalog;
 using Haworks.Contracts.Checkout;
 using Haworks.BuildingBlocks.Messaging;
+using Haworks.BuildingBlocks.Idempotency;
 
 namespace Haworks.Catalog.Application.Commands.Reservations;
 
@@ -26,7 +27,8 @@ public sealed record ConfirmReservationCommand(
     string CustomerEmail,
     decimal TotalAmount,
     string Currency,
-    string? ClientIdempotencyKey) : IRequest<Result<ConfirmReservationResultDto>>;
+    string? ClientIdempotencyKey,
+    string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result<ConfirmReservationResultDto>>;
 
 
 internal sealed class ConfirmReservationCommandHandler(

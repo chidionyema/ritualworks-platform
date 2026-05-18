@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Haworks.Catalog.Application.Commands;
@@ -16,6 +17,8 @@ public sealed class ProductsController(
 {
     [HttpGet]
     [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> List(
         [FromQuery] int skip = 0,
         [FromQuery] int take = 20,
@@ -29,6 +32,8 @@ public sealed class ProductsController(
 
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
         => (await mediator.Send(new GetProductByIdQuery(id), ct)).ToActionResult();
 
@@ -42,6 +47,8 @@ public sealed class ProductsController(
     /// </summary>
     [HttpGet("{id:guid}/cached")]
     [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetCached(Guid id, CancellationToken ct)
     {
         var result = await productCache.GetAsync(id, ct);
@@ -58,6 +65,8 @@ public sealed class ProductsController(
     }
 
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreateProductCommand command, CancellationToken ct)
     {
         var result = await mediator.Send(command, ct);
@@ -65,6 +74,8 @@ public sealed class ProductsController(
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductRequest body, CancellationToken ct)
     {
         var command = new UpdateProductCommand(
@@ -79,6 +90,8 @@ public sealed class ProductsController(
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Delete(
         Guid id,
         [FromQuery] Guid? correlationId,
@@ -90,6 +103,8 @@ public sealed class ProductsController(
 
     [HttpPost("{id:guid}/reserve")]
     [Authorize(Roles = "Admin,Service")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Reserve(Guid id, [FromBody] ReserveStockRequest body, CancellationToken ct)
     {
         var command = new ReserveStockCommand(

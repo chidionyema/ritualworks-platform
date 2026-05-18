@@ -1,4 +1,5 @@
 using FluentValidation;
+using Haworks.BuildingBlocks.Idempotency;
 using MediatR;
 
 namespace Haworks.Catalog.Application.Commands;
@@ -8,7 +9,8 @@ public sealed record CreateProductCommand(
     string Description,
     decimal UnitPrice,
     Guid CategoryId,
-    int InitialStock) : IRequest<Result<Guid>>;
+    int InitialStock,
+    string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result<Guid>>;
 
 
 internal sealed class CreateProductCommandHandler(

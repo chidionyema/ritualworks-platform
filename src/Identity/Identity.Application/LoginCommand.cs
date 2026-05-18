@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using Haworks.Identity.Application.DTOs;
 using Haworks.Identity.Application.Telemetry;
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Identity.Domain;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -12,8 +13,9 @@ namespace Haworks.Identity.Application;
 public sealed record LoginCommand(
     string Username,
     string Password,
-    HttpContext HttpContext
-) : IRequest<Result<AuthResponseDto>>;
+    HttpContext HttpContext,
+    string IdempotencyKey = ""
+) : IIdempotentCommand, IRequest<Result<AuthResponseDto>>;
 
 internal sealed class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResponseDto>>
 {

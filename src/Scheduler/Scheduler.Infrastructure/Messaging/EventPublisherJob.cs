@@ -22,7 +22,7 @@ public class EventPublisherJob
     private static readonly Regex SafeNamePattern =
         new(@"^[a-zA-Z0-9._:\-]{1,255}$", RegexOptions.Compiled | RegexOptions.NonBacktracking);
 
-    public async Task PublishAsync(string targetExchange, string routingKey, string payload)
+    public async Task PublishAsync(string targetExchange, string routingKey, string payload, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(targetExchange))
             throw new ArgumentException("targetExchange must not be empty", nameof(targetExchange));
@@ -45,7 +45,7 @@ public class EventPublisherJob
             ? new Uri($"rabbitmq://{targetExchange}")
             : new Uri($"rabbitmq://{targetExchange}/{routingKey}");
 
-        var endpoint = await _sendEndpointProvider.GetSendEndpoint(exchangeUri);
+        var endpoint = await _sendEndpointProvider.GetSendEndpoint(exchangeUri).ConfigureAwait(false);
 
         // Deserialize the raw JSON payload to object so MassTransit can serialise it
         // with full header metadata (MessageId, CorrelationId, etc.).
@@ -57,6 +57,6 @@ public class EventPublisherJob
         {
             ctx.Headers.Set("X-Scheduler-Exchange", targetExchange);
             ctx.Headers.Set("X-Scheduler-RoutingKey", routingKey ?? string.Empty);
-        });
+        }, ct).ConfigureAwait(false);
     }
 }

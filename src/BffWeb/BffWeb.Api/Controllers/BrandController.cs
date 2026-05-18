@@ -11,6 +11,8 @@ namespace Haworks.BffWeb.Api.Controllers;
 public class BrandController(IOptionsSnapshot<BrandOptions> brandOptions) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public IActionResult Get()
     {
         return Ok(new

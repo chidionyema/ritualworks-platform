@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Catalog.Application.Interfaces;
 using Haworks.Catalog.Domain.Interfaces;
@@ -11,7 +12,8 @@ namespace Haworks.Catalog.Application.Commands;
 
 public sealed record DeleteProductCommand(
     Guid ProductId,
-    Guid? CorrelationId = null) : IRequest<Result>;
+    Guid? CorrelationId = null,
+    string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result>;
 
 internal sealed class DeleteProductCommandHandler : IRequestHandler<DeleteProductCommand, Result>
 {

@@ -152,7 +152,7 @@ public sealed class ClamAvScanner : IVirusScanner
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { /* best effort */ }
+            try { File.Delete(tempPath); } catch (Exception ex) { _logger.LogWarning(ex, "An error occurred in {MethodName}", nameof(ScanViaFileSystemAsync)); }
         }
     }
 

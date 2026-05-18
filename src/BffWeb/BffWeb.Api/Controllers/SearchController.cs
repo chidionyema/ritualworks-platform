@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.BffWeb.Api.Controllers;
@@ -21,7 +22,9 @@ public sealed class SearchController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> Search(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Search(CancellationToken ct = default)
     {
         var http = _httpFactory.CreateClient(BackendClients.Search);
         var path = "/search" + Request.QueryString.Value;
@@ -40,7 +43,9 @@ public sealed class SearchController : ControllerBase
 
     [HttpPost("saved")]
     [Authorize]
-    public async Task<IActionResult> SaveSearch([FromBody] object query, CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SaveSearch([FromBody] object query, CancellationToken ct = default)
     {
         var http = _httpFactory.CreateClient(BackendClients.Search);
         var path = "/search/saved";

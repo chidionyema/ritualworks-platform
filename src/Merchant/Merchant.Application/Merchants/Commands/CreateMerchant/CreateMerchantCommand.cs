@@ -1,4 +1,5 @@
 using FluentValidation;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Contracts.Merchant;
 using Haworks.Merchant.Application.Common.Interfaces;
 using Haworks.Merchant.Domain.Aggregates;
@@ -9,7 +10,7 @@ using Npgsql;
 
 namespace Haworks.Merchant.Application.Merchants.Commands.CreateMerchant;
 
-public record CreateMerchantCommand(Guid OwnerId, string Name, string Slug) : IRequest<Guid>;
+public record CreateMerchantCommand(Guid OwnerId, string Name, string Slug, string IdempotencyKey = "") : IIdempotentCommand, IRequest<Guid>;
 
 public class CreateMerchantCommandValidator : AbstractValidator<CreateMerchantCommand>
 {

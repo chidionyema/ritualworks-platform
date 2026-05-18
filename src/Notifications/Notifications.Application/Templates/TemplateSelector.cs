@@ -25,12 +25,13 @@ public sealed class TemplateSelector : ITemplateSelector
     public async Task<NotificationTemplate> SelectAsync(
         string templateId,
         string locale,
-        NotificationChannel channel)
+        NotificationChannel channel,
+        CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(templateId);
         ArgumentNullException.ThrowIfNull(locale);
 
-        var versions = await _repository.GetVersionsAsync(templateId).ConfigureAwait(false);
+        var versions = await _repository.GetVersionsAsync(templateId, ct).ConfigureAwait(false);
         var materialised = versions as IList<NotificationTemplate> ?? versions.ToList();
 
         var channelString = channel.ToString();

@@ -94,28 +94,8 @@ public class TokenRevocationService : ITokenRevocationService
             return false;
         }
 
-        var cacheKey = BuildCacheKey(tokenValue);
-
-        // Try cache first (sync-over-async for the cache layer)
-        try
-        {
-            // We use a short timeout to avoid blocking indefinitely if the cache is slow
-            var task = _cache.GetAsync<RevokedTokenMarker>(cacheKey).AsTask();
-            if (task.Wait(TimeSpan.FromSeconds(1)))
-            {
-                var cached = task.Result;
-                if (cached is not null)
-                {
-                    return true;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Error checking revocation cache synchronously for token ending {TokenSuffix}", tokenValue.Length > 4 ? tokenValue[^4..] : "****");
-        }
-
-        // Fallback to synchronous DB check
+        // Fallback to synchronous DB check — we avoid sync-over-async for the cache layer
+        // to prevent deadlocks in synchronous contexts.
         return _context.RevokedTokens.Any(rt => rt.Token == tokenValue);
     }
 

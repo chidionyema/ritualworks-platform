@@ -1,4 +1,6 @@
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,9 +24,11 @@ public class MediaController(IMediator mediator) : ControllerBase
     /// or S3 upload ID + per-part presigned URLs for multipart uploads (files > 8MB).
     /// </summary>
     [HttpPost("initiate")]
-    public async Task<IActionResult> InitiateUpload([FromBody] InitiateUploadCommand command)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> InitiateUpload([FromBody] InitiateUploadCommand command, CancellationToken ct = default)
     {
-        var result = await mediator.Send(command);
+        var result = await mediator.Send(command, ct);
         return result.ToActionResult();
     }
 
@@ -33,9 +37,11 @@ public class MediaController(IMediator mediator) : ControllerBase
     /// Triggers the virus scan pipeline.
     /// </summary>
     [HttpPost("{id}/complete")]
-    public async Task<IActionResult> CompleteUpload(Guid id)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CompleteUpload(Guid id, CancellationToken ct = default)
     {
-        var result = await mediator.Send(new ProcessVirusScanCommand(id));
+        var result = await mediator.Send(new ProcessVirusScanCommand(id), ct);
         return result.ToActionResult();
     }
 
@@ -44,9 +50,11 @@ public class MediaController(IMediator mediator) : ControllerBase
     /// Stitches parts in S3 and triggers the virus scan pipeline.
     /// </summary>
     [HttpPost("{id}/complete-multipart")]
-    public async Task<IActionResult> CompleteMultipartUpload(Guid id, [FromBody] CompleteMultipartRequest body)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CompleteMultipartUpload(Guid id, [FromBody] CompleteMultipartRequest body, CancellationToken ct = default)
     {
-        var result = await mediator.Send(new CompleteMultipartUploadCommand(id, body.Parts));
+        var result = await mediator.Send(new CompleteMultipartUploadCommand(id, body.Parts), ct);
         return result.ToActionResult();
     }
 
@@ -54,9 +62,11 @@ public class MediaController(IMediator mediator) : ControllerBase
     /// Aborts an in-progress upload. For multipart uploads, also aborts the S3 multipart upload.
     /// </summary>
     [HttpPost("{id}/abort")]
-    public async Task<IActionResult> AbortUpload(Guid id)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> AbortUpload(Guid id, CancellationToken ct = default)
     {
-        var result = await mediator.Send(new AbortUploadCommand(id));
+        var result = await mediator.Send(new AbortUploadCommand(id), ct);
         return result.ToActionResult();
     }
 
@@ -64,17 +74,20 @@ public class MediaController(IMediator mediator) : ControllerBase
     /// Returns media file metadata as a DTO — never the raw entity.
     /// </summary>
     [HttpGet("{id}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetMedia(
         Guid id,
         [FromServices] MediaDbContext context,
-        [FromServices] Haworks.BuildingBlocks.CurrentUser.ICurrentUserService currentUser)
+        [FromServices] Haworks.BuildingBlocks.CurrentUser.ICurrentUserService currentUser,
+        CancellationToken ct = default)
     {
         var ownerId = currentUser.UserId;
         if (string.IsNullOrEmpty(ownerId)) return Unauthorized();
 
         var file = await context.MediaFiles
             .AsNoTracking()
-            .FirstOrDefaultAsync(f => f.Id == id && f.OwnerId == ownerId);
+            .FirstOrDefaultAsync(f => f.Id == id && f.OwnerId == ownerId, ct);
 
         if (file == null) return NotFound();
 
@@ -93,15 +106,18 @@ public class MediaController(IMediator mediator) : ControllerBase
     /// Lists the caller's media files with pagination and optional filtering.
     /// </summary>
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ListMedia(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] string? status = null,
-        [FromQuery] string? mimeTypePrefix = null)
+        [FromQuery] string? mimeTypePrefix = null,
+        CancellationToken ct = default)
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var result = await mediator.Send(new ListMediaQuery(page, pageSize, status, mimeTypePrefix));
+        var result = await mediator.Send(new ListMediaQuery(page, pageSize, status, mimeTypePrefix), ct);
         return result.ToActionResult();
     }
 
@@ -110,9 +126,11 @@ public class MediaController(IMediator mediator) : ControllerBase
     /// Client downloads directly from S3 — no bandwidth through the API server.
     /// </summary>
     [HttpGet("{id}/url")]
-    public async Task<IActionResult> GetMediaUrl(Guid id, [FromQuery] string? variant = null)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetMediaUrl(Guid id, [FromQuery] string? variant = null, CancellationToken ct = default)
     {
-        var result = await mediator.Send(new GetMediaUrlQuery(id, variant));
+        var result = await mediator.Send(new GetMediaUrlQuery(id, variant), ct);
         return result.ToActionResult();
     }
 
@@ -121,9 +139,11 @@ public class MediaController(IMediator mediator) : ControllerBase
     /// Returns presigned URLs for each file (single-part or multipart).
     /// </summary>
     [HttpPost("batch-initiate")]
-    public async Task<IActionResult> BatchInitiateUpload([FromBody] BatchInitiateUploadCommand command)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> BatchInitiateUpload([FromBody] BatchInitiateUploadCommand command, CancellationToken ct = default)
     {
-        var result = await mediator.Send(command);
+        var result = await mediator.Send(command, ct);
         return result.ToActionResult();
     }
 
@@ -131,9 +151,11 @@ public class MediaController(IMediator mediator) : ControllerBase
     /// Links a media file to a domain entity (e.g. product, post).
     /// </summary>
     [HttpPost("{id}/link")]
-    public async Task<IActionResult> LinkEntity(Guid id, [FromBody] LinkEntityRequest body)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> LinkEntity(Guid id, [FromBody] LinkEntityRequest body, CancellationToken ct = default)
     {
-        var result = await mediator.Send(new LinkEntityCommand(id, body.EntityId, body.EntityType));
+        var result = await mediator.Send(new LinkEntityCommand(id, body.EntityId, body.EntityType), ct);
         return result.ToActionResult();
     }
 
@@ -141,9 +163,11 @@ public class MediaController(IMediator mediator) : ControllerBase
     /// Soft-deletes a media file. Bytes remain in S3 pending GC.
     /// </summary>
     [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteMedia(Guid id)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DeleteMedia(Guid id, CancellationToken ct = default)
     {
-        var result = await mediator.Send(new DeleteMediaCommand(id));
+        var result = await mediator.Send(new DeleteMediaCommand(id), ct);
         return result.ToActionResult();
     }
 }

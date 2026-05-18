@@ -2,6 +2,7 @@ using Haworks.Catalog.Application.Commands;
 using Haworks.Catalog.Domain;
 using Haworks.Catalog.Domain.Interfaces;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Hybrid;
@@ -31,6 +32,8 @@ public sealed class DemoTestController(
     /// "shouldFail=false" calls hit /health and reset the circuit.
     /// </summary>
     [HttpGet("fail")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public IActionResult AlwaysFail() =>
         StatusCode(StatusCodes.Status503ServiceUnavailable, new
         {
@@ -56,6 +59,8 @@ public sealed class DemoTestController(
         DateTime.UtcNow.Ticks < Interlocked.Read(ref s_chaosUntilTicks);
 
     [HttpPost("chaos/trigger")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public IActionResult TriggerChaos([FromBody] ChaosRequest request)
     {
         var until = DateTime.UtcNow.AddSeconds(Math.Clamp(request.DurationSeconds, 1, 300));
@@ -73,6 +78,8 @@ public sealed class DemoTestController(
     }
 
     [HttpPost("chaos/clear")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public IActionResult ClearChaos()
     {
         Interlocked.Exchange(ref s_chaosUntilTicks, 0);
@@ -81,6 +88,8 @@ public sealed class DemoTestController(
     }
 
     [HttpGet("health-with-chaos")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public IActionResult HealthWithChaos() =>
         IsChaosActive()
             ? StatusCode(StatusCodes.Status503ServiceUnavailable, new { chaos = true, message = "Chaos injection active" })
@@ -103,6 +112,8 @@ public sealed class DemoTestController(
     /// the factory directly per request — N hits.
     /// </summary>
     [HttpPost("cache-stampede")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Stampede([FromBody] StampedeRequest request, CancellationToken ct)
     {
         var key = $"demo:stampede:{request.CacheKey}:{Guid.NewGuid():N}";
@@ -165,6 +176,8 @@ public sealed class DemoTestController(
     /// proxy calls. Safe to call repeatedly.
     /// </summary>
     [HttpPost("cache/seed-demo-product")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SeedDemoProduct(
         [FromServices] IMediator mediator,
         [FromServices] ICategoryRepository categories,

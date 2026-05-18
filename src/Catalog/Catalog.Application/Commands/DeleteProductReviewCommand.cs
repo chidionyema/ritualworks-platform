@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Catalog.Domain.Interfaces;
 using MediatR;
 
@@ -8,8 +9,9 @@ public sealed record DeleteProductReviewCommand(
     Guid ProductId,
     Guid ReviewId,
     string? UserId,
-    bool IsAdmin
-) : IRequest<Result>;
+    bool IsAdmin,
+    string IdempotencyKey = ""
+) : IIdempotentCommand, IRequest<Result>;
 
 internal sealed class DeleteProductReviewCommandHandler : IRequestHandler<DeleteProductReviewCommand, Result>
 {

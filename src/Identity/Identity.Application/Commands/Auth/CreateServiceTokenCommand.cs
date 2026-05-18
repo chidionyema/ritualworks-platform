@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Identity.Application.Interfaces;
 using MediatR;
 
@@ -9,7 +10,7 @@ namespace Haworks.Identity.Application.Commands.Auth;
 /// Token is signed with the same RSA key used for user tokens so downstream
 /// services validate it via the existing JWKS endpoint without extra config.
 /// </summary>
-public sealed record CreateServiceTokenCommand : IRequest<Result<string>>;
+public sealed record CreateServiceTokenCommand(string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result<string>>;
 
 internal sealed class CreateServiceTokenCommandHandler
     : IRequestHandler<CreateServiceTokenCommand, Result<string>>

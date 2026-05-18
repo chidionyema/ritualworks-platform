@@ -36,7 +36,7 @@ public sealed class SubscriptionRenewalRequestedConsumer(
                 Currency = "USD",
                 NewPeriodEnd = DateTime.UtcNow.AddMonths(1),
                 RenewedAt = DateTime.UtcNow
-            });
+            }, context.CancellationToken);
         }
         catch (Exception ex)
         {
@@ -47,7 +47,7 @@ public sealed class SubscriptionRenewalRequestedConsumer(
                 SubscriptionId = msg.SubscriptionId,
                 ErrorCode = ex.GetType().Name,
                 ErrorMessage = ex.Message
-            });
+            }, context.CancellationToken);
 
             throw;
         }

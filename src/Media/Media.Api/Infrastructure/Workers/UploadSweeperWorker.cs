@@ -12,11 +12,23 @@ public sealed class UploadSweeperWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var interval = TimeSpan.FromMinutes(_opts.SweeperIntervalMinutes);
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            await SweepSafeAsync(stoppingToken);
-            await Task.Delay(interval, stoppingToken);
+            var interval = TimeSpan.FromMinutes(_opts.SweeperIntervalMinutes);
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await SweepSafeAsync(stoppingToken);
+                await Task.Delay(interval, stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Graceful shutdown
+        }
+        catch (Exception ex)
+        {
+            logger.LogCritical(ex, "Unhandled exception in background service {ServiceName}", nameof(UploadSweeperWorker));
+            throw;
         }
     }
 

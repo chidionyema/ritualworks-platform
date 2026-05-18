@@ -142,7 +142,7 @@ public sealed class FfmpegService(IOptions<TranscodeOptions> opts, ILogger<Ffmpe
         }
         catch (OperationCanceledException)
         {
-            try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+            try { process.Kill(entireProcessTree: true); } catch (Exception ex) { logger.LogWarning(ex, "An error occurred in {MethodName}", nameof(RunAsync)); }
             throw new TimeoutException($"FFmpeg process timed out after {timeout.TotalMinutes}m");
         }
 

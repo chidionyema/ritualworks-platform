@@ -98,14 +98,14 @@ public sealed class NotificationRequestConsumer(
         try
         {
             var template = await templateSelector.SelectAsync(
-                notification.TemplateId, DefaultLocale, notification.Channel);
+                notification.TemplateId, DefaultLocale, notification.Channel, ct);
 
             var variables = notification.Variables ?? new Dictionary<string, object>();
 
             if (template is not null)
             {
-                renderedSubject = await templateRenderer.RenderAsync(template.SubjectTemplate, variables);
-                renderedBody = await templateRenderer.RenderAsync(template.BodyTemplate, variables);
+                renderedSubject = await templateRenderer.RenderAsync(template.SubjectTemplate, variables, ct);
+                renderedBody = await templateRenderer.RenderAsync(template.BodyTemplate, variables, ct);
             }
             else
             {

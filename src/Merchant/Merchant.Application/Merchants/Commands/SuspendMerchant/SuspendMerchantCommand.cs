@@ -1,5 +1,6 @@
 using FluentValidation;
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Contracts.Merchant;
 using Haworks.Merchant.Application.Common.Interfaces;
 using MassTransit;
@@ -8,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Haworks.Merchant.Application.Merchants.Commands.SuspendMerchant;
 
-public record SuspendMerchantCommand(Guid MerchantId, string SuspendedBy, string Reason) : IRequest<Result>;
+public record SuspendMerchantCommand(Guid MerchantId, string SuspendedBy, string Reason, string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result>;
 
 public class SuspendMerchantCommandValidator : AbstractValidator<SuspendMerchantCommand>
 {

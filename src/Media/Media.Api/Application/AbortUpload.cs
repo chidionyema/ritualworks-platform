@@ -1,8 +1,9 @@
 using Haworks.BuildingBlocks.CurrentUser;
+using Haworks.BuildingBlocks.Idempotency;
 
 namespace Haworks.Media.Api.Application;
 
-public record AbortUploadCommand(Guid MediaId) : IRequest<Result<Unit>>;
+public record AbortUploadCommand(Guid MediaId, string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result<Unit>>;
 
 public class AbortUploadValidator : AbstractValidator<AbortUploadCommand>
 {

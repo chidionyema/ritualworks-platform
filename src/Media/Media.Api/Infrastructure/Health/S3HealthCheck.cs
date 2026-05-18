@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 
 namespace Haworks.Media.Api.Infrastructure.Health;
 
-public sealed class S3HealthCheck(IAmazonS3 s3, IOptions<MediaStorageOptions> opts) : IHealthCheck
+public sealed class S3HealthCheck(IAmazonS3 s3, IOptions<MediaStorageOptions> opts, ILogger<S3HealthCheck> logger) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context, CancellationToken ct = default)
@@ -19,6 +19,7 @@ public sealed class S3HealthCheck(IAmazonS3 s3, IOptions<MediaStorageOptions> op
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "An error occurred in {MethodName}", nameof(CheckHealthAsync));
             return HealthCheckResult.Unhealthy("S3 unreachable", ex);
         }
     }

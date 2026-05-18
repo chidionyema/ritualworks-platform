@@ -2,6 +2,7 @@ using Haworks.BuildingBlocks.Authentication;
 using Haworks.BuildingBlocks.Common;
 using Haworks.Webhooks.Application.Deliveries;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -20,6 +21,8 @@ public sealed class DeliveriesController(IMediator mediator) : ControllerBase
     }
 
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> List(
         [FromQuery] Guid? subscriptionId,
         [FromQuery] string? eventType,
@@ -34,10 +37,14 @@ public sealed class DeliveriesController(IMediator mediator) : ControllerBase
     }
 
     [HttpGet("{id:guid}/attempts")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetAttempts(Guid id, CancellationToken ct)
         => (await mediator.Send(new GetDeliveryAttemptsQuery(id, GetPartnerId()), ct)).ToActionResult();
 
     [HttpPost("{id:guid}/replay")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Replay(Guid id, CancellationToken ct)
         => (await mediator.Send(new ReplayDeliveryCommand(id, GetPartnerId()), ct)).ToActionResult();
 }

@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Haworks.Identity.Application.DTOs;
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Identity.Domain;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -24,8 +25,9 @@ public sealed class AuthOptions
 public sealed record RefreshTokenCommand(
     string AccessToken,
     string RefreshToken,
-    HttpContext HttpContext
-) : IRequest<Result<AuthResponseDto>>;
+    HttpContext HttpContext,
+    string IdempotencyKey = ""
+) : IIdempotentCommand, IRequest<Result<AuthResponseDto>>;
 
 /// <summary>
 /// Handler for token refresh - uses clean architecture interfaces.

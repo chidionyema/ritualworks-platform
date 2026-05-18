@@ -25,7 +25,7 @@ public sealed class ScribanTemplateRenderer : ITemplateRenderer
     private static readonly IReadOnlyList<string> EmptyRequired = Array.Empty<string>();
 
     /// <inheritdoc/>
-    public Task<string> RenderAsync(string template, IDictionary<string, object> data)
+    public Task<string> RenderAsync(string template, IDictionary<string, object> data, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(data);

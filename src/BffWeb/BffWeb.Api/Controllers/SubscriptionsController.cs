@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Headers;
 
@@ -20,17 +21,21 @@ public sealed class SubscriptionsController : ControllerBase
     }
 
     [HttpGet("status")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public Task<IActionResult> GetStatus(
         [FromHeader(Name = "Authorization")] string? authorization,
-        CancellationToken ct)
+        CancellationToken ct = default)
     {
         return ForwardAsync(HttpMethod.Get, "/api/subscriptions/status", null, authorization, ct);
     }
 
     [HttpPost("create-checkout-session")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateCheckoutSession(
         [FromHeader(Name = "Authorization")] string? authorization,
-        CancellationToken ct)
+        CancellationToken ct = default)
     {
         // For POST, we read the body and forward it.
         Request.EnableBuffering();
@@ -38,7 +43,7 @@ public sealed class SubscriptionsController : ControllerBase
         return await ForwardAsync(HttpMethod.Post, "/api/subscriptions/create-checkout-session", streamContent, authorization, ct);
     }
 
-    private async Task<IActionResult> ForwardAsync(HttpMethod method, string path, HttpContent? content, string? authorization, CancellationToken ct)
+    private async Task<IActionResult> ForwardAsync(HttpMethod method, string path, HttpContent? content, string? authorization, CancellationToken ct = default)
     {
         var http = _httpFactory.CreateClient(BackendClients.Payments);
 

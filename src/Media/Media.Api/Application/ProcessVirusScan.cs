@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.CurrentUser;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Contracts.Media;
 using Haworks.Media.Api.Infrastructure;
 using MassTransit;
@@ -6,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Haworks.Media.Api.Application;
 
-public record ProcessVirusScanCommand(Guid MediaId) : IRequest<Result<Unit>>;
+public record ProcessVirusScanCommand(Guid MediaId, string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result<Unit>>;
 
 public class ProcessVirusScanValidator : AbstractValidator<ProcessVirusScanCommand>
 {
@@ -25,6 +26,7 @@ public class ProcessVirusScanHandler : IRequestHandler<ProcessVirusScanCommand, 
     private readonly IS3Service _s3;
     private readonly IPublishEndpoint _publisher;
     private readonly ISendEndpointProvider _sendEndpoint;
+    private readonly ILogger<ProcessVirusScanHandler> _logger;
 
     public ProcessVirusScanHandler(
         MediaDbContext context,
@@ -33,7 +35,8 @@ public class ProcessVirusScanHandler : IRequestHandler<ProcessVirusScanCommand, 
         ICurrentUserService currentUser,
         IS3Service s3,
         IPublishEndpoint publisher,
-        ISendEndpointProvider sendEndpoint)
+        ISendEndpointProvider sendEndpoint,
+        ILogger<ProcessVirusScanHandler> logger)
     {
         _context = context;
         _virusScanner = virusScanner;
@@ -42,6 +45,7 @@ public class ProcessVirusScanHandler : IRequestHandler<ProcessVirusScanCommand, 
         _s3 = s3;
         _publisher = publisher;
         _sendEndpoint = sendEndpoint;
+        _logger = logger;
     }
 
     public async Task<Result<Unit>> Handle(ProcessVirusScanCommand request, CancellationToken cancellationToken)
@@ -92,7 +96,7 @@ public class ProcessVirusScanHandler : IRequestHandler<ProcessVirusScanCommand, 
             // Magic-byte signature validation — blocks executables and mismatched MIME types
             await using (var sigStream = File.OpenRead(tempPath))
             {
-                var sigResult = await _signatureValidator.ValidateAsync(sigStream);
+                var sigResult = await _signatureValidator.ValidateAsync(sigStream, cancellationToken);
                 if (!sigResult.IsValid)
                 {
                     await _s3.QuarantineAsync(mediaFile.Id.ToString(), cancellationToken);
@@ -169,8 +173,9 @@ public class ProcessVirusScanHandler : IRequestHandler<ProcessVirusScanCommand, 
 
                 await tx2.CommitAsync(cancellationToken);
             }
-            catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+            catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException ex)
             {
+                _logger.LogWarning(ex, "An error occurred in {MethodName}", nameof(Handle));
                 return Unit.Value;
             }
             catch
@@ -181,7 +186,7 @@ public class ProcessVirusScanHandler : IRequestHandler<ProcessVirusScanCommand, 
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { /* best effort */ }
+            try { File.Delete(tempPath); } catch (Exception ex) { _logger.LogWarning(ex, "An error occurred in {MethodName}", nameof(Handle)); }
         }
 
         return Unit.Value;

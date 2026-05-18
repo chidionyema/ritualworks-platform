@@ -1,9 +1,10 @@
 using FluentValidation;
+using Haworks.BuildingBlocks.Idempotency;
 using MediatR;
 
 namespace Haworks.Catalog.Application.Commands;
 
-public sealed record CreateCategoryCommand(string Name, string? Description) : IRequest<Result<Guid>>;
+public sealed record CreateCategoryCommand(string Name, string? Description, string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result<Guid>>;
 
 
 internal sealed class CreateCategoryCommandHandler(

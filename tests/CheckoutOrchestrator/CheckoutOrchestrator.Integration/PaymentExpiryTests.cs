@@ -78,6 +78,7 @@ public sealed class PaymentExpiryTests : IClassFixture<CheckoutWebAppFactory>, I
         await PublishAsync(new PaymentSessionCreatedEvent
         {
             OrderId = orderId, SagaId = sagaId, PaymentId = paymentId,
+            UserId = "user-1",
             SessionId = "sess_test", CheckoutUrl = "https://stripe.test/sess_test",
             Provider = "Stripe", Amount = 25.50m, Currency = "USD",
         });

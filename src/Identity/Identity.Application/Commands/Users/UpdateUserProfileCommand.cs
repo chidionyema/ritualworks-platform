@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Identity.Domain;
 using Haworks.Identity.Domain.Interfaces;
 using MediatR;
@@ -16,8 +17,9 @@ public sealed record UpdateUserProfileCommand(
     string? PostalCode,
     string? Country,
     string? Bio,
-    string? Website
-) : IRequest<Result>;
+    string? Website,
+    string IdempotencyKey = ""
+) : IIdempotentCommand, IRequest<Result>;
 
 internal sealed class UpdateUserProfileCommandHandler : IRequestHandler<UpdateUserProfileCommand, Result>
 {

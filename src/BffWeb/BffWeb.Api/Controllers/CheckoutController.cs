@@ -5,6 +5,7 @@ using System.Security.Claims;
 using Haworks.BffWeb.Application.Telemetry;
 using Haworks.BuildingBlocks.Idempotency;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -34,7 +35,9 @@ public sealed class CheckoutController(
 {
     [HttpPost]
     [EnableRateLimiting("expensive")]
-    public async Task<IActionResult> Start([FromBody] CheckoutRequest body, CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Start([FromBody] CheckoutRequest body, CancellationToken ct = default)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userId))

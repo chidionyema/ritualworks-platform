@@ -25,11 +25,11 @@ public class DemoHub : Hub
 
     private const int MaxGroupsPerConnection = 5;
 
-    public async Task SubscribeToSession(string sessionId)
+    public async Task SubscribeToSession(string sessionId, CancellationToken ct = default)
     {
         if (!Guid.TryParse(sessionId, out var parsedSessionId))
         {
-            await Clients.Caller.SendAsync("OnSubscriptionError", "Invalid session ID format");
+            await Clients.Caller.SendAsync("OnSubscriptionError", "Invalid session ID format", ct);
             return;
         }
 
@@ -37,25 +37,25 @@ public class DemoHub : Hub
         var groupCount = (int)(Context.Items.TryGetValue("groupCount", out var c) ? c! : 0);
         if (groupCount >= MaxGroupsPerConnection)
         {
-            await Clients.Caller.SendAsync("OnSubscriptionError", "Maximum session subscriptions reached");
+            await Clients.Caller.SendAsync("OnSubscriptionError", "Maximum session subscriptions reached", ct);
             return;
         }
         Context.Items["groupCount"] = groupCount + 1;
 
-        await Groups.AddToGroupAsync(Context.ConnectionId, GetGroupName(parsedSessionId));
+        await Groups.AddToGroupAsync(Context.ConnectionId, GetGroupName(parsedSessionId), ct);
 
         _logger.LogDebug(
             "Client {ConnectionId} subscribed to demo session {SessionId}",
             Context.ConnectionId, sessionId);
 
-        await Clients.Caller.SendAsync("OnSubscribed", sessionId);
+        await Clients.Caller.SendAsync("OnSubscribed", sessionId, ct);
     }
 
-    public async Task UnsubscribeFromSession(string sessionId)
+    public async Task UnsubscribeFromSession(string sessionId, CancellationToken ct = default)
     {
         if (Guid.TryParse(sessionId, out var parsedSessionId))
         {
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, GetGroupName(parsedSessionId));
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, GetGroupName(parsedSessionId), ct);
         }
     }
 
@@ -123,12 +123,10 @@ public class SignalRDemoHubNotifier : IDemoHubNotifier
             _logger.LogWarning("Dropping {Method} event with Guid.Empty sessionId — likely uninitialized", methodName);
             return;
         }
-        else
-        {
-            var groupName = GetGroupName(sessionId);
-            await _hubContext.Clients.Group(groupName).SendAsync(methodName, payload, ct);
-            _logger.LogDebug("Sent {Method} for demo session {SessionId}", methodName, sessionId);
-        }
+
+        var groupName = GetGroupName(sessionId);
+        await _hubContext.Clients.Group(groupName).SendAsync(methodName, payload, ct);
+        _logger.LogDebug("Sent {Method} for demo session {SessionId}", methodName, sessionId);
     }
 
     private static string GetGroupName(Guid sessionId) => $"demo-{sessionId}";

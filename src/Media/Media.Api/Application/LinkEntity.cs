@@ -1,9 +1,10 @@
 using Haworks.BuildingBlocks.CurrentUser;
+using Haworks.BuildingBlocks.Idempotency;
 using Microsoft.EntityFrameworkCore;
 
 namespace Haworks.Media.Api.Application;
 
-public record LinkEntityCommand(Guid MediaId, Guid EntityId, string EntityType) : IRequest<Result<Unit>>;
+public record LinkEntityCommand(Guid MediaId, Guid EntityId, string EntityType, string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result<Unit>>;
 
 public class LinkEntityValidator : AbstractValidator<LinkEntityCommand>
 {

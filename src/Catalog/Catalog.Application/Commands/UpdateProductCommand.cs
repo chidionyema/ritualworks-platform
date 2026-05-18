@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Catalog.Application.DTOs;
 using Haworks.Catalog.Application.Interfaces;
@@ -16,8 +17,9 @@ public sealed record UpdateProductCommand(
     decimal UnitPrice,
     Guid CategoryId,
     bool IsListed,
-    Guid? CorrelationId = null
-) : IRequest<Result<ProductDto>>;
+    Guid? CorrelationId = null,
+    string IdempotencyKey = ""
+) : IIdempotentCommand, IRequest<Result<ProductDto>>;
 
 internal sealed class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand, Result<ProductDto>>
 {

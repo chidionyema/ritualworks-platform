@@ -1,5 +1,6 @@
 using Haworks.BffWeb.Api.Demo;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.BffWeb.Api.Controllers;
@@ -29,6 +30,8 @@ public sealed class ChaosController : ControllerBase
     }
 
     [HttpGet("state")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public IActionResult GetState()
     {
         if (IsForbidden()) return ForbidResponse();
@@ -36,7 +39,9 @@ public sealed class ChaosController : ControllerBase
     }
 
     [HttpPost("{target}/pause")]
-    public async Task<IActionResult> Pause(string target, [FromBody] PauseRequest? req, CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Pause(string target, [FromBody] PauseRequest? req, CancellationToken ct = default)
     {
         if (IsForbidden()) return ForbidResponse();
         var duration = req?.DurationSeconds is { } s && s > 0
@@ -52,7 +57,9 @@ public sealed class ChaosController : ControllerBase
     }
 
     [HttpPost("{target}/resume")]
-    public async Task<IActionResult> Resume(string target, CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Resume(string target, CancellationToken ct = default)
     {
         if (IsForbidden()) return ForbidResponse();
         var resumed = await _manager!.ResumeAsync(target, ct);

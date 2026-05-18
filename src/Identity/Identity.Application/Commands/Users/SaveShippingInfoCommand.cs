@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Identity.Domain;
 using Haworks.Identity.Domain.Interfaces;
 using MediatR;
@@ -14,8 +15,9 @@ public sealed record SaveShippingInfoCommand(
     string? State,
     string PostalCode,
     string Country,
-    string? Phone
-) : IRequest<Result>;
+    string? Phone,
+    string IdempotencyKey = ""
+) : IIdempotentCommand, IRequest<Result>;
 
 internal sealed class SaveShippingInfoCommandHandler : IRequestHandler<SaveShippingInfoCommand, Result>
 {

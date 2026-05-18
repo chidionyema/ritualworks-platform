@@ -11,6 +11,7 @@ using Haworks.Merchant.Application.Merchants.DTOs;
 using Haworks.Merchant.Application.Merchants.Queries;
 using Haworks.Merchant.Domain.Enums;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -26,6 +27,8 @@ public class MerchantsController : ControllerBase
     public MerchantsController(IMediator mediator) => _mediator = mediator;
 
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create(CreateMerchantCommand command, CancellationToken ct)
     {
         var id = await _mediator.Send(command, ct);
@@ -33,6 +36,8 @@ public class MerchantsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetMerchantByIdQuery(id), ct);
@@ -40,6 +45,8 @@ public class MerchantsController : ControllerBase
     }
 
     [HttpGet("by-slug/{slug}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetBySlug(string slug, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetMerchantBySlugQuery(slug), ct);
@@ -47,6 +54,8 @@ public class MerchantsController : ControllerBase
     }
 
     [HttpGet("mine")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetMine(CancellationToken ct)
     {
         var userId = HttpContext.GetForwardedUserId();
@@ -59,6 +68,8 @@ public class MerchantsController : ControllerBase
 
     [HttpGet]
     [Authorize(Roles = "Admin")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> List(
         [FromQuery] int skip = 0,
         [FromQuery] int take = 20,
@@ -73,6 +84,8 @@ public class MerchantsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateMerchantRequest request, CancellationToken ct)
     {
         var userId = HttpContext.GetForwardedUserId();
@@ -89,6 +102,8 @@ public class MerchantsController : ControllerBase
     }
 
     [HttpPut("{id:guid}/hours")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SetHours(Guid id, [FromBody] List<OperatingHourDto> hours, CancellationToken ct)
     {
         var userId = HttpContext.GetForwardedUserId();
@@ -101,6 +116,8 @@ public class MerchantsController : ControllerBase
 
     [HttpPost("{id:guid}/approve")]
     [Authorize(Roles = "Admin")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {
         var adminId = HttpContext.GetForwardedUserId();
@@ -113,6 +130,8 @@ public class MerchantsController : ControllerBase
 
     [HttpPost("{id:guid}/reject")]
     [Authorize(Roles = "Admin")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Reject(Guid id, [FromBody] RejectMerchantRequest request, CancellationToken ct)
     {
         var adminId = HttpContext.GetForwardedUserId();
@@ -125,6 +144,8 @@ public class MerchantsController : ControllerBase
 
     [HttpPost("{id:guid}/suspend")]
     [Authorize(Roles = "Admin")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Suspend(Guid id, [FromBody] SuspendMerchantRequest request, CancellationToken ct)
     {
         var adminId = HttpContext.GetForwardedUserId();
@@ -136,6 +157,8 @@ public class MerchantsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/deactivate")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Deactivate(Guid id, CancellationToken ct)
     {
         var userId = HttpContext.GetForwardedUserId();

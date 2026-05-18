@@ -27,9 +27,9 @@ public sealed class CdcSearchIndexWorker(
         "kafka.consumer.messages.skipped", description: "CDC messages skipped (malformed)");
 
     private long _lagMessages;
-    private static readonly ObservableGauge<long> LagGauge = Meter.CreateObservableGauge(
+    private static readonly ObservableGauge<long> LagGauge = Meter.CreateObservableGauge<long>(
         "kafka.consumer.lag.messages",
-        () => []);
+        () => 0L);
 
     private static readonly string[] Topics =
     [
@@ -39,46 +39,58 @@ public sealed class CdcSearchIndexWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        consumer.Subscribe(Topics);
-
-        // Register lag gauge with instance reference
-        Meter.CreateObservableGauge("kafka.consumer_lag_messages",
-            () => new Measurement<long>(_lagMessages,
-                new KeyValuePair<string, object?>("group", "search-svc-cdc")),
-            description: "Kafka consumer lag in messages");
-
-        ConsumeResult<string, string>? result = null;
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
-            {
-                result = consumer.Consume(stoppingToken);
-                if (result?.Message?.Value == null) continue;
+            consumer.Subscribe(Topics);
 
-                await ProcessMessageAsync(result, stoppingToken);
-                consumer.Commit(result);
-                MessagesProcessed.Add(1, new KeyValuePair<string, object?>("topic", result.Topic));
+            // Register lag gauge with instance reference
+            Meter.CreateObservableGauge<long>("kafka.consumer_lag_messages",
+                () => new Measurement<long>(_lagMessages,
+                    new KeyValuePair<string, object?>("group", "search-svc-cdc")),
+                description: "Kafka consumer lag in messages");
 
-                // Update lag estimate from partition watermarks
-                UpdateLagEstimate(result);
-            }
-            catch (OperationCanceledException)
+            ConsumeResult<string, string>? result = null;
+            while (!stoppingToken.IsCancellationRequested)
             {
-                break;
+                try
+                {
+                    result = consumer.Consume(stoppingToken);
+                    if (result?.Message?.Value == null) continue;
+
+                    await ProcessMessageAsync(result, stoppingToken);
+                    consumer.Commit(result);
+                    MessagesProcessed.Add(1, new KeyValuePair<string, object?>("topic", result.Topic));
+
+                    // Update lag estimate from partition watermarks
+                    UpdateLagEstimate(result);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex) when (ex is System.Text.Json.JsonException or KeyNotFoundException or FormatException or ArgumentNullException)
+                {
+                    logger.LogError(ex, "Skipping malformed CDC message on {Topic}", result?.Topic);
+                    if (result != null) consumer.Commit(result);
+                    MessagesSkipped.Add(1, new KeyValuePair<string, object?>("topic", result?.Topic ?? "unknown"));
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error processing CDC search index update");
+                }
             }
-            catch (Exception ex) when (ex is System.Text.Json.JsonException or KeyNotFoundException or FormatException or ArgumentNullException)
-            {
-                logger.LogError(ex, "Skipping malformed CDC message on {Topic}", result?.Topic);
-                if (result != null) consumer.Commit(result);
-                MessagesSkipped.Add(1, new KeyValuePair<string, object?>("topic", result?.Topic ?? "unknown"));
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error processing CDC search index update");
-            }
+
+            consumer.Close();
         }
-
-        consumer.Close();
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Graceful shutdown
+        }
+        catch (Exception ex)
+        {
+            logger.LogCritical(ex, "Unhandled exception in background service {ServiceName}", nameof(CdcSearchIndexWorker));
+            throw;
+        }
     }
 
     private void UpdateLagEstimate(ConsumeResult<string, string> result)
@@ -88,8 +100,9 @@ public sealed class CdcSearchIndexWorker(
             var watermarks = consumer.QueryWatermarkOffsets(result.TopicPartition, TimeSpan.FromSeconds(1));
             _lagMessages = watermarks.High.Value - result.Offset.Value;
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "Failed to update lag estimate");
             // Non-critical — lag metric will be stale but won't crash the consumer
         }
     }

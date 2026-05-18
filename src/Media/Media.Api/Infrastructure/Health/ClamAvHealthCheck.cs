@@ -4,7 +4,7 @@ using nClam;
 
 namespace Haworks.Media.Api.Infrastructure.Health;
 
-public sealed class ClamAvHealthCheck(IOptions<ClamAvOptions> opts) : IHealthCheck
+public sealed class ClamAvHealthCheck(IOptions<ClamAvOptions> opts, ILogger<ClamAvHealthCheck> logger) : IHealthCheck
 {
     private readonly ClamAvOptions _opts = opts.Value;
 
@@ -21,6 +21,7 @@ public sealed class ClamAvHealthCheck(IOptions<ClamAvOptions> opts) : IHealthChe
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "An error occurred in {MethodName}", nameof(CheckHealthAsync));
             return HealthCheckResult.Unhealthy("ClamAV unreachable", ex);
         }
     }

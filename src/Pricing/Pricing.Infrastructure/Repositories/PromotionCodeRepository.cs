@@ -67,14 +67,13 @@ public sealed class PromotionCodeRepository : IPromotionCodeRepository
                 "SET LOCAL lock_timeout = '500ms'", ct).ConfigureAwait(false);
 
             // Atomic CAS UPDATE — increment UsesCount only if under limit
-            var rowsAffected = await _context.Database.ExecuteSqlRawAsync(
-                """
+            var rowsAffected = await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"""
                 UPDATE pricing."PromotionCodes"
                 SET "UsesCount" = "UsesCount" + 1, "LastModifiedDate" = NOW()
-                WHERE "Id" = {0}
+                WHERE "Id" = {promotionCodeId}
                   AND ("MaxUses" IS NULL OR "UsesCount" < "MaxUses")
                 """,
-                new object[] { promotionCodeId },
                 ct).ConfigureAwait(false);
 
             if (rowsAffected == 0)

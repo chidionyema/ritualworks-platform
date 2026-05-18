@@ -16,7 +16,7 @@ public class StripePayoutGateway : IPayoutGateway
         _client = new StripeClient(secretKey);
     }
 
-    public async Task<string> CreateConnectedAccountAsync(Guid sellerId, string email)
+    public async Task<string> CreateConnectedAccountAsync(Guid sellerId, string email, CancellationToken ct = default)
     {
         var options = new AccountCreateOptions
         {
@@ -29,17 +29,17 @@ public class StripePayoutGateway : IPayoutGateway
         };
 
         var service = new AccountService(_client);
-        var account = await service.CreateAsync(options);
+        var account = await service.CreateAsync(options, cancellationToken: ct);
         return account.Id;
     }
 
-    public async Task DeleteConnectedAccountAsync(string providerId)
+    public async Task DeleteConnectedAccountAsync(string providerId, CancellationToken ct = default)
     {
         var service = new AccountService(_client);
-        await service.DeleteAsync(providerId);
+        await service.DeleteAsync(providerId, cancellationToken: ct);
     }
 
-    public async Task<string> CreateAccountOnboardingLinkAsync(string providerId, string returnUrl, string refreshUrl)
+    public async Task<string> CreateAccountOnboardingLinkAsync(string providerId, string returnUrl, string refreshUrl, CancellationToken ct = default)
     {
         var options = new AccountLinkCreateOptions
         {
@@ -50,11 +50,11 @@ public class StripePayoutGateway : IPayoutGateway
         };
 
         var service = new AccountLinkService(_client);
-        var accountLink = await service.CreateAsync(options);
+        var accountLink = await service.CreateAsync(options, cancellationToken: ct);
         return accountLink.Url;
     }
 
-    public async Task<(string ExternalId, PayoutStatus Status)> InitiatePayoutAsync(string providerId, decimal amount, string currency, string? description = null, string? idempotencyKey = null)
+    public async Task<(string ExternalId, PayoutStatus Status)> InitiatePayoutAsync(string providerId, decimal amount, string currency, string? description = null, string? idempotencyKey = null, CancellationToken ct = default)
     {
         var options = new TransferCreateOptions
         {
@@ -70,7 +70,7 @@ public class StripePayoutGateway : IPayoutGateway
         };
 
         var service = new TransferService(_client);
-        var transfer = await service.CreateAsync(options, requestOptions);
+        var transfer = await service.CreateAsync(options, requestOptions, cancellationToken: ct);
 
         // C4 Fix: Map Stripe's actual transfer status instead of hardcoding Succeeded.
         // Stripe Transfers are not instant — they go through pending → paid → failed.

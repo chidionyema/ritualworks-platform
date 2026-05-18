@@ -4,7 +4,7 @@ namespace Haworks.RulesEngine.Api.Domain;
 
 public class Rule
 {
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
     public string Name { get; set; } = string.Empty;
     public string Expression { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;

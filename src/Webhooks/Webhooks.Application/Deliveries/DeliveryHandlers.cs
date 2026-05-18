@@ -1,5 +1,6 @@
 using Hangfire;
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Webhooks.Application.Common;
 using Haworks.Webhooks.Application.Interfaces;
 using Haworks.Webhooks.Domain;
@@ -40,7 +41,7 @@ public sealed record GetDeliveriesQuery(
 
 public sealed record GetDeliveryAttemptsQuery(Guid DeliveryId, Guid CallerId) : IRequest<Result<IReadOnlyList<WebhookAttemptDto>>>;
 
-public sealed record ReplayDeliveryCommand(Guid DeliveryId, Guid CallerId) : IRequest<Result<Guid>>;
+public sealed record ReplayDeliveryCommand(Guid DeliveryId, Guid CallerId, string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result<Guid>>;
 
 internal sealed class DeliveryHandlers(
     IWebhooksDbContext db,

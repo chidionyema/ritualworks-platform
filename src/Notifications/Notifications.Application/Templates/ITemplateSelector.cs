@@ -5,5 +5,5 @@ namespace Haworks.Notifications.Application.Templates;
 
 public interface ITemplateSelector
 {
-    Task<NotificationTemplate> SelectAsync(string templateId, string locale, NotificationChannel channel);
+    Task<NotificationTemplate> SelectAsync(string templateId, string locale, NotificationChannel channel, CancellationToken ct = default);
 }

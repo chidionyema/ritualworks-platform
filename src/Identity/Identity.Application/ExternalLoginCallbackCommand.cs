@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text.RegularExpressions;
 using Haworks.Identity.Application.DTOs;
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Identity.Domain;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -11,8 +12,9 @@ using Microsoft.Extensions.Options;
 namespace Haworks.Identity.Application;
 
 public sealed record ExternalLoginCallbackCommand(
-    HttpContext HttpContext
-) : IRequest<Result<AuthResponseDto>>;
+    HttpContext HttpContext,
+    string IdempotencyKey = ""
+) : IIdempotentCommand, IRequest<Result<AuthResponseDto>>;
 
 /// <summary>
 /// Options for configuring external login behavior.

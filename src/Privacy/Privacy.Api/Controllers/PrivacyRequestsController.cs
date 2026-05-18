@@ -2,10 +2,10 @@ using Haworks.Privacy.Application.Requests.Commands.InitiateRequest;
 using Haworks.Privacy.Application.Requests.Queries.GetErasureStatus;
 using Haworks.Privacy.Domain.Enums;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using System.Security.Claims;
 
 namespace Haworks.Privacy.Api.Controllers;
 
@@ -23,14 +23,16 @@ public class PrivacyRequestsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Initiate(InitiatePrivacyRequestCommand command)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Initiate(InitiatePrivacyRequestCommand command, CancellationToken ct = default)
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             return Unauthorized();
 
         var secureCommand = command with { UserId = userId };
-        var id = await _mediator.Send(secureCommand);
+        var id = await _mediator.Send(secureCommand, ct);
         return Ok(new { RequestId = id });
     }
 
@@ -39,13 +41,15 @@ public class PrivacyRequestsController : ControllerBase
     /// Users can only query their own requests (enforced by user ID from JWT).
     /// </summary>
     [HttpGet("{requestId:guid}")]
-    public async Task<IActionResult> GetStatus(Guid requestId)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetStatus(Guid requestId, CancellationToken ct = default)
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             return Unauthorized();
 
-        var result = await _mediator.Send(new GetErasureStatusQuery(requestId, userId));
+        var result = await _mediator.Send(new GetErasureStatusQuery(requestId, userId), ct);
         if (result is null)
             return NotFound();
 

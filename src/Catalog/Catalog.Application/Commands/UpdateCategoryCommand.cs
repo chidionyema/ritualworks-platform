@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Catalog.Application.DTOs;
 using Haworks.Catalog.Domain.Interfaces;
@@ -9,7 +10,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Haworks.Catalog.Application.Commands;
 
-public sealed record UpdateCategoryCommand(Guid CategoryId, string Name) : IRequest<Result<CategoryDto>>;
+public sealed record UpdateCategoryCommand(Guid CategoryId, string Name, string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result<CategoryDto>>;
 
 internal sealed class UpdateCategoryCommandHandler : IRequestHandler<UpdateCategoryCommand, Result<CategoryDto>>
 {

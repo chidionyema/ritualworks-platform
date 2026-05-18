@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Haworks.Catalog.Application.DTOs.Reservations;
 using Haworks.Contracts.Catalog;
+using Haworks.BuildingBlocks.Idempotency;
 
 namespace Haworks.Catalog.Application.Commands.Reservations;
 
@@ -21,7 +22,8 @@ namespace Haworks.Catalog.Application.Commands.Reservations;
 public sealed record CreateReservationCommand(
     IReadOnlyList<ReservationItemDto> Items,
     string UserId,
-    string? ClientIdempotencyKey) : IRequest<Result<ReservationDto>>;
+    string? ClientIdempotencyKey,
+    string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result<ReservationDto>>;
 
 
 internal sealed class CreateReservationCommandHandler(

@@ -96,6 +96,7 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
         await PublishAsync(new PaymentSessionCreatedEvent
         {
             OrderId = orderId, SagaId = sagaId, PaymentId = paymentId,
+            UserId = "user-1",
             SessionId = "sess_test", CheckoutUrl = "https://stripe.test/sess_test",
             Provider = "Stripe", Amount = 25.50m, Currency = "USD",
         });
@@ -219,6 +220,7 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
         await PublishAsync(new PaymentSessionCreatedEvent
         {
             OrderId = orderId, SagaId = sagaId, PaymentId = paymentId,
+            UserId = "user-1",
             SessionId = "sess_x", CheckoutUrl = "https://stripe.test/sess_x",
             Provider = "Stripe", Amount = 25.50m, Currency = "USD",
         });
@@ -285,6 +287,7 @@ public sealed class SagaFlowsTests : IClassFixture<Haworks.CheckoutOrchestrator.
         await PublishAsync(new PaymentSessionCreatedEvent
         {
             OrderId = orderId, SagaId = sagaId, PaymentId = paymentId,
+            UserId = "user-1",
             SessionId = "sess_resume", CheckoutUrl = "https://stripe.test/sess_resume",
             Provider = "Stripe", Amount = 25.50m, Currency = "USD",
         });

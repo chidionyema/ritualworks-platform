@@ -1,5 +1,6 @@
 using Haworks.Scheduler.Application.Scheduling.Commands.ScheduleEvent;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,9 +19,11 @@ public class SchedulingController : ControllerBase
     }
 
     [HttpPost("schedule")]
-    public async Task<IActionResult> Schedule(ScheduleEventCommand command)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Schedule(ScheduleEventCommand command, CancellationToken ct = default)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, ct);
         return Accepted(new { result.JobId, result.AlreadyExisted });
     }
 }

@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Contracts.Merchant;
 using Haworks.Merchant.Application.Common.Interfaces;
 using MassTransit;
@@ -7,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Haworks.Merchant.Application.Merchants.Commands.ApproveMerchant;
 
-public record ApproveMerchantCommand(Guid MerchantId, string ApprovedBy) : IRequest<Result>;
+public record ApproveMerchantCommand(Guid MerchantId, string ApprovedBy, string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result>;
 
 public sealed class ApproveMerchantCommandHandler : IRequestHandler<ApproveMerchantCommand, Result>
 {

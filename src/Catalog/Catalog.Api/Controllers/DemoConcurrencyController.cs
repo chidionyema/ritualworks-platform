@@ -1,5 +1,6 @@
 using Haworks.Catalog.Domain;
 using Haworks.Catalog.Infrastructure;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +30,8 @@ public sealed class DemoConcurrencyController(
     ILogger<DemoConcurrencyController> logger) : ControllerBase
 {
     [HttpGet("{productId:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Get(Guid productId, CancellationToken ct)
     {
         try
@@ -69,6 +72,8 @@ public sealed class DemoConcurrencyController(
     }
 
     [HttpPut("{productId:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Update(
         Guid productId,
         [FromBody] InventoryUpdate update,

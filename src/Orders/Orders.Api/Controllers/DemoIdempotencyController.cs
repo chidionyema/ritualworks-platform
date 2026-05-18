@@ -1,9 +1,9 @@
-using System.ComponentModel.DataAnnotations;
-using System.Data;
 using Haworks.Orders.Infrastructure;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace Haworks.Orders.Api.Controllers;
 
@@ -39,6 +39,8 @@ public sealed class DemoIdempotencyController(
     /// the dedup, not in-process state.
     /// </summary>
     [HttpPost("claim")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Claim(
         [FromHeader(Name = "X-Idempotency-Key")] string? key,
         [FromQuery] int ttlSeconds = 30,
@@ -125,6 +127,8 @@ public sealed class DemoIdempotencyController(
     /// real Postgres UNIQUE constraint behaviour, not a simulation.
     /// </summary>
     [HttpPost("race")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Race(
         [FromBody] RaceRequest body,
         CancellationToken ct)
@@ -141,7 +145,7 @@ public sealed class DemoIdempotencyController(
         // Clear any prior claim of this exact key so the race always has
         // a fresh row to fight over.
         await db.Database.ExecuteSqlRawAsync(
-            "DELETE FROM demo_idempotency_keys WHERE key = {0}", body.Key);
+            "DELETE FROM demo_idempotency_keys WHERE key = {0}", new object[] { body.Key! }, ct);
 
         var connStr = db.Database.GetConnectionString();
         var tasks = Enumerable.Range(0, count).Select(async i =>

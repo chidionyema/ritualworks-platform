@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Headers;
 
@@ -28,10 +29,12 @@ public sealed class ReservationsController : ControllerBase
     /// <summary>Anonymous-allowed: ADR-004 supports guest pre-order holds.</summary>
     [HttpPost]
     [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create(
         [FromHeader(Name = "Authorization")] string? authorization,
         [FromHeader(Name = "X-Idempotency-Key")] string? idempotencyKey,
-        CancellationToken ct)
+        CancellationToken ct = default)
     {
         Request.EnableBuffering();
         using var streamContent = new StreamContent(Request.Body);
@@ -46,11 +49,13 @@ public sealed class ReservationsController : ControllerBase
     /// </summary>
     [HttpPost("{reservationId:guid}/confirm")]
     [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Confirm(
         Guid reservationId,
         [FromHeader(Name = "Authorization")] string? authorization,
         [FromHeader(Name = "X-Idempotency-Key")] string? idempotencyKey,
-        CancellationToken ct)
+        CancellationToken ct = default)
     {
         Request.EnableBuffering();
         using var streamContent = new StreamContent(Request.Body);
@@ -69,7 +74,7 @@ public sealed class ReservationsController : ControllerBase
         HttpContent? content,
         string? authorization,
         string? idempotencyKey,
-        CancellationToken ct)
+        CancellationToken ct = default)
     {
         var http = _httpFactory.CreateClient(BackendClients.Catalog);
 

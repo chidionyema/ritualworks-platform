@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Identity.Domain;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -8,8 +9,9 @@ namespace Haworks.Identity.Application;
 public sealed record LinkExternalLoginCommand(
     string UserId,
     string Provider,
-    ExternalLoginInfo? LoginInfo
-) : IRequest<Result<LinkExternalLoginResult>>;
+    ExternalLoginInfo? LoginInfo,
+    string IdempotencyKey = ""
+) : IIdempotentCommand, IRequest<Result<LinkExternalLoginResult>>;
 
 public sealed record LinkExternalLoginResult(
     bool RequiresChallenge,

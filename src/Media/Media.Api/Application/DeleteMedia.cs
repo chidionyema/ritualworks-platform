@@ -1,11 +1,12 @@
 using Haworks.BuildingBlocks.CurrentUser;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Contracts.Media;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 
 namespace Haworks.Media.Api.Application;
 
-public record DeleteMediaCommand(Guid MediaId) : IRequest<Result<Unit>>;
+public record DeleteMediaCommand(Guid MediaId, string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result<Unit>>;
 
 public class DeleteMediaValidator : AbstractValidator<DeleteMediaCommand>
 {

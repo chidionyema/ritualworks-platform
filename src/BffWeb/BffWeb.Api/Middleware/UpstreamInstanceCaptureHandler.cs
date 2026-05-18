@@ -23,11 +23,13 @@ internal sealed class UpstreamInstanceCaptureHandler : DelegatingHandler
     public const string ItemsKey = "live-console.upstreams";
 
     private readonly IHttpContextAccessor _accessor;
+    private readonly ILogger<UpstreamInstanceCaptureHandler> _logger;
     private readonly string _service;
 
-    public UpstreamInstanceCaptureHandler(IHttpContextAccessor accessor, string service)
+    public UpstreamInstanceCaptureHandler(IHttpContextAccessor accessor, ILogger<UpstreamInstanceCaptureHandler> logger, string service)
     {
         _accessor = accessor;
+        _logger = logger;
         _service = service;
     }
 
@@ -65,9 +67,9 @@ internal sealed class UpstreamInstanceCaptureHandler : DelegatingHandler
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // swallow — capture is best-effort
+                _logger.LogWarning(ex, "An error occurred in {MethodName}", nameof(SendAsync));
             }
         }
     }

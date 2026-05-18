@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Haworks.Search.Application.Indexing;
 using Haworks.Search.Application.Interfaces;
 using Haworks.Search.Application.Models;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -23,6 +24,8 @@ public sealed class SearchController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<SearchResponse>> Search(
         [FromQuery, Required, MinLength(1), MaxLength(200)] string q,
         [FromQuery] Guid? categoryId,
@@ -83,6 +86,8 @@ public sealed class SearchController : ControllerBase
     }
 
     [HttpPost("saved")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SaveSearch(
         [FromBody] SearchQuery query,
         CancellationToken ct = default)

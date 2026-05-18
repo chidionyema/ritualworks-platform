@@ -1,14 +1,16 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using MediatR;
 
 namespace Haworks.Identity.Application;
 
 public sealed record LogoutCommand(
     ClaimsPrincipal User,
-    HttpContext HttpContext
-) : IRequest<Result>;
+    HttpContext HttpContext,
+    string IdempotencyKey = ""
+) : IIdempotentCommand, IRequest<Result>;
 
 internal sealed class LogoutCommandHandler : IRequestHandler<LogoutCommand, Result>
 {

@@ -1,5 +1,6 @@
 using FluentValidation;
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Merchant.Application.Common.Interfaces;
 using Haworks.Merchant.Application.Merchants.DTOs;
 using Haworks.Merchant.Domain.Aggregates;
@@ -11,7 +12,8 @@ namespace Haworks.Merchant.Application.Merchants.Commands.SetOperatingHours;
 public record SetOperatingHoursCommand(
     Guid MerchantId,
     Guid UserId,
-    List<OperatingHourDto> Hours) : IRequest<Result>;
+    List<OperatingHourDto> Hours,
+    string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result>;
 
 public class SetOperatingHoursCommandValidator : AbstractValidator<SetOperatingHoursCommand>
 {

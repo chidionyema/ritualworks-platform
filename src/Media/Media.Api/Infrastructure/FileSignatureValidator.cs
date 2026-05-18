@@ -6,7 +6,7 @@ public record FileSignatureValidationResult(bool IsValid, string FileType);
 
 public interface IFileSignatureValidator
 {
-    Task<FileSignatureValidationResult> ValidateAsync(Stream fileStream);
+    Task<FileSignatureValidationResult> ValidateAsync(Stream fileStream, CancellationToken ct = default);
 }
 
 public sealed class FileSignatureValidator : IFileSignatureValidator
@@ -40,7 +40,7 @@ public sealed class FileSignatureValidator : IFileSignatureValidator
         { "video/x-matroska", [[0x1A, 0x45, 0xDF, 0xA3]] },
     };
 
-    public async Task<FileSignatureValidationResult> ValidateAsync(Stream fileStream)
+    public async Task<FileSignatureValidationResult> ValidateAsync(Stream fileStream, CancellationToken ct = default)
     {
         if (fileStream is null)
             return new FileSignatureValidationResult(false, "Unknown");
@@ -49,7 +49,7 @@ public sealed class FileSignatureValidator : IFileSignatureValidator
         var read = 0;
         while (read < MaxSignatureBytes)
         {
-            var n = await fileStream.ReadAsync(head.AsMemory(read, MaxSignatureBytes - read)).ConfigureAwait(false);
+            var n = await fileStream.ReadAsync(head.AsMemory(read, MaxSignatureBytes - read), ct).ConfigureAwait(false);
             if (n == 0) break;
             read += n;
         }

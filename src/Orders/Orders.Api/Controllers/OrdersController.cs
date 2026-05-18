@@ -1,10 +1,11 @@
-using MediatR;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
 using Haworks.Orders.Application.Commands;
 using Haworks.Orders.Application.Queries;
 using Haworks.BuildingBlocks.Common;
 using Haworks.BuildingBlocks.Extensions;
+using MediatR;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Haworks.Orders.Api.Controllers;
 
@@ -14,6 +15,8 @@ public sealed class OrdersController(IMediator mediator) : ControllerBase
 {
     [HttpGet("{id:guid}")]
     [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
         var authenticatedUserId = HttpContext.GetForwardedUserId();
@@ -24,6 +27,8 @@ public sealed class OrdersController(IMediator mediator) : ControllerBase
 
     [HttpGet("by-user/{userId}")]
     [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ListForUser(
         string userId,
         [FromQuery] int skip = 0,
@@ -44,6 +49,8 @@ public sealed class OrdersController(IMediator mediator) : ControllerBase
 
     [HttpGet("lookup")]
     [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> LookupGuestOrder(
         [FromQuery] string token,
         [FromQuery] string email,
@@ -57,6 +64,8 @@ public sealed class OrdersController(IMediator mediator) : ControllerBase
 
     [HttpPost]
     [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreateOrderCommand command, CancellationToken ct)
     {
         // SECURITY: always take UserId from the JWT, never trust the request body.

@@ -42,7 +42,7 @@ public sealed class LiveConsoleBroadcaster
         _hello = new LiveConsoleHello(
             Service: "bff-web",
             InstanceId: InstanceIdMiddleware.InstanceId,
-            GitSha: ReadGitSha(),
+            GitSha: ReadGitSha(_logger),
             ProcessStartedAt: Process.GetCurrentProcess().StartTime.ToUniversalTime().ToString("o"));
     }
 
@@ -52,7 +52,7 @@ public sealed class LiveConsoleBroadcaster
     /// </summary>
     public LiveConsoleHello Hello => _hello;
 
-    private static string ReadGitSha()
+    private static string ReadGitSha(ILogger logger)
     {
         // Prefer an env var if the orchestrator set one (aspire-up.sh
         // can populate this without forking processes per service).
@@ -79,8 +79,9 @@ public sealed class LiveConsoleBroadcaster
             var sha = p.StandardOutput.ReadToEnd().Trim();
             return string.IsNullOrEmpty(sha) ? "unknown" : sha;
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "An error occurred in {MethodName}", nameof(ReadGitSha));
             return "unknown";
         }
     }

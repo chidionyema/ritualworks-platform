@@ -1,3 +1,4 @@
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Pricing.Domain.Enums;
 using MediatR;
 
@@ -6,7 +7,7 @@ namespace Haworks.Pricing.Application.Commands;
 /// <summary>
 /// Creates a new promotion code (admin only).
 /// </summary>
-public sealed record CreatePromotionCodeCommand : IRequest<Guid>
+public sealed record CreatePromotionCodeCommand : IIdempotentCommand, IRequest<Guid>
 {
     public required string Code { get; init; }
     public DiscountType DiscountType { get; init; }
@@ -19,4 +20,5 @@ public sealed record CreatePromotionCodeCommand : IRequest<Guid>
     public DateTimeOffset? StartsAt { get; init; }
     public DateTimeOffset? ExpiresAt { get; init; }
     public string SellerTimezone { get; init; } = "America/New_York";
+    public string IdempotencyKey { get; init; } = string.Empty;
 }

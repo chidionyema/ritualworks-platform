@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Haworks.BffWeb.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.BffWeb.Api.Controllers;
@@ -37,7 +38,9 @@ public class SystemController : ControllerBase
     }
 
     [HttpGet("health/snapshot")]
-    public async Task<IActionResult> GetHealthSnapshot(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetHealthSnapshot(CancellationToken ct = default)
     {
         var probe = await _healthProbe.ProbeAsync(ct);
         var activity = _activityCounters.Snapshot();
@@ -46,7 +49,9 @@ public class SystemController : ControllerBase
     }
 
     [HttpGet("health/stream")]
-    public async Task GetHealthStream(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task GetHealthStream(CancellationToken ct = default)
     {
         Response.Headers.Append("Content-Type", "text/event-stream");
         Response.Headers.Append("Cache-Control", "no-cache");
@@ -66,6 +71,8 @@ public class SystemController : ControllerBase
     }
 
     [HttpGet("metrics/snapshot")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public IActionResult GetMetricsSnapshot()
     {
         var snapshot = _activityCounters.Snapshot();
@@ -81,7 +88,9 @@ public class SystemController : ControllerBase
     }
 
     [HttpGet("metrics/stream")]
-    public async Task GetMetricsStream(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task GetMetricsStream(CancellationToken ct = default)
     {
         Response.Headers.Append("Content-Type", "text/event-stream");
         Response.Headers.Append("Cache-Control", "no-cache");
@@ -110,7 +119,9 @@ public class SystemController : ControllerBase
     // tracks real service-up state. No traffic is actually inferred — when
     // we wire OTel/tempo, this endpoint should pull from real span data.
     [HttpGet("topology/stream")]
-    public async Task GetTopologyStream(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task GetTopologyStream(CancellationToken ct = default)
     {
         Response.Headers.Append("Content-Type", "text/event-stream");
         Response.Headers.Append("Cache-Control", "no-cache");
@@ -156,6 +167,8 @@ public class SystemController : ControllerBase
     /// header.
     /// </summary>
     [HttpGet("system/identity")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public IActionResult GetSystemIdentity(
         [FromServices] Haworks.BffWeb.Api.Demo.LiveConsoleBroadcaster broadcaster)
     {

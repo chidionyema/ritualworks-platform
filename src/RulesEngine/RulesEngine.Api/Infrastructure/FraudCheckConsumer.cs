@@ -38,7 +38,7 @@ public sealed class FraudCheckConsumer(
         var riskScore = 0;
 
         // Build the evaluation context from the event
-        var variables = new Dictionary<string, object?>
+        var variables = new Dictionary<string, object>
         {
             ["totalAmount"] = (double)msg.TotalAmount,
             ["itemCount"] = msg.ItemCount,

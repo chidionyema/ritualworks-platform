@@ -17,24 +17,36 @@ public sealed class S3EventConsumer(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await PollAsync(stoppingToken);
-                _consecutiveErrors = 0;
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _consecutiveErrors++;
-                logger.LogError(ex, "S3 event consumer iteration failed (consecutive: {Count})", _consecutiveErrors);
-            }
+                try
+                {
+                    await PollAsync(stoppingToken);
+                    _consecutiveErrors = 0;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _consecutiveErrors++;
+                    logger.LogError(ex, "S3 event consumer iteration failed (consecutive: {Count})", _consecutiveErrors);
+                }
 
-            // Exponential backoff on consecutive errors, capped at 60s
-            var delaySec = _consecutiveErrors > 0
-                ? Math.Min(60, (int)Math.Pow(2, _consecutiveErrors))
-                : _opts.PollIntervalSeconds;
-            await Task.Delay(TimeSpan.FromSeconds(delaySec), stoppingToken);
+                // Exponential backoff on consecutive errors, capped at 60s
+                var delaySec = _consecutiveErrors > 0
+                    ? Math.Min(60, (int)Math.Pow(2, _consecutiveErrors))
+                    : _opts.PollIntervalSeconds;
+                await Task.Delay(TimeSpan.FromSeconds(delaySec), stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Graceful shutdown
+        }
+        catch (Exception ex)
+        {
+            logger.LogCritical(ex, "Unhandled exception in background service {ServiceName}", nameof(S3EventConsumer));
+            throw;
         }
     }
 

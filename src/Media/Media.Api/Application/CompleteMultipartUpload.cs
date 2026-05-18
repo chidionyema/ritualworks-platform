@@ -1,10 +1,11 @@
 using Amazon.S3.Model;
 using Haworks.BuildingBlocks.CurrentUser;
+using Haworks.BuildingBlocks.Idempotency;
 using MassTransit;
 
 namespace Haworks.Media.Api.Application;
 
-public record CompleteMultipartUploadCommand(Guid MediaId, IReadOnlyList<PartETagDto> Parts) : IRequest<Result<Unit>>;
+public record CompleteMultipartUploadCommand(Guid MediaId, IReadOnlyList<PartETagDto> Parts, string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result<Unit>>;
 public record PartETagDto(int PartNumber, string ETag);
 
 public class CompleteMultipartUploadValidator : AbstractValidator<CompleteMultipartUploadCommand>
@@ -27,7 +28,8 @@ public class CompleteMultipartUploadHandler(
     IVirusScanner virusScanner,
     ICurrentUserService currentUser,
     IPublishEndpoint publisher,
-    ISendEndpointProvider sendEndpoint) : IRequestHandler<CompleteMultipartUploadCommand, Result<Unit>>
+    ISendEndpointProvider sendEndpoint,
+    ILogger<CompleteMultipartUploadHandler> logger) : IRequestHandler<CompleteMultipartUploadCommand, Result<Unit>>
 {
     public async Task<Result<Unit>> Handle(CompleteMultipartUploadCommand request, CancellationToken ct)
     {
@@ -142,7 +144,7 @@ public class CompleteMultipartUploadHandler(
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { /* best effort */ }
+            try { File.Delete(tempPath); } catch (Exception ex) { logger.LogWarning(ex, "An error occurred in {MethodName}", nameof(Handle)); }
         }
 
         return Unit.Value;

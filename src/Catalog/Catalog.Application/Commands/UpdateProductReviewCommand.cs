@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Catalog.Application.DTOs;
 using Haworks.Catalog.Application.Helpers;
 using Haworks.Catalog.Domain.Interfaces;
@@ -13,8 +14,9 @@ public sealed record UpdateProductReviewCommand(
     string Content,
     int Rating,
     string? UserId,
-    bool IsAdmin
-) : IRequest<Result<ProductReviewDto>>;
+    bool IsAdmin,
+    string IdempotencyKey = ""
+) : IIdempotentCommand, IRequest<Result<ProductReviewDto>>;
 
 internal sealed class UpdateProductReviewCommandHandler
     : IRequestHandler<UpdateProductReviewCommand, Result<ProductReviewDto>>

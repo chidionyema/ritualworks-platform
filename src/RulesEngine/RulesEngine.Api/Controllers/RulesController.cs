@@ -2,6 +2,7 @@ using Haworks.RulesEngine.Api.Application;
 using Haworks.BuildingBlocks.Common;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.RulesEngine.Api.Controllers;
@@ -21,53 +22,65 @@ public class RulesController : ControllerBase
     // ── Evaluation ────────────────────────────────────────────────────────────
 
     [HttpPost("evaluate")]
-    public async Task<IActionResult> Evaluate([FromBody] EvaluateRuleQuery query)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Evaluate([FromBody] EvaluateRuleQuery query, CancellationToken ct = default)
     {
-        var result = await _mediator.Send(query);
+        var result = await _mediator.Send(query, ct);
         return result.ToActionResult();
     }
 
     // ── CRUD ──────────────────────────────────────────────────────────────────
 
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] bool? activeOnly = null)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> List([FromQuery] bool? activeOnly = null, CancellationToken ct = default)
     {
-        var result = await _mediator.Send(new ListRulesQuery(activeOnly));
+        var result = await _mediator.Send(new ListRulesQuery(activeOnly), ct);
         return result.ToActionResult();
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> Get(Guid id)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Get(Guid id, CancellationToken ct = default)
     {
-        var result = await _mediator.Send(new GetRuleQuery(id));
+        var result = await _mediator.Send(new GetRuleQuery(id), ct);
         return result.ToActionResult();
     }
 
     [Authorize(Roles = "admin")]
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateRuleCommand command)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Create([FromBody] CreateRuleCommand command, CancellationToken ct = default)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, ct);
         if (!result.IsSuccess) return result.ToActionResult();
         return CreatedAtAction(nameof(Get), new { id = result.Value.Id }, result.Value);
     }
 
     [Authorize(Roles = "admin")]
     [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateRuleCommand command)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateRuleCommand command, CancellationToken ct = default)
     {
         if (id != command.Id)
             return BadRequest(new { error = "Route id does not match body id." });
 
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, ct);
         return result.ToActionResult();
     }
 
     [Authorize(Roles = "admin")]
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct = default)
     {
-        var result = await _mediator.Send(new DeleteRuleCommand(id));
+        var result = await _mediator.Send(new DeleteRuleCommand(id), ct);
         return result.ToNoContentActionResult();
     }
 }

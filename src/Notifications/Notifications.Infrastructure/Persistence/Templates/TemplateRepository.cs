@@ -24,7 +24,8 @@ internal sealed class TemplateRepository : ITemplateRepository
         string templateId,
         string locale,
         NotificationChannel channel,
-        int version)
+        int version,
+        CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(templateId);
         ArgumentNullException.ThrowIfNull(locale);
@@ -36,10 +37,11 @@ internal sealed class TemplateRepository : ITemplateRepository
                 t.TemplateId == templateId &&
                 t.Locale == locale &&
                 t.Channel == channelString &&
-                t.Version == version);
+                t.Version == version,
+                ct);
     }
 
-    public async Task<IEnumerable<NotificationTemplate>> GetVersionsAsync(string templateId)
+    public async Task<IEnumerable<NotificationTemplate>> GetVersionsAsync(string templateId, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(templateId);
 
@@ -47,23 +49,23 @@ internal sealed class TemplateRepository : ITemplateRepository
             .AsNoTracking()
             .Where(t => t.TemplateId == templateId)
             .OrderByDescending(t => t.Version)
-            .ToListAsync()
+            .ToListAsync(ct)
             .ConfigureAwait(false);
     }
 
-    public async Task AddAsync(NotificationTemplate template)
+    public async Task AddAsync(NotificationTemplate template, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(template);
 
-        await _dbContext.NotificationTemplates.AddAsync(template).ConfigureAwait(false);
-        await _dbContext.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
+        await _dbContext.NotificationTemplates.AddAsync(template, ct).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
-    public Task UpdateAsync(NotificationTemplate template)
+    public Task UpdateAsync(NotificationTemplate template, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(template);
 
         _dbContext.NotificationTemplates.Update(template);
-        return _dbContext.SaveChangesAsync(CancellationToken.None);
+        return _dbContext.SaveChangesAsync(ct);
     }
 }

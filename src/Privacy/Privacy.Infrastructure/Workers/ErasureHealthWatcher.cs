@@ -31,11 +31,23 @@ public sealed class ErasureHealthWatcher : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!await DelaySafeAsync(TimeSpan.FromSeconds(30), stoppingToken)) return;
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            await TickSafeAsync(stoppingToken);
+            if (!await DelaySafeAsync(TimeSpan.FromSeconds(30), stoppingToken)) return;
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await TickSafeAsync(stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Graceful shutdown
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "Unhandled exception in background service {ServiceName}", nameof(ErasureHealthWatcher));
+            throw;
         }
     }
 

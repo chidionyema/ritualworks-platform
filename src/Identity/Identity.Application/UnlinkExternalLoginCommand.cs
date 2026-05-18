@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Identity.Domain;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -7,8 +8,9 @@ namespace Haworks.Identity.Application;
 
 public sealed record UnlinkExternalLoginCommand(
     string UserId,
-    string Provider
-) : IRequest<Result>;
+    string Provider,
+    string IdempotencyKey = ""
+) : IIdempotentCommand, IRequest<Result>;
 
 internal sealed class UnlinkExternalLoginCommandHandler : IRequestHandler<UnlinkExternalLoginCommand, Result>
 {

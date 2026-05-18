@@ -28,7 +28,7 @@ namespace Haworks.BffWeb.Api.Demo;
 /// itself. Wired only when <c>IsDevelopment()</c>; production registrations
 /// no-op.
 /// </summary>
-public sealed class ChaosManager : IDisposable
+public sealed class ChaosManager : IAsyncDisposable
 {
     private static readonly TimeSpan DefaultDuration = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaxDuration = TimeSpan.FromMinutes(2);
@@ -135,7 +135,7 @@ public sealed class ChaosManager : IDisposable
         // Idempotent: if already paused, refresh the auto-resume deadline.
         if (_paused.TryGetValue(target, out var existing))
         {
-            existing.CancelAutoResume();
+            existing.CancelAutoResume(_logger);
             var newDeadline = DateTime.UtcNow.Add(dur);
             existing.ResumeAtUtc = newDeadline;
             existing.ScheduleAutoResume(this, target, dur);
@@ -172,7 +172,7 @@ public sealed class ChaosManager : IDisposable
         if (!_strategies.TryGetValue(target, out var strategy)) return false;
         if (!_paused.TryRemove(target, out var state)) return false;
 
-        state.CancelAutoResume();
+        state.CancelAutoResume(_logger);
         try
         {
             await strategy.ResumeAsync(_logger, ct).ConfigureAwait(false);
@@ -200,18 +200,18 @@ public sealed class ChaosManager : IDisposable
         }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         // Best-effort: try to resume anything still paused on shutdown.
         foreach (var key in _paused.Keys.ToArray())
         {
             try
             {
-                ResumeAsync(key).GetAwaiter().GetResult();
+                await ResumeAsync(key).ConfigureAwait(false);
             }
-            catch
+            catch (Exception ex)
             {
-                // already logged; nothing more to do here
+                _logger.LogWarning(ex, "An error occurred in {MethodName}", nameof(DisposeAsync));
             }
         }
     }
@@ -224,7 +224,7 @@ public sealed class ChaosManager : IDisposable
 
         public void ScheduleAutoResume(ChaosManager mgr, string target, TimeSpan after)
         {
-            CancelAutoResume();
+            CancelAutoResume(mgr._logger);
             var cts = new CancellationTokenSource();
             _cts = cts;
             _ = Task.Run(async () =>
@@ -241,9 +241,9 @@ public sealed class ChaosManager : IDisposable
             });
         }
 
-        public void CancelAutoResume()
+        public void CancelAutoResume(ILogger logger)
         {
-            try { _cts?.Cancel(); } catch { /* swallow */ }
+            try { _cts?.Cancel(); } catch (Exception ex) { logger.LogWarning(ex, "An error occurred in {MethodName}", nameof(CancelAutoResume)); }
             _cts = null;
         }
     }

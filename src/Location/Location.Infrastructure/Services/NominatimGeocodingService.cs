@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using Haworks.Location.Application.Interfaces;
 
 namespace Haworks.Location.Infrastructure.Services;
@@ -7,7 +8,7 @@ namespace Haworks.Location.Infrastructure.Services;
 /// <summary>
 /// Geocoding service using OpenStreetMap Nominatim API.
 /// </summary>
-public sealed class NominatimGeocodingService(HttpClient httpClient) : IGeocodingService
+public sealed class NominatimGeocodingService(HttpClient httpClient, ILogger<NominatimGeocodingService> logger) : IGeocodingService
 {
     public async Task<(double Latitude, double Longitude)?> GeocodeAsync(string address, CancellationToken ct = default)
     {
@@ -27,9 +28,9 @@ public sealed class NominatimGeocodingService(HttpClient httpClient) : IGeocodin
                 return (lat, lon);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Fail gracefully for now
+            logger.LogWarning(ex, "An error occurred in {MethodName}", nameof(GeocodeAsync));
             return null;
         }
 

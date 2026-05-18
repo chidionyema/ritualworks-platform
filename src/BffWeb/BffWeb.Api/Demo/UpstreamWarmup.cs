@@ -64,12 +64,24 @@ internal sealed class UpstreamWarmup : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!await DelaySafeAsync(StartupRamp, stoppingToken)) return;
+        try
+        {
+            if (!await DelaySafeAsync(StartupRamp, stoppingToken)) return;
 
-        // Warm each backend in parallel — they have no ordering dependency
-        // between them. Total wall-clock = max single-backend warmup time.
-        var tasks = s_backends.Select(svc => WarmOneAsync(svc, stoppingToken));
-        await Task.WhenAll(tasks);
+            // Warm each backend in parallel — they have no ordering dependency
+            // between them. Total wall-clock = max single-backend warmup time.
+            var tasks = s_backends.Select(svc => WarmOneAsync(svc, stoppingToken));
+            await Task.WhenAll(tasks);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Graceful shutdown
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "Unhandled exception in background service {ServiceName}", nameof(UpstreamWarmup));
+            throw;
+        }
     }
 
     private static async Task<bool> DelaySafeAsync(TimeSpan delay, CancellationToken ct)

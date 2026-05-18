@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Haworks.Catalog.Application.Commands;
@@ -11,11 +12,15 @@ namespace Haworks.Catalog.Api.Controllers;
 public sealed class CategoriesController(IMediator mediator) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> List(CancellationToken ct)
         => (await mediator.Send(new ListCategoriesQuery(), ct)).ToActionResult();
 
     [HttpPost]
     [Authorize(Roles = "Admin")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreateCategoryCommand command, CancellationToken ct)
     {
         var result = await mediator.Send(command, ct);

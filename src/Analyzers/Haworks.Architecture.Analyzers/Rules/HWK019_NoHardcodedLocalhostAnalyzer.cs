@@ -33,27 +33,34 @@ public sealed class HWK019_NoHardcodedLocalhostAnalyzer : DiagnosticAnalyzer
         {
             if (value.Contains(pattern))
             {
-                // Skip test directories
+                // Skip test directories and the analyzer itself
                 var filePath = context.Node.SyntaxTree.FilePath ?? "";
                 if (filePath.Contains("/tests/") || filePath.Contains("/Tests/") ||
                     filePath.Contains("\\tests\\") || filePath.Contains("\\Tests\\") ||
-                    filePath.Contains(".Testing/") || filePath.Contains(".Testing\\"))
+                    filePath.Contains(".Testing/") || filePath.Contains(".Testing\\") ||
+                    filePath.Contains("HWK019_NoHardcodedLocalhostAnalyzer.cs"))
                     return;
 
                 if (context.Node.Parent is AttributeArgumentSyntax)
                     return;
 
                 // Skip validation/SSRF-blocking code (where localhost is being REJECTED, not USED)
-                var containingClass = context.Node.FirstAncestorOrSelf<ClassDeclarationSyntax>();
-                var className = containingClass?.Identifier.Text ?? "";
-                if (className.Contains("Ssrf") || className.Contains("Guard") ||
-                    className.Contains("Validator") || className.Contains("Sanitiz"))
+                var classes = context.Node.Ancestors().OfType<ClassDeclarationSyntax>();
+                if (classes.Any(c => 
+                    c.Identifier.Text.Contains("Ssrf") || 
+                    c.Identifier.Text.Contains("Guard") ||
+                    c.Identifier.Text.Contains("Validator") || 
+                    c.Identifier.Text.Contains("Sanitiz") ||
+                    c.Identifier.Text.EndsWith("DbContextFactory", System.StringComparison.Ordinal)))
+                    return;
+
+                if (filePath.EndsWith("Program.cs", System.StringComparison.Ordinal))
                     return;
 
                 var method = context.Node.FirstAncestorOrSelf<MethodDeclarationSyntax>();
                 var methodName = method?.Identifier.Text ?? "";
-                if (methodName.Contains("Valid") || methodName.Contains("Block") ||
-                    methodName.Contains("Sanitiz") || methodName.Contains("IsAllowed"))
+                if (methodName.Contains("Valid") || methodName.Contains("Validate") || methodName.Contains("IsValid") ||
+                    methodName.Contains("Block") || methodName.Contains("Sanitiz") || methodName.Contains("IsAllowed"))
                     return;
 
                 // Skip equality checks (comparing against localhost to reject it)

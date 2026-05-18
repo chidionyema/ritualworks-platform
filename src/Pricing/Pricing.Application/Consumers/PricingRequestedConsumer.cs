@@ -51,7 +51,7 @@ public sealed class PricingRequestedConsumer(
                     Code = msg.PromoCode!.ToUpperInvariant(),
                     OrderId = msg.OrderId,
                     UserId = msg.UserId,
-                    DiscountAmount = promoDiscount.Amount,
+                    DiscountAmount = promoDiscount.AmountOff,
                     CalculationId = result.CalculationId,
                 }, context.CancellationToken);
             }

@@ -28,7 +28,7 @@ public class HangfireEventScheduler : IEventScheduler
         var auditPayload = EnrichPayloadWithAudit(payload, scheduledBy, idempotencyKey);
 
         var jobId = _backgroundJobClient.Schedule<EventPublisherJob>(
-            job => job.PublishAsync(targetExchange, routingKey, auditPayload),
+            job => job.PublishAsync(targetExchange, routingKey, auditPayload, CancellationToken.None),
             scheduledTime);
 
         _logger.LogInformation(

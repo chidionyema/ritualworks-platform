@@ -43,45 +43,57 @@ internal sealed class ReservationSweeperService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var sweepInterval = _options.Value.SweepInterval;
-        var batchSize = _options.Value.BatchSize;
-
-        _logger.LogInformation(
-            "Reservation sweeper started. Interval={Interval}, Batch={BatchSize}",
-            sweepInterval, batchSize);
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            var sweepInterval = _options.Value.SweepInterval;
+            var batchSize = _options.Value.BatchSize;
+
+            _logger.LogInformation(
+                "Reservation sweeper started. Interval={Interval}, Batch={BatchSize}",
+                sweepInterval, batchSize);
+
+            while (!stoppingToken.IsCancellationRequested)
             {
-                var expired = await SweepOnceAsync(stoppingToken).ConfigureAwait(false);
-                if (expired > 0)
+                try
                 {
-                    _logger.LogInformation("Sweeper expired {Count} reservations", expired);
+                    var expired = await SweepOnceAsync(stoppingToken).ConfigureAwait(false);
+                    if (expired > 0)
+                    {
+                        _logger.LogInformation("Sweeper expired {Count} reservations", expired);
+                    }
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    // Resilient loop: log and keep going so a transient DB blip
+                    // doesn't wedge the sweeper forever.
+                    _logger.LogError(ex, "Reservation sweep failed; will retry next interval");
+                }
+
+                try
+                {
+                    await Task.Delay(_options.Value.SweepInterval, stoppingToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
                 }
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                // Resilient loop: log and keep going so a transient DB blip
-                // doesn't wedge the sweeper forever.
-                _logger.LogError(ex, "Reservation sweep failed; will retry next interval");
-            }
 
-            try
-            {
-                await Task.Delay(_options.Value.SweepInterval, stoppingToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
+            _logger.LogInformation("Reservation sweeper stopped");
         }
-
-        _logger.LogInformation("Reservation sweeper stopped");
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Graceful shutdown
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "Unhandled exception in background service {ServiceName}", nameof(ReservationSweeperService));
+            throw;
+        }
     }
 
     /// <summary>

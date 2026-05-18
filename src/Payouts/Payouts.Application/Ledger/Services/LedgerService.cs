@@ -37,9 +37,8 @@ public class LedgerService : ILedgerService
     {
         if (amount <= 0) throw new ArgumentException("Amount must be positive", nameof(amount));
 
-        var dbContext = (DbContext)_context;
         // C2 Fix: Use RepeatableRead to prevent idempotency check TOCTOU at ReadCommitted
-        await using var tx = await dbContext.Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct);
+        await using var tx = await ((DbContext)_context).Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct);
         try
         {
             var alreadyProcessed = await _context.LedgerEntries
@@ -50,12 +49,12 @@ public class LedgerService : ILedgerService
                 await tx.RollbackAsync(ct);
                 return;
             }
-            var profile = await _context.SellerProfiles.FirstOrDefaultAsync(p => p.SellerId == sellerId, ct);
+            var profile = await _context.SellerProfiles.Where(p => p.SellerId == sellerId).FirstOrDefaultAsync(ct);
             var commissionRate = profile?.CommissionPercentage ?? 10.00m;
             var commission = Math.Round(amount * commissionRate / 100m, 2, MidpointRounding.AwayFromZero);
             var sellerAmount = amount - commission;
 
-            var transactionId = Guid.NewGuid();
+            var transactionId = Guid.CreateVersion7();
             // C1 Fix: FOR UPDATE locks prevent concurrent balance corruption
             var sellerAccount = await GetOrCreateAccountWithLock(sellerId, AccountType.SellerPending, currency, ct);
             var platformHoldingAccount = await GetOrCreateAccountWithLock(SystemPlatformId, AccountType.PlatformHolding, currency, ct);
@@ -113,12 +112,12 @@ public class LedgerService : ILedgerService
                 return;
             }
 
-            var profile = await _context.SellerProfiles.FirstOrDefaultAsync(p => p.SellerId == sellerId, ct);
+            var profile = await _context.SellerProfiles.Where(p => p.SellerId == sellerId).FirstOrDefaultAsync(ct);
             var commissionRate = profile?.CommissionPercentage ?? 10.00m;
             var commission = Math.Round(amount * commissionRate / 100m, 2, MidpointRounding.AwayFromZero);
             var sellerAmount = amount - commission;
 
-            var transactionId = Guid.NewGuid();
+            var transactionId = Guid.CreateVersion7();
 
             // Deterministic: find the account that was originally credited for this reference
             var creditedAccountId = await _context.LedgerEntries
@@ -182,7 +181,8 @@ public class LedgerService : ILedgerService
     {
         var account = await _context.LedgerAccounts
             .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.OwnerId == sellerId && a.Type == type && a.Currency == currency, ct);
+            .Where(a => a.OwnerId == sellerId && a.Type == type && a.Currency == currency)
+            .FirstOrDefaultAsync(ct);
         return account?.Balance ?? 0;
     }
 
@@ -192,7 +192,6 @@ public class LedgerService : ILedgerService
     /// </summary>
     private async Task<LedgerAccount> GetOrCreateAccountWithLock(Guid ownerId, AccountType type, string currency, CancellationToken ct)
     {
-        var dbContext = (DbContext)_context;
         var typeInt = (int)type;
 
         var account = await _context.LedgerAccounts
@@ -203,6 +202,7 @@ public class LedgerService : ILedgerService
                 FOR UPDATE
                 """,
                 ownerId, typeInt, currency)
+            .Where(x => true)
             .FirstOrDefaultAsync(ct);
 
         if (account == null)
@@ -220,16 +220,17 @@ public class LedgerService : ILedgerService
                     FOR UPDATE
                     """,
                     ownerId, typeInt, currency)
+                .Where(x => true)
                 .FirstAsync(ct);
         }
 
         return account;
     }
 
-    private async Task<LedgerAccount?> LockAccount(Guid ownerId, AccountType type, string currency, CancellationToken ct)
+    private Task<LedgerAccount?> LockAccount(Guid ownerId, AccountType type, string currency, CancellationToken ct)
     {
         var typeInt = (int)type;
-        return await _context.LedgerAccounts
+        return _context.LedgerAccounts
             .FromSqlRaw(
                 """
                 SELECT *, xmin FROM payouts."LedgerAccounts"
@@ -237,12 +238,13 @@ public class LedgerService : ILedgerService
                 FOR UPDATE
                 """,
                 ownerId, typeInt, currency)
+            .Where(x => true)
             .FirstOrDefaultAsync(ct);
     }
 
-    private async Task<LedgerAccount?> LockAccountById(Guid accountId, CancellationToken ct)
+    private Task<LedgerAccount?> LockAccountById(Guid accountId, CancellationToken ct)
     {
-        return await _context.LedgerAccounts
+        return _context.LedgerAccounts
             .FromSqlRaw(
                 """
                 SELECT *, xmin FROM payouts."LedgerAccounts"
@@ -250,6 +252,7 @@ public class LedgerService : ILedgerService
                 FOR UPDATE
                 """,
                 accountId)
+            .Where(x => true)
             .FirstOrDefaultAsync(ct);
     }
 }

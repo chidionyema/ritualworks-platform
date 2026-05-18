@@ -1,10 +1,11 @@
 using Haworks.BuildingBlocks.CurrentUser;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.Media.Api.Options;
 using Microsoft.Extensions.Options;
 
 namespace Haworks.Media.Api.Application;
 
-public record BatchInitiateUploadCommand(IReadOnlyList<InitiateUploadCommand> Files) : IRequest<Result<IReadOnlyList<UploadResponse>>>;
+public record BatchInitiateUploadCommand(IReadOnlyList<InitiateUploadCommand> Files, string IdempotencyKey = "") : IIdempotentCommand, IRequest<Result<IReadOnlyList<UploadResponse>>>;
 
 public class BatchInitiateUploadValidator : AbstractValidator<BatchInitiateUploadCommand>
 {

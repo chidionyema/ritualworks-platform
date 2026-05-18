@@ -4,6 +4,7 @@ using Haworks.CheckoutOrchestrator.Api.Models;
 using Haworks.BuildingBlocks.Common;
 using Haworks.BuildingBlocks.Extensions;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,6 +19,8 @@ namespace Haworks.CheckoutOrchestrator.Api.Controllers;
 public sealed class CheckoutsController(IMediator mediator) : ControllerBase
 {
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Start([FromBody] StartCheckoutRequest body, CancellationToken ct)
     {
         var result = await mediator.Send(new StartCheckoutCommand(
@@ -37,6 +40,8 @@ public sealed class CheckoutsController(IMediator mediator) : ControllerBase
     }
 
     [HttpGet("{sagaId:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Get(Guid sagaId, CancellationToken ct)
     {
         var userId = HttpContext.GetForwardedUserId();
@@ -46,6 +51,8 @@ public sealed class CheckoutsController(IMediator mediator) : ControllerBase
     }
 
     [HttpGet("by-order/{orderId:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetByOrderId(Guid orderId, CancellationToken ct)
     {
         var userId = HttpContext.GetForwardedUserId();

@@ -1,4 +1,5 @@
 using Haworks.BuildingBlocks.Common;
+using Haworks.BuildingBlocks.Idempotency;
 using Haworks.BuildingBlocks.Messaging;
 using Haworks.Contracts.Location;
 using Haworks.Location.Application.Interfaces;
@@ -12,7 +13,7 @@ namespace Haworks.Location.Application.Commands;
 /// Command to create a new address record and publish a LocationUpdated event.
 /// Coordinates are optional; if missing, the service will attempt to geocode the address.
 /// </summary>
-public record CreateAddressCommand : IRequest<Result<Guid>>
+public record CreateAddressCommand : IIdempotentCommand, IRequest<Result<Guid>>
 {
     public required string Street { get; init; }
     public required string City { get; init; }
@@ -20,6 +21,7 @@ public record CreateAddressCommand : IRequest<Result<Guid>>
     public required string Country { get; init; }
     public double? Latitude { get; init; }
     public double? Longitude { get; init; }
+    public string IdempotencyKey { get; init; } = string.Empty;
 }
 
 public class CreateAddressCommandHandler(
