@@ -1,28 +1,63 @@
 name: E2E Tests
-# Manual-only. Requires docker-compose infra (Postgres, Redis, RabbitMQ,
-# Vault, etc.) which doesn't reliably start on GitHub runners within
-# timeout. Run locally: make e2e
+
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   e2e:
+    name: E2E (docker-compose)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
     steps:
       - uses: actions/checkout@v6
+
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '9.0.x'
-      - name: Start infrastructure
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Start infrastructure (docker-compose)
         run: docker compose -f deploy/compose/docker-compose.yml up -d --wait --timeout 120
+
       - name: Wait for services
         run: |
           for port in 5050 5070; do
-            timeout 60 bash -c "until curl -sf http://localhost:$port/health; do sleep 2; done"
+            for i in $(seq 1 30); do
+              if curl -sf "http://localhost:$port/health" >/dev/null 2>&1; then
+                echo "Port $port healthy (attempt $i)"
+                break
+              fi
+              sleep 2
+            done
           done
+
       - name: Run E2E tests
-        run: dotnet test tests/E2E/ --logger "console;verbosity=normal"
+        run: dotnet test tests/E2E/ --configuration Release --logger "console;verbosity=normal"
+
       - name: Teardown
         if: always()
         run: docker compose -f deploy/compose/docker-compose.yml down -v
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-test-results
+          path: '**/TestResults/*.trx'
+          retention-days: 7
