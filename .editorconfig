@@ -94,5 +94,6 @@ dotnet_diagnostic.MA0134.severity = none        # Observe result of async
 dotnet_diagnostic.AsyncFixer01.severity = error  # Unnecessary async/await — performance overhead
 dotnet_diagnostic.AsyncFixer02.severity = error  # Long-running on threadpool without ConfigureAwait
 dotnet_diagnostic.AsyncFixer03.severity = error  # Fire-and-forget async call
-dotnet_diagnostic.AsyncFixer04.severity = warning # Fire-and-forget in using block
+dotnet_diagnostic.AsyncFixer04.severity = error # Fire-and-forget in using block
 dotnet_diagnostic.AsyncFixer05.severity = error  # Implicit casting to Task
+

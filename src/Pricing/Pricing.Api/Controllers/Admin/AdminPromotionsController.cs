@@ -1,7 +1,10 @@
+using Haworks.BuildingBlocks.Common;
 using Haworks.Pricing.Application.Commands;
 using Haworks.Pricing.Application.Interfaces;
+using Haworks.Pricing.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.Pricing.Api.Controllers.Admin;
@@ -24,34 +27,53 @@ public sealed class AdminPromotionsController : ControllerBase
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(object), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreatePromotion([FromBody] CreatePromotionCodeCommand command, CancellationToken ct)
     {
         var id = await _mediator.Send(command, ct).ConfigureAwait(false);
-        return CreatedAtAction(nameof(GetPromotion), new { id }, new { id });
+        return Result.Success(new { id }).ToCreatedActionResult(nameof(GetPromotion), new { id });
     }
 
     [HttpGet]
+    [ProducesResponseType(typeof(IEnumerable<PromotionCode>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetPromotions([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
         var codes = await _promoRepo.GetAllPagedAsync(page, pageSize, ct).ConfigureAwait(false);
-        return Ok(codes);
+        return Result.Success(codes).ToActionResult();
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(PromotionCode), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPromotion(Guid id, CancellationToken ct)
     {
         var code = await _promoRepo.GetByIdAsync(id, ct).ConfigureAwait(false);
-        if (code is null) return NotFound();
-        return Ok(code);
+        if (code is null) 
+            return Result.Failure<PromotionCode>(Error.NotFound("PromotionCode.NotFound", "Promotion code not found")).ToActionResult();
+            
+        return Result.Success(code).ToActionResult();
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeletePromotion(Guid id, CancellationToken ct)
     {
         var code = await _promoRepo.GetByIdAsync(id, ct).ConfigureAwait(false);
-        if (code is null) return NotFound();
+        if (code is null) 
+            return Result.Failure(Error.NotFound("PromotionCode.NotFound", "Promotion code not found")).ToActionResult();
+            
         code.SoftDelete();
         await _promoRepo.SaveChangesAsync(ct).ConfigureAwait(false);
-        return NoContent();
+        return Result.Success().ToNoContentActionResult();
     }
 }

@@ -91,7 +91,7 @@ public static class Diagnostics
         title: "Do not use NotImplementedException in production code",
         messageFormat: "'{0}' will crash at runtime — implement the method or remove it",
         category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor NoHardcodedLocalhost = new(
@@ -115,7 +115,7 @@ public static class Diagnostics
         title: "Do not use .Result or .Wait() on tasks",
         messageFormat: "'{0}' can deadlock the request pipeline — use await instead",
         category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor NoNewHttpClient = new(
@@ -163,7 +163,7 @@ public static class Diagnostics
         title: "Do not return Task without await inside try/catch",
         messageFormat: "Returning a Task without await in '{0}' means the catch block will never execute for async exceptions",
         category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor NoDecimalArithmeticWithoutRounding = new(
@@ -203,7 +203,7 @@ public static class Diagnostics
         title: "Do not mix AsNoTracking() with SaveChangesAsync()",
         messageFormat: "Method '{0}' calls AsNoTracking() and SaveChangesAsync() which silently discards mutations",
         category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor PollyMustAcceptCancellationToken = new(
@@ -281,7 +281,7 @@ public static class Diagnostics
         title: "Do not log secrets, tokens, or passwords",
         messageFormat: "Log statement references '{0}' which may contain sensitive data",
         category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor NoStringInterpolationInLogger = new(

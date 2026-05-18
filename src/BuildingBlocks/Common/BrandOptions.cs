@@ -33,4 +33,10 @@ public sealed class BrandOptions
     /// Company registration / legal name if different from brand name.
     /// </summary>
     public string LegalName { get; set; } = "Haworks Ltd.";
+
+    /// <summary>
+    /// The default currency code for the brand (ISO 4217).
+    /// Used as fallback for pricing and payments.
+    /// </summary>
+    public string DefaultCurrency { get; set; } = "USD";
 }

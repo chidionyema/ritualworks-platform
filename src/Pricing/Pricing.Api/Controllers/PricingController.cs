@@ -1,10 +1,14 @@
 using System.Security.Claims;
+using Haworks.BuildingBlocks.Common;
 using Haworks.Pricing.Application.Commands;
 using Haworks.Pricing.Application.Queries;
 using Haworks.Pricing.Domain.Exceptions;
+using Haworks.Pricing.Domain.ValueObjects;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace Haworks.Pricing.Api.Controllers;
 
@@ -13,13 +17,17 @@ namespace Haworks.Pricing.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("pricing")]
+[ProducesResponseType(StatusCodes.Status400BadRequest)]
+[ProducesResponseType(StatusCodes.Status500InternalServerError)]
 public sealed class PricingController : ControllerBase
 {
     private readonly IMediator _mediator;
+    private readonly BrandOptions _brandOptions;
 
-    public PricingController(IMediator mediator)
+    public PricingController(IMediator mediator, IOptions<BrandOptions> brandOptions)
     {
         _mediator = mediator;
+        _brandOptions = brandOptions.Value;
     }
 
     /// <summary>
@@ -27,6 +35,8 @@ public sealed class PricingController : ControllerBase
     /// </summary>
     [HttpGet("calculate")]
     [AllowAnonymous]
+    [ProducesResponseType(typeof(PriceBreakdownResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Calculate(
         [FromQuery] Guid productId,
         [FromQuery] int quantity,
@@ -42,34 +52,24 @@ public sealed class PricingController : ControllerBase
         if (quantity < 1 || quantity > 9999)
             return BadRequest("Quantity must be between 1 and 9999.");
 
-        try
+        var result = await _mediator.Send(new CalculateEffectivePriceQuery
         {
-            var result = await _mediator.Send(new CalculateEffectivePriceQuery
-            {
-                ProductId = productId,
-                Quantity = quantity,
-                PromoCode = promoCode,
-                UserId = userId,
-                CountryCode = countryCode,
-                StateCode = stateCode,
-            }, ct).ConfigureAwait(false);
+            ProductId = productId,
+            Quantity = quantity,
+            PromoCode = promoCode,
+            UserId = userId,
+            CountryCode = countryCode,
+            StateCode = stateCode,
+        }, ct).ConfigureAwait(false);
 
-            return Ok(result);
-        }
-        catch (InvalidOperationException)
-        {
-            return NotFound(new { error = "The requested product was not found." });
-        }
-        catch (TaxCalculationException)
-        {
-            return StatusCode(500, new { error = "Tax calculation failed. Please try again later." });
-        }
+        return Result.Success(result).ToActionResult();
     }
 
     /// <summary>
     /// Validate a promotion code without redeeming.
     /// </summary>
     [HttpPost("promotions/validate")]
+    [ProducesResponseType(typeof(ValidatePromotionCodeResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> ValidatePromotion(
         [FromBody] ValidatePromotionRequest request,
         CancellationToken ct)
@@ -85,7 +85,7 @@ public sealed class PricingController : ControllerBase
             UserId = userId,
         }, ct).ConfigureAwait(false);
 
-        return Ok(result);
+        return Result.Success(result).ToActionResult();
     }
 
     /// <summary>
@@ -93,6 +93,9 @@ public sealed class PricingController : ControllerBase
     /// </summary>
     [HttpPost("promotions/redeem")]
     [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> RedeemPromotion(
         [FromBody] RedeemPromotionRequest request,
         CancellationToken ct)
@@ -110,17 +113,7 @@ public sealed class PricingController : ControllerBase
             CalculationId = request.CalculationId,
         }, ct).ConfigureAwait(false);
 
-        if (!result.Success)
-        {
-            return result.FailureReason switch
-            {
-                "exhausted" => Conflict(new { error = "Promotion code exhausted." }),
-                "expired" => UnprocessableEntity(new { error = "Promotion code expired." }),
-                _ => UnprocessableEntity(new { error = $"Promotion code invalid: {result.FailureReason}" }),
-            };
-        }
-
-        return NoContent();
+        return Result.Success(result).ToActionResult();
     }
 
     /// <summary>
@@ -128,6 +121,8 @@ public sealed class PricingController : ControllerBase
     /// </summary>
     [HttpGet("tax/rate")]
     [AllowAnonymous]
+    [ProducesResponseType(typeof(TaxRateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetTaxRate(
         [FromQuery] string countryCode,
         [FromQuery] string? stateCode,
@@ -137,23 +132,31 @@ public sealed class PricingController : ControllerBase
         if (string.IsNullOrWhiteSpace(countryCode))
             return BadRequest("countryCode is required.");
 
-        try
+        var result = await taxCalculator.CalculateAsync(
+            countryCode, 
+            stateCode, 
+            100m, 
+            _brandOptions.DefaultCurrency, 
+            ct).ConfigureAwait(false);
+
+        return Ok(new TaxRateResponse
         {
-            var result = await taxCalculator.CalculateAsync(countryCode, stateCode, 100m, "USD", ct).ConfigureAwait(false);
-            return Ok(new
-            {
-                countryCode,
-                stateCode,
-                combinedRate = result.EffectiveRate,
-                source = result.Source,
-            });
-        }
-        catch (TaxCalculationException)
-        {
-            return NotFound(new { error = $"No tax rate configured for {countryCode}/{stateCode}" });
-        }
+            CountryCode = countryCode,
+            StateCode = stateCode,
+            CombinedRate = result.EffectiveRate,
+            Source = result.Source,
+        });
     }
 }
+
+public sealed record TaxRateResponse
+{
+    public required string CountryCode { get; init; }
+    public string? StateCode { get; init; }
+    public decimal CombinedRate { get; init; }
+    public string Source { get; init; } = string.Empty;
+}
+
 
 /// <summary>Request body for promotion validation.</summary>
 public sealed record ValidatePromotionRequest

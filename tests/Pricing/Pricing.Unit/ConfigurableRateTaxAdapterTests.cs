@@ -65,11 +65,11 @@ public sealed class ConfigurableRateTaxAdapterTests
     }
 
     [Fact]
-    public async Task CalculateAsync_NoMatch_FailOpenFalse_ReturnsZero()
+    public async Task CalculateAsync_NoMatch_FailOpenTrue_ReturnsZero()
     {
         var options = new TaxOptions
         {
-            FailOpen = false,
+            FailOpen = true,
             Rates = new List<TaxRateEntry>(), // Empty — no match possible
         };
         var adapter = CreateAdapter(options);
@@ -81,11 +81,11 @@ public sealed class ConfigurableRateTaxAdapterTests
     }
 
     [Fact]
-    public async Task CalculateAsync_NoMatch_FailOpenTrue_Throws()
+    public async Task CalculateAsync_NoMatch_FailOpenFalse_Throws()
     {
         var options = new TaxOptions
         {
-            FailOpen = true,
+            FailOpen = false,
             Rates = new List<TaxRateEntry>(), // Empty — no match possible
         };
         var adapter = CreateAdapter(options);

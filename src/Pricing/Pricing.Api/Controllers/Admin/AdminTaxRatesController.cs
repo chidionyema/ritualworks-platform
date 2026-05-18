@@ -1,6 +1,8 @@
+using Haworks.BuildingBlocks.Common;
 using Haworks.Pricing.Application.Interfaces;
 using Haworks.Pricing.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Haworks.Pricing.Api.Controllers.Admin;
@@ -21,13 +23,20 @@ public sealed class AdminTaxRatesController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesResponseType(typeof(IEnumerable<TaxRate>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetTaxRates(CancellationToken ct)
     {
         var rates = await _taxRateRepo.GetAllAsync(ct).ConfigureAwait(false);
-        return Ok(rates);
+        return Result.Success(rates).ToActionResult();
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(object), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateTaxRate([FromBody] CreateTaxRateRequest request, CancellationToken ct)
     {
         var rate = TaxRate.Create(
@@ -39,14 +48,22 @@ public sealed class AdminTaxRatesController : ControllerBase
 
         await _taxRateRepo.AddAsync(rate, ct).ConfigureAwait(false);
         await _taxRateRepo.SaveChangesAsync(ct).ConfigureAwait(false);
-        return Created($"/admin/pricing/tax/rates/{rate.Id}", new { id = rate.Id });
+        
+        return Result.Success(new { id = rate.Id })
+            .ToCreatedActionResult(nameof(GetTaxRates), new { id = rate.Id });
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateTaxRate(Guid id, [FromBody] CreateTaxRateRequest request, CancellationToken ct)
     {
         var existing = await _taxRateRepo.GetByIdAsync(id, ct).ConfigureAwait(false);
-        if (existing is null) return NotFound();
+        if (existing is null) 
+            return Result.Failure(Error.NotFound("TaxRate.NotFound", "Tax rate not found")).ToActionResult();
 
         var effectiveFrom = request.EffectiveFrom ?? DateTimeOffset.UtcNow;
 
@@ -62,7 +79,8 @@ public sealed class AdminTaxRatesController : ControllerBase
 
         await _taxRateRepo.AddAsync(newRate, ct).ConfigureAwait(false);
         await _taxRateRepo.SaveChangesAsync(ct).ConfigureAwait(false);
-        return NoContent();
+        
+        return Result.Success().ToNoContentActionResult();
     }
 }
 
