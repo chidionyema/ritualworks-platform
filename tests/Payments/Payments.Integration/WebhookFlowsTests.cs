@@ -100,7 +100,7 @@ public sealed class WebhookFlowsTests : IAsyncLifetime
         var harness = _factory.Services.GetRequiredService<ITestHarness>();
 
         var sessionId = "sess_known_" + Guid.NewGuid().ToString("N");
-        var payment = await SeedPendingPaymentAsync(sessionId, amountCents: 50m);
+        var payment = await SeedPendingPaymentAsync(sessionId, amount: 50m);
 
         var eventId = "evt_complete_" + Guid.NewGuid().ToString("N");
         var payload = StripePayload(eventId, "checkout.session.completed", sessionId, paidMinor: 5000, orderId: payment.OrderId);
@@ -146,7 +146,7 @@ public sealed class WebhookFlowsTests : IAsyncLifetime
         var harness = _factory.Services.GetRequiredService<ITestHarness>();
 
         var sessionId = "sess_mismatch_" + Guid.NewGuid().ToString("N");
-        var payment = await SeedPendingPaymentAsync(sessionId, amountCents: 50m);
+        var payment = await SeedPendingPaymentAsync(sessionId, amount: 50m);
 
         // Stripe captures 75 instead of 50 -> amount mismatch.
         var eventId = "evt_mismatch_" + Guid.NewGuid().ToString("N");
@@ -189,7 +189,7 @@ public sealed class WebhookFlowsTests : IAsyncLifetime
         var harness = _factory.Services.GetRequiredService<ITestHarness>();
 
         var sessionId = "sess_idem_" + Guid.NewGuid().ToString("N");
-        var payment = await SeedPendingPaymentAsync(sessionId, amountCents: 25m);
+        var payment = await SeedPendingPaymentAsync(sessionId, amount: 25m);
 
         var eventId = "evt_idempotent_" + Guid.NewGuid().ToString("N");
         var payload = StripePayload(eventId, "checkout.session.completed", sessionId, paidMinor: 2500, orderId: payment.OrderId);
@@ -284,7 +284,7 @@ public sealed class WebhookFlowsTests : IAsyncLifetime
         var payment = Payment.Create(
             orderId: Guid.NewGuid(),
             userId: "user-test",
-            amountCents: amount,
+            amount: amount,
             taxCents: 0m,
             currency: "USD",
             provider: PaymentProvider.Stripe,

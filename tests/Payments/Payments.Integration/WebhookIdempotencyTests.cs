@@ -49,7 +49,7 @@ public sealed class WebhookIdempotencyTests : IAsyncLifetime
         // Arrange
         var harness = _factory.Services.GetRequiredService<ITestHarness>();
         var sessionId = "sess_idem_" + Guid.NewGuid().ToString("N");
-        var payment = await SeedPendingPaymentAsync(sessionId, amountCents: 100m);
+        var payment = await SeedPendingPaymentAsync(sessionId, amount: 100m);
 
         var eventId = "evt_idem_" + Guid.NewGuid().ToString("N");
         var payload = StripePayload(eventId, "checkout.session.completed", sessionId, paidMinor: 10000, orderId: payment.OrderId);
@@ -94,7 +94,7 @@ public sealed class WebhookIdempotencyTests : IAsyncLifetime
         // Arrange
         var harness = _factory.Services.GetRequiredService<ITestHarness>();
         var sessionId = "sess_race_" + Guid.NewGuid().ToString("N");
-        var payment = await SeedPendingPaymentAsync(sessionId, amountCents: 50m);
+        var payment = await SeedPendingPaymentAsync(sessionId, amount: 50m);
 
         var eventId = "evt_race_" + Guid.NewGuid().ToString("N");
         var payload = StripePayload(eventId, "checkout.session.completed", sessionId, paidMinor: 5000, orderId: payment.OrderId);
@@ -144,7 +144,7 @@ public sealed class WebhookIdempotencyTests : IAsyncLifetime
         var payment = Payment.Create(
             orderId: Guid.NewGuid(),
             userId: "user-test",
-            amountCents: amount,
+            amount: amount,
             taxCents: 0m,
             currency: "USD",
             provider: PaymentProvider.Stripe,
